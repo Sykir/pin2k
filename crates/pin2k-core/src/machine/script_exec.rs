@@ -6,7 +6,7 @@ use crate::mods::{HomebrewSwitchRule, ModManifest};
 use crate::rfm_rules::{GameTitle, RfmMultiball, RfmWave};
 use crate::script_engine::{GameScript, ScriptAction, ScriptRuntime, ScriptTrigger};
 use crate::storage::{GameHistoryEntry, LocalDb};
-use crate::swe1_rules::{ActiveSceneState, JediRank, Swe1Scene};
+use crate::swe1_rules::{ActiveMultiball, ActiveSceneState, JediRank, Swe1Scene};
 use crate::swe1_tables::{drive, sw};
 
 impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A> {
@@ -126,6 +126,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.elapsed_ms = 0;
                 self.balls_in_play = 0;
                 self.active_scene = None;
+                self.active_anim_hint.clear();
                 self.set_banner("DEBUG: BOOT SEQUENCE", 2_000);
                 return true;
             }
@@ -134,6 +135,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.state = MachineState::Attract;
                 self.balls_in_play = 0;
                 self.active_scene = None;
+                self.multiball = ActiveMultiball::None;
+                self.active_anim_hint = self.attract.current().anim_hint().unwrap_or("").to_string();
                 self.set_banner("DEBUG: ATTRACT MODE", 3_000);
                 return true;
             }
@@ -143,6 +146,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                         self.state = MachineState::Attract;
                     }
                     self.try_start_or_add_player();
+                }
+                self.active_scene = None;
+                self.multiball = ActiveMultiball::None;
+                if self.game_title == GameTitle::Swe1 {
+                    self.active_anim_hint = "anim_spinner_1".to_string();
                 }
                 self.set_banner("DEBUG: IN GAME", 3_000);
                 return true;
@@ -192,6 +200,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             {
                 self.game_title = GameTitle::Rfm;
                 if self.state != MachineState::InGame {
+                    if !matches!(self.state, MachineState::Boot | MachineState::Attract) {
+                        self.state = MachineState::Attract;
+                    }
                     self.try_start_or_add_player();
                 }
                 self.rfm.active_wave = Some(wave);
@@ -248,12 +259,16 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         };
 
         if let Some(scene) = scene_opt {
+            self.game_title = GameTitle::Swe1;
+            self.multiball = ActiveMultiball::None;
             self.start_swe1_scene(scene);
             self.set_banner(format!("DEBUG SCENE: {}", scene.title()), 4_000);
             return true;
         }
 
         if key == "darth_maul_duel" || key == "maul" || key == "jedi_battle" {
+            self.game_title = GameTitle::Swe1;
+            self.active_scene = None;
             self.start_darth_maul_duel();
             return true;
         }
@@ -293,6 +308,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
     pub fn debug_add_score(&mut self, points: u64) {
         if self.state != MachineState::InGame {
+            if !matches!(self.state, MachineState::Boot | MachineState::Attract) {
+                self.state = MachineState::Attract;
+            }
             self.try_start_or_add_player();
         }
         self.add_score(points);

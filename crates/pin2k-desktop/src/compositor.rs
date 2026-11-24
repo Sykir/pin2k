@@ -376,6 +376,8 @@ impl VideoBackend for SoftwareCompositor {
             self.render_podrace_scene(false);
         } else if active_name == "anim_podrace_closeup" {
             self.render_podrace_scene(true);
+        } else if active_name == "anim_spinner_1" {
+            self.render_ingame_spinners();
         } else {
             self.podrace_scene_ticks = 0;
             if let Some(idx) = self.active_anim_idx {
@@ -520,6 +522,20 @@ impl SoftwareCompositor {
             [110, 250, 255, 255],
             1,
         );
+    }
+
+    /// Renders the authentic SWE1 InGame Holoprojector Spinners (`anim_spinner_1` + `anim_spinner_2`
+    /// with brackets and `anim_naboo_fighter_tiny_rotate` center ship).
+    fn render_ingame_spinners(&mut self) {
+        let f60 = ((self.anim_elapsed_ms * 60) / 1000) as usize;
+        // Left Spinner + bracket
+        let _ = self.blit_named("anim_spinner_bracket_left", 0, 38, 72, 1);
+        let _ = self.blit_named("anim_spinner_1", f60, 38, 72, 1);
+        // Right Spinner + bracket
+        let _ = self.blit_named("anim_spinner_bracket_right", 0, 452, 72, 1);
+        let _ = self.blit_named("anim_spinner_2", f60, 452, 72, 1);
+        // Center rotating Naboo Starfighter
+        let _ = self.blit_named("anim_naboo_fighter_tiny_rotate", f60, 270, 26, 1);
     }
 }
 

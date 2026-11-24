@@ -307,7 +307,7 @@ const INDEX_HTML: &str = r#"<!doctype html>
     <button onclick="dbgMode('admin')">Admin Menu</button>
     <button onclick="dbgMode('debug')">Debug Menu</button>
     <button onclick="fetch('api/debug/score/1000000',{method:'POST'})">+1M Score</button>
-    <select id="swe1Scene" onchange="if(this.value) dbgMode(this.value)" style="background:#0f172a;color:#f8fafc;border:1px solid #475569;padding:6px;border-radius:4px;">
+    <select id="swe1Scene" onchange="if(this.value){ dbgMode(this.value); this.selectedIndex=0; }" style="background:#0f172a;color:#f8fafc;border:1px solid #475569;padding:6px;border-radius:4px;">
       <option value="">-- SWE1 Scène (1..12) --</option>
       <option value="scene:0">01: Battle Droid Invasion</option>
       <option value="scene:1">02: Destroyer Droids</option>
