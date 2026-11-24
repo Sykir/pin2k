@@ -1,0 +1,603 @@
+//! Native Rust Pinball 2000 (*Star Wars Episode I*) cabinet & desktop runtime.
+//!
+//! Connects the lifted SWE1 game engine (`pin2k-core`) to:
+//! - Physical Pinball 2000 Power Driver Board via Linux `/dev/parportN` (`ppdev`),
+//!   raw x86 I/O port `/dev/port` (`0x378`/`0x278`/`0x3BC`), or wire-exact `VirtualPdbPort`
+//! - Optional Encore-compatible wire trace output (`--lpt-trace <FILE>`)
+//! - Extracted SWE1 animations & DCS audio (`--assets-dir <DIR>`)
+//! - Live HTTP/HTML5 Canvas + WebAudio cabinet view (`--web-port <PORT>`)
+//! - Scripted deterministic SWE1 gameplay showcase (`--script demo`) & PNG frame export
+
+mod audio;
+mod compositor;
+mod web_ui;
+
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+use anyhow::Result;
+use audio::CompositeAudioBackend;
+use clap::Parser;
+use compositor::SoftwareCompositor;
+use pin2k_core::swe1_tables::sw;
+use pin2k_core::Pin2kMachine;
+use pin2k_hal::{
+    LptPort, NativeSerialPort, PdbDriver, PlayfieldSignature, SerialPdbPort, TracedLptPort,
+    VirtualPdbPort,
+};
+#[cfg(target_os = "linux")]
+use pin2k_hal::{DevPortLpt, LinuxPpdevPort};
+use pin2k_rom_tool::parse_hex_or_dec;
+use web_ui::{spawn_web_server, SharedWebState};
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "pin2k-desktop",
+    version,
+    about = "Star Wars Episode I (Pinball 2000) native Rust runtime with parallel-port Power Driver Board support"
+)]
+struct Cli {
+    /// Parallel-port or serial driver board backend:
+    /// `auto` (probes /dev/parport0..31 on Linux, falls back to virtual PDB),
+    /// `emulated` (wire-exact VirtualPdbPort),
+    /// `/dev/parportN` (Linux ppdev board),
+    /// `ioport:0x378` (Linux /dev/port SPP base address), or
+    /// `serial:/dev/ttyUSB0` / `serial:COM3` (cross-platform UART-to-PDB bridge).
+    #[arg(long, default_value = "auto")]
+    lpt_device: String,
+
+    /// Dedicated serial port device for UART-to-PDB bridge (e.g. `/dev/ttyUSB0` or `COM3`).
+    #[arg(long)]
+    serial_device: Option<String>,
+
+    /// Baud rate for `--serial-device` or `serial:...` (default: 115200).
+    #[arg(long, default_value_t = 115_200)]
+    serial_baud: u32,
+
+    /// Optional file path to record every parallel-port byte read/write (`R/W reg=val`).
+    #[arg(long)]
+    lpt_trace: Option<PathBuf>,
+
+    /// Optional JSONL file path to log every structured `GameEvent` emitted by `pin2k-core`.
+    #[arg(long)]
+    events_log: Option<PathBuf>,
+
+    /// Disable native OS OGG/PCM audio playback (`--no-native-audio`).
+    #[arg(long, default_value_t = false)]
+    no_native_audio: bool,
+
+    /// Path to extracted SWE1 assets directory (containing `gfx/gfx_manifest.json` and `audio/sound_manifest.json`).
+    #[arg(long)]
+    assets_dir: Option<PathBuf>,
+
+    /// Optional Pinball 2000 ROM update package (directory, `.exe`, or `.zip`) to validate & report active ROM version.
+    #[arg(long)]
+    rom_update: Option<PathBuf>,
+
+    /// Optional localhost HTTP port for live 640×480 Holoprojector + Playfield + WebAudio UI.
+    #[arg(long)]
+    web_port: Option<u16>,
+
+    /// Built-in automated switch script to execute (`none` or `demo`).
+    #[arg(long, default_value = "none")]
+    script: String,
+
+    /// Number of 60 Hz (`16 ms`) frames to simulate (`0` = run indefinitely until Ctrl-C).
+    #[arg(long, default_value_t = 60)]
+    frames: u64,
+
+    /// Sleep 16 ms per frame for real-time 60 Hz pacing (automatically enabled when `--web-port` is set).
+    #[arg(long, default_value_t = false)]
+    realtime: bool,
+
+    /// Optional PNG path to save the final rendered 640×480 composite frame.
+    #[arg(long)]
+    screenshot_out: Option<PathBuf>,
+
+    /// Optional directory to export every rendered 640×480 frame (`frame_0000.png`..) for video encoding.
+    #[arg(long)]
+    frames_out_dir: Option<PathBuf>,
+}
+
+/// Polymorphic `LptPort` wrapper allowing runtime selection between physical `ppdev`,
+/// `/dev/port`, and `VirtualPdbPort` while still allowing software switch injection on `VirtualPdbPort`.
+enum DynamicLptBackend {
+    #[cfg(target_os = "linux")]
+    Ppdev(LinuxPpdevPort),
+    #[cfg(target_os = "linux")]
+    DevPort(DevPortLpt),
+    Serial(SerialPdbPort<NativeSerialPort>),
+    Virtual(VirtualPdbPort),
+}
+
+impl DynamicLptBackend {
+    fn set_virtual_switch(&mut self, sw_id: u8, closed: bool) {
+        if let DynamicLptBackend::Virtual(ref mut v) = self {
+            v.set_logical_switch(sw_id, closed);
+        }
+    }
+
+    fn virtual_stats(&self) -> Option<(u64, u64, u64)> {
+        if let DynamicLptBackend::Virtual(ref v) = self {
+            Some((v.data_writes, v.ctrl_writes, v.dispatches))
+        } else {
+            None
+        }
+    }
+}
+
+impl LptPort for DynamicLptBackend {
+    fn read_data(&mut self) -> u8 {
+        match self {
+            #[cfg(target_os = "linux")]
+            DynamicLptBackend::Ppdev(p) => p.read_data(),
+            #[cfg(target_os = "linux")]
+            DynamicLptBackend::DevPort(p) => p.read_data(),
+            DynamicLptBackend::Serial(p) => p.read_data(),
+            DynamicLptBackend::Virtual(p) => p.read_data(),
+        }
+    }
+    fn write_data(&mut self, val: u8) {
+        match self {
+            #[cfg(target_os = "linux")]
+            DynamicLptBackend::Ppdev(p) => p.write_data(val),
+            #[cfg(target_os = "linux")]
+            DynamicLptBackend::DevPort(p) => p.write_data(val),
+            DynamicLptBackend::Serial(p) => p.write_data(val),
+            DynamicLptBackend::Virtual(p) => p.write_data(val),
+        }
+    }
+    fn read_status(&mut self) -> u8 {
+        match self {
+            #[cfg(target_os = "linux")]
+            DynamicLptBackend::Ppdev(p) => p.read_status(),
+            #[cfg(target_os = "linux")]
+            DynamicLptBackend::DevPort(p) => p.read_status(),
+            DynamicLptBackend::Serial(p) => p.read_status(),
+            DynamicLptBackend::Virtual(p) => p.read_status(),
+        }
+    }
+    fn read_control(&mut self) -> u8 {
+        match self {
+            #[cfg(target_os = "linux")]
+            DynamicLptBackend::Ppdev(p) => p.read_control(),
+            #[cfg(target_os = "linux")]
+            DynamicLptBackend::DevPort(p) => p.read_control(),
+            DynamicLptBackend::Serial(p) => p.read_control(),
+            DynamicLptBackend::Virtual(p) => p.read_control(),
+        }
+    }
+    fn write_control(&mut self, val: u8) {
+        match self {
+            #[cfg(target_os = "linux")]
+            DynamicLptBackend::Ppdev(p) => p.write_control(val),
+            #[cfg(target_os = "linux")]
+            DynamicLptBackend::DevPort(p) => p.write_control(val),
+            DynamicLptBackend::Serial(p) => p.write_control(val),
+            DynamicLptBackend::Virtual(p) => p.write_control(val),
+        }
+    }
+}
+
+enum MaybeTracedLpt {
+    Plain(DynamicLptBackend),
+    Traced(TracedLptPort<DynamicLptBackend>),
+}
+
+impl MaybeTracedLpt {
+    fn inner_mut(&mut self) -> &mut DynamicLptBackend {
+        match self {
+            MaybeTracedLpt::Plain(b) => b,
+            MaybeTracedLpt::Traced(t) => &mut t.inner,
+        }
+    }
+
+    fn inner_ref(&self) -> &DynamicLptBackend {
+        match self {
+            MaybeTracedLpt::Plain(b) => b,
+            MaybeTracedLpt::Traced(t) => &t.inner,
+        }
+    }
+}
+
+impl LptPort for MaybeTracedLpt {
+    fn read_data(&mut self) -> u8 {
+        match self {
+            MaybeTracedLpt::Plain(b) => b.read_data(),
+            MaybeTracedLpt::Traced(t) => t.read_data(),
+        }
+    }
+    fn write_data(&mut self, val: u8) {
+        match self {
+            MaybeTracedLpt::Plain(b) => b.write_data(val),
+            MaybeTracedLpt::Traced(t) => t.write_data(val),
+        }
+    }
+    fn read_status(&mut self) -> u8 {
+        match self {
+            MaybeTracedLpt::Plain(b) => b.read_status(),
+            MaybeTracedLpt::Traced(t) => t.read_status(),
+        }
+    }
+    fn read_control(&mut self) -> u8 {
+        match self {
+            MaybeTracedLpt::Plain(b) => b.read_control(),
+            MaybeTracedLpt::Traced(t) => t.read_control(),
+        }
+    }
+    fn write_control(&mut self, val: u8) {
+        match self {
+            MaybeTracedLpt::Plain(b) => b.write_control(val),
+            MaybeTracedLpt::Traced(t) => t.write_control(val),
+        }
+    }
+}
+
+fn open_lpt_backend(
+    spec: &str,
+    serial_device: Option<&str>,
+    serial_baud: u32,
+) -> Result<(DynamicLptBackend, String)> {
+    if let Some(dev) = serial_device.or_else(|| spec.strip_prefix("serial:")) {
+        let port = NativeSerialPort::open(dev, serial_baud)?;
+        return Ok((
+            DynamicLptBackend::Serial(SerialPdbPort::new(port)),
+            format!("serial ({dev} @ {serial_baud} 8N1)"),
+        ));
+    }
+    if spec == "emulated" {
+        return Ok((
+            DynamicLptBackend::Virtual(VirtualPdbPort::new(PlayfieldSignature::Swe1)),
+            "emulated (VirtualPdbPort SWE1)".to_string(),
+        ));
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(port_str) = spec.strip_prefix("ioport:") {
+        let base = parse_hex_or_dec(port_str).map_err(|e| anyhow::anyhow!(e))? as u16;
+        let p = DevPortLpt::open(base)?;
+        return Ok((
+            DynamicLptBackend::DevPort(p),
+            format!("/dev/port @ 0x{base:03X}"),
+        ));
+    }
+    #[cfg(not(target_os = "linux"))]
+    if let Some(_) = spec.strip_prefix("ioport:") {
+        anyhow::bail!("direct /dev/port I/O is Linux-only; use --serial-device COMx or --lpt-device emulated on Windows");
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if spec.starts_with("/dev/parport") {
+            let p = LinuxPpdevPort::open(spec)?;
+            return Ok((DynamicLptBackend::Ppdev(p), format!("ppdev ({spec})")));
+        }
+        if spec == "auto" {
+            if let Some(p) = LinuxPpdevPort::auto_discover() {
+                let desc = format!("auto-detected ppdev ({})", p.device_path().display());
+                return Ok((DynamicLptBackend::Ppdev(p), desc));
+            }
+        }
+    }
+    let _ = parse_hex_or_dec;
+    Ok((
+        DynamicLptBackend::Virtual(VirtualPdbPort::new(PlayfieldSignature::Swe1)),
+        "auto -> VirtualPdbPort (no physical port detected)".to_string(),
+    ))
+}
+
+/// Returns scripted switch events `(frame_num, sw_id, hold_frames)` for `--script demo`
+/// exercising Coins, Start, Skill Shot, Deflector Shield breakdown, Battle Droid Scene,
+/// Laser Action Buttons, J-E-D-I -> Darth Maul Lightsaber Duel, and Hangar 3-Ball Multiball!
+fn build_demo_script() -> Vec<(u64, u8, u64)> {
+    vec![
+        (4, sw::LEFT_COIN, 4),
+        (12, sw::START_BUTTON, 4),
+        (24, sw::JETS_ROLLOVER, 4),        // Skill Shot (+500,000)
+        (36, sw::LEFT_SHIELD_TARGET, 4),   // Deplete Deflector Shield (6 -> 4 -> 2 -> 0)
+        (46, sw::RIGHT_SHIELD_TARGET, 4),
+        (56, sw::SHIELD_HIT, 4),           // Shields Down -> Shield Popper opens!
+        (68, sw::SHIELD_POPPER, 4),        // Starts Scene 1: Battle Droid Invasion!
+        (74, sw::LEFT_BANK_UPPER, 3),      // Charge Lasers
+        (80, sw::LEFT_ACTION_BUTTON, 3),   // Fire Left Laser Action Button!
+        (90, sw::RIGHT_ACTION_BUTTON, 3),  // Fire Right Laser Action Button!
+        (100, sw::RAMP_MADE_LEFT, 4),      // Scene hits -> Victory!
+        (110, sw::RAMP_MADE_RIGHT, 4),
+        (120, sw::LEFT_LOOP_UPPER, 4),     // Completes Battle Droid Invasion (+1,500,000)!
+        (132, sw::RAMP_MADE_LEFT, 4),      // Spell J-E-D-I -> Darth Maul Saber Duel!
+        (142, sw::RAMP_MADE_RIGHT, 4),
+        (152, sw::RAMP_MADE_LEFT, 4),
+        (162, sw::RAMP_MADE_RIGHT, 4),     // J-E-D-I Complete -> Duel of the Fates + Neon ON!
+        (174, sw::RAMP_MADE_LEFT, 4),      // Lightsaber Combo vs Darth Maul!
+        (184, sw::RAMP_MADE_RIGHT, 4),
+        (194, sw::RAMP_MADE_LEFT, 4),      // Maul Defeated -> Promoted to Jedi Youth!
+        (216, sw::LEFT_DROP_TARGET, 4),    // Open Left Saucer
+        (224, sw::LEFT_SAUCER, 4),         // Lock Ball 1
+        (234, sw::RIGHT_SAUCER, 4),        // Lock Ball 2
+        (244, sw::LEFT_SAUCER, 4),         // Lock Ball 3 -> Theed Hangar 3-Ball Multiball!
+        (256, sw::RAMP_MADE_LEFT, 4),      // Jackpot #1 (+1,000,000)
+        (266, sw::RAMP_MADE_RIGHT, 4),     // Jackpot #2 (+2,000,000)
+        (276, sw::SHIELD_POPPER, 4),       // Super Jackpot in Center Scoop (+3,000,000)!
+    ]
+}
+
+fn build_diag_script() -> Vec<(u64, u8, u64)> {
+    vec![
+        (4, sw::DIAG_ENTER, 4),  // Enter Admin Root Menu
+        (12, sw::DIAG_ENTER, 4), // Enter Diagnostics Submenu
+        (20, sw::DIAG_UP, 4),    // Select Coil / Solenoid Test
+        (28, sw::DIAG_ENTER, 4), // Open Coil Test
+        (36, sw::DIAG_UP, 4),    // Pulse Coil 01
+        (44, sw::DIAG_UP, 4),    // Pulse Coil 02
+        (52, sw::DIAG_UP, 4),    // Pulse Coil 03 (Magnet)
+    ]
+}
+
+fn build_admin_script() -> Vec<(u64, u8, u64)> {
+    vec![
+        (4, sw::DIAG_ENTER, 4),  // Open Operator Admin Menu
+        (12, sw::DIAG_UP, 4),    // Cursor -> Audits
+        (20, sw::DIAG_UP, 4),    // Cursor -> Adjustments
+        (28, sw::DIAG_ENTER, 4), // Open Adjustments
+        (36, sw::DIAG_UP, 4),    // Cursor -> Balls/Game
+        (44, sw::DIAG_ENTER, 4), // Toggle Balls/Game -> 5
+    ]
+}
+
+/// Scripted switch sequence dedicated to *Boonta Eve Podrace* (`--script podrace`, 300 frames):
+/// Starts game, depletes Deflector Shield, enters Center Scoop (`Swe1Scene::Podrace`), plays
+/// the 60-frame Boonta Eve starting grid, races through Beggar's Canyon firing Lasers & hitting
+/// Checkpoints, and finishes with the full-screen Podrace Victory closeup!
+fn build_podrace_script() -> Vec<(u64, u8, u64)> {
+    vec![
+        (2, sw::LEFT_COIN, 3),
+        (6, sw::START_BUTTON, 3),
+        (11, sw::LEFT_SHIELD_TARGET, 3),
+        (16, sw::RIGHT_SHIELD_TARGET, 3),
+        (21, sw::SHIELD_HIT, 3),          // Deflector Shield down -> Center Scoop opens
+        (26, sw::SHIELD_POPPER, 4),       // Starts BOONTA EVE PODRACE (6 required hits)!
+        (92, sw::LEFT_BANK_UPPER, 3),     // Charge Lasers
+        (98, sw::LEFT_FLIPPER_BUTTON, 10),// Steer Podracer Left
+        (114, sw::LEFT_ACTION_BUTTON, 3), // Hit #1: Left Laser Blast -> Sebulba explosion!
+        (138, sw::RIGHT_FLIPPER_BUTTON, 10),
+        (144, sw::RAMP_MADE_LEFT, 4),     // Hit #2: Left Ramp Checkpoint!
+        (168, sw::RIGHT_ACTION_BUTTON, 3),// Hit #3: Right Laser Blast!
+        (192, sw::RAMP_MADE_RIGHT, 4),    // Hit #4: Right Ramp Checkpoint!
+        (216, sw::LEFT_LOOP_UPPER, 4),    // Hit #5: Force Loop Boost!
+        (242, sw::RAMP_MADE_LEFT, 4),     // Hit #6: BOONTA EVE PODRACE VICTORY! +1,500,000!
+    ]
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    let (dyn_lpt, lpt_desc) = open_lpt_backend(
+        &cli.lpt_device,
+        cli.serial_device.as_deref(),
+        cli.serial_baud,
+    )?;
+    let lpt = match cli.lpt_trace.as_ref() {
+        Some(trace_path) => {
+            if let Some(p) = trace_path.parent() {
+                if !p.as_os_str().is_empty() {
+                    fs::create_dir_all(p)?;
+                }
+            }
+            MaybeTracedLpt::Traced(TracedLptPort::new(dyn_lpt, trace_path)?)
+        }
+        None => MaybeTracedLpt::Plain(dyn_lpt),
+    };
+
+    let mut events_file = match cli.events_log.as_ref() {
+        Some(path) => {
+            if let Some(p) = path.parent() {
+                if !p.as_os_str().is_empty() {
+                    fs::create_dir_all(p)?;
+                }
+            }
+            Some(OpenOptions::new().create(true).write(true).truncate(true).open(path)?)
+        }
+        None => None,
+    };
+
+    let mut pdb = PdbDriver::new(lpt);
+    let detected_sig = pdb.probe_playfield_signature();
+    let fuses = pdb.read_fuse_status();
+
+    let mut compositor = SoftwareCompositor::new();
+    let loaded_anims = if let Some(ref dir) = cli.assets_dir {
+        compositor.load_assets(dir)?
+    } else {
+        0
+    };
+
+    let shared_web = Arc::new(Mutex::new(SharedWebState::default()));
+    let audio = CompositeAudioBackend::new(
+        Arc::clone(&shared_web),
+        cli.assets_dir.as_deref(),
+        !cli.no_native_audio,
+    );
+
+    if let Some(port) = cli.web_port {
+        spawn_web_server(port, Arc::clone(&shared_web), cli.assets_dir.clone())?;
+    }
+
+    let rom_version_str = if let Some(ref upd_path) = cli.rom_update {
+        let bundle = pin2k_rom_tool::prism::load_update_bundle(upd_path)?;
+        format!(
+            "{} (#{}) v{}.{:02} (XINA {})",
+            bundle.header.game_name,
+            bundle.header.game_number,
+            bundle.header.version_major,
+            bundle.header.version_minor,
+            bundle.header.xina_version
+        )
+    } else {
+        "SWE1 (#50069) native Rust rules".to_string()
+    };
+
+    println!(
+        "pin2k-desktop initialized: ROM=[{}], LPT=[{}], playfield_probe={:?}, fuses=(0x{:02X},0x{:02X}), loaded_anims={}",
+        rom_version_str, lpt_desc, detected_sig, fuses.0, fuses.1, loaded_anims
+    );
+
+    if let Some(ref out_dir) = cli.frames_out_dir {
+        fs::create_dir_all(out_dir)?;
+    }
+
+    let mut machine = Pin2kMachine::with_audio(pdb, compositor, audio);
+    let demo_events = match cli.script.as_str() {
+        "demo" => build_demo_script(),
+        "diagnostics" => build_diag_script(),
+        "admin" => build_admin_script(),
+        "podrace" => build_podrace_script(),
+        _ => Vec::new(),
+    };
+
+    let mut scheduled_releases: Vec<(u64, u8)> = Vec::new();
+    let pace_realtime = cli.realtime || cli.web_port.is_some();
+    let mut frame: u64 = 0;
+
+    loop {
+        if cli.frames > 0 && frame >= cli.frames {
+            break;
+        }
+
+        // Queue Swe1Scene::Podrace (index 6) right before Center Scoop entry in `--script podrace`
+        if cli.script == "podrace" && frame == 25 {
+            machine.players[0].next_scene_idx = 6;
+        }
+
+        // Apply scripted switch presses/releases
+        for &(start_f, sw_id, hold_f) in &demo_events {
+            if frame == start_f {
+                machine.hw.port.inner_mut().set_virtual_switch(sw_id, true);
+                scheduled_releases.push((frame + hold_f, sw_id));
+            }
+        }
+        scheduled_releases.retain(|&(rel_f, sw_id)| {
+            if frame >= rel_f {
+                machine.hw.port.inner_mut().set_virtual_switch(sw_id, false);
+                false
+            } else {
+                true
+            }
+        });
+
+        // Apply web UI switch presses
+        if let Ok(mut st) = shared_web.lock() {
+            for (sw_id, closed, hold_ms) in st.pending_switches.drain(..) {
+                machine.hw.port.inner_mut().set_virtual_switch(sw_id, closed);
+                let hold_frames = (hold_ms as u64 / 16).max(2);
+                scheduled_releases.push((frame + hold_frames, sw_id));
+            }
+        }
+
+        // Update active animation selection from SWE1 game state before ticking
+        let hint = machine.active_anim_hint.clone();
+        machine.video.select_anim_by_hint(&hint);
+
+        machine.tick(16);
+
+        let emitted_events = machine.drain_events();
+        if let Some(ref mut ef) = events_file {
+            for ev in &emitted_events {
+                if let Ok(line) = serde_json::to_string(ev) {
+                    let _ = writeln!(ef, "{line}");
+                }
+            }
+        }
+        if cli.web_port.is_some() && !emitted_events.is_empty() {
+            if let Ok(mut st) = shared_web.lock() {
+                if let Ok(ev_json) = serde_json::to_string(&emitted_events) {
+                    st.events_json = ev_json;
+                }
+            }
+        }
+
+        // Overlay live playfield lamps & PDB coil telemetry onto lower screen half
+        let lamps_copy = *machine.hw.lamp_states();
+        let drive_mask = machine.hw.active_drive_mask();
+        let pdb_ok = machine.hw.pdb_present;
+        let door_ok = machine.coin_door_closed;
+        let rank_str = machine.players[machine.current_player].jedi_rank.label();
+        let lasers = machine.players[machine.current_player].laser_shots;
+        machine.video.draw_playfield_telemetry(
+            &lamps_copy,
+            drive_mask,
+            pdb_ok,
+            door_ok,
+            machine.credits,
+            machine.current_ball,
+            rank_str,
+            lasers,
+            machine.elapsed_ms,
+        );
+
+        if let Some(ref out_dir) = cli.frames_out_dir {
+            let p = out_dir.join(format!("frame_{frame:04}.png"));
+            machine.video.framebuffer.save(&p)?;
+        }
+
+        // Publish frame & state to web UI if active
+        if cli.web_port.is_some() && frame % 4 == 0 {
+            if let Ok(png) = machine.video.encode_png() {
+                if let Ok(mut st) = shared_web.lock() {
+                    let (seq, sfile, sloop) = st
+                        .active_sound_file
+                        .clone()
+                        .unwrap_or((0, String::new(), false));
+                    st.latest_png = png;
+                    st.status_json = serde_json::json!({
+                        "state": format!("{:?}", machine.state),
+                        "score": machine.score,
+                        "ball": machine.current_ball,
+                        "credits": machine.credits,
+                        "rank": rank_str,
+                        "banner": machine.status_banner,
+                        "sound_seq": seq,
+                        "sound_file": sfile,
+                        "sound_loop": sloop,
+                    })
+                    .to_string();
+                }
+            }
+        }
+
+        frame += 1;
+        if pace_realtime {
+            thread::sleep(Duration::from_millis(16));
+        }
+    }
+
+    if let Some(ref shot_path) = cli.screenshot_out {
+        if let Some(p) = shot_path.parent() {
+            if !p.as_os_str().is_empty() {
+                fs::create_dir_all(p)?;
+            }
+        }
+        machine.video.framebuffer.save(shot_path)?;
+        println!("Saved 640x480 composite screenshot -> {}", shot_path.display());
+    }
+
+    let p = &machine.players[machine.current_player];
+    println!(
+        "pin2k-desktop summary: frames={}, state={:?}, score={}, rank={}, scenes_done={}, banner=\"{}\"",
+        machine.video.frames_presented,
+        machine.state,
+        machine.score,
+        p.jedi_rank.label(),
+        p.scenes_completed.count_ones(),
+        machine.status_banner
+    );
+    if let Some((dw, cw, disp)) = machine.hw.port.inner_ref().virtual_stats() {
+        println!(
+            "PDB LPT bus telemetry: data_writes={}, ctrl_writes={}, register_dispatches={}",
+            dw, cw, disp
+        );
+    }
+
+    Ok(())
+}

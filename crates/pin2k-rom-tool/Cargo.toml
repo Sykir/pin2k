@@ -1,0 +1,15 @@
+[package]
+name = "pin2k-rom-tool"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "PRISM ROM reconstruction, ASCII/header scanning, and raw sprite preview tooling for Pinball 2000"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+image.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+zip.workspace = true

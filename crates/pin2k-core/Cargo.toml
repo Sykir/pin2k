@@ -1,0 +1,11 @@
+[package]
+name = "pin2k-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Clean-room Pinball 2000 & Star Wars Episode I (#50069) game engine"
+
+[dependencies]
+pin2k-hal = { path = "../pin2k-hal" }
+serde.workspace = true
+thiserror.workspace = true

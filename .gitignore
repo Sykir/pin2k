@@ -1,0 +1,21 @@
+/target
+**/*.rs.bk
+*.pdb
+
+# Local proprietary ROM dumps, updates, extracted assets, and runtime artifacts (never commit)
+/roms/
+/assets/
+/updates/
+/work/
+*.bin
+*.rom
+*.flash
+*.elf
+*.exe
+*.zip
+*.ogg
+*.png
+*.gif
+*.mp4
+*.trace
+*.jsonl

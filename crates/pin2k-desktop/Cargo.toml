@@ -1,0 +1,20 @@
+[package]
+name = "pin2k-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Native Rust Pinball 2000 / Star Wars Episode I cabinet & desktop runtime"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+image.workspace = true
+lewton.workspace = true
+pin2k-core = { path = "../pin2k-core" }
+pin2k-hal = { path = "../pin2k-hal" }
+pin2k-rom-tool = { path = "../pin2k-rom-tool" }
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
