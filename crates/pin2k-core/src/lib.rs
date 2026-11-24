@@ -1,6 +1,7 @@
 //! Core Pinball 2000 & *Star Wars Episode I* (`#50069`) game engine.
 
 pub mod admin;
+pub mod attract;
 pub mod events;
 pub mod machine;
 pub mod mods;
@@ -13,6 +14,7 @@ pub mod switch_matrix;
 use thiserror::Error;
 
 pub use admin::{AdminScreen, Difficulty, GameAdjustments, GameAudits};
+pub use attract::{AttractController, AttractDeff};
 pub use events::{GameEvent, TimestampedEvent};
 pub use machine::{DiagPage, MachineState, Pin2kMachine};
 pub use mods::{HomebrewSwitchRule, ModManifest};

@@ -163,7 +163,12 @@ impl SoftwareCompositor {
     }
 
     /// Selects the best-matching loaded SWE1 animation for `hint` (exact match, then full-height substring match).
+    /// An empty `hint` clears the active sprite so pure text/starfield screens render cleanly.
     pub fn select_anim_by_hint(&mut self, hint: &str) {
+        if hint.is_empty() {
+            self.active_anim_idx = None;
+            return;
+        }
         if let Some(&idx) = self.anim_lookup.get(hint) {
             self.active_anim_idx = Some(idx);
             return;

@@ -177,6 +177,11 @@ pub mod sound {
     pub const EXPLOSION: SoundId = SoundId(0x0015);
     pub const SHIELD_HIT_SFX: SoundId = SoundId(0x0016);
     pub const JET_BUMPER_SFX: SoundId = SoundId(0x0018);
+
+    #[allow(non_snake_case)]
+    pub const fn LASER_SFX_OR_CLICK() -> SoundId {
+        SoundId(0x000D)
+    }
 }
 
 /// Descriptor for a SWE1 drive (`DriveTable` + `DriveXYtable`).

@@ -6,6 +6,7 @@ use pin2k_hal::{
 use serde::{Deserialize, Serialize};
 
 use crate::admin::{AdminScreen, GameAdjustments, GameAudits, ADMIN_SOUND_PRESETS};
+use crate::attract::{AttractController, AttractDeff};
 use crate::events::{GameEvent, TimestampedEvent};
 use crate::mods::{HomebrewSwitchRule, ModManifest};
 use crate::rfm_rules::{GameTitle, RfmMultiball, RfmState, RfmWave};
@@ -74,6 +75,7 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub active_scene: Option<ActiveSceneState>,
     pub multiball: ActiveMultiball,
     pub rfm: RfmState,
+    pub attract: AttractController,
     pub status_banner: String,
     pub banner_timer_ms: u32,
     pub active_anim_hint: String,
@@ -141,9 +143,10 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             active_scene: None,
             multiball: ActiveMultiball::None,
             rfm: RfmState::default(),
+            attract: AttractController::default(),
             status_banner: banner,
             banner_timer_ms: 0,
-            active_anim_hint: "anim_battle_droid_intro_battle".to_string(),
+            active_anim_hint: String::new(),
             diag_page: DiagPage::SwitchTest,
             admin_screen: AdminScreen::Root { cursor: 0 },
             adjustments: GameAdjustments::default(),
@@ -320,11 +323,14 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             MachineState::Attract => {
                 if id == sw::START_BUTTON {
                     self.try_start_or_add_player();
-                } else if id == sw::LEFT_FLIPPER_BUTTON || id == sw::RIGHT_FLIPPER_BUTTON {
-                    // Attract flipper cycle (`AttractMode::left_hit` / `right_hit`)
-                    let scene = Swe1Scene::ALL[((self.elapsed_ms / 100) as usize) % 12];
-                    self.active_anim_hint = scene.anim_hint().to_string();
-                    self.set_banner(format!("HIGH SCORE: {} {}", self.high_scores[0].initials.iter().collect::<String>(), self.high_scores[0].score), 2_500);
+                } else if id == sw::LEFT_FLIPPER_BUTTON {
+                    // Lifted AttractMode::left_hit (`0x00100358`)
+                    self.attract.advance(-1);
+                    self.emit_sound(sound::LASER_SFX_OR_CLICK(), false);
+                } else if id == sw::RIGHT_FLIPPER_BUTTON {
+                    // Lifted AttractMode::right_hit (`0x001003e0`)
+                    self.attract.advance(1);
+                    self.emit_sound(sound::LASER_SFX_OR_CLICK(), false);
                 }
             }
             MachineState::Diagnostics => self.handle_diagnostics_switch(id),
@@ -1549,6 +1555,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
     fn finish_game(&mut self) {
         self.state = MachineState::Attract;
+        self.attract.last_game_played = true;
+        self.attract.index = 13; // DeffAttractModeScores
+        self.attract.timer_ms = 0;
         self.audio.stop_all();
         self.emit_sound(sound::GAME_OVER_MUSIC, false);
         self.emit_event(GameEvent::GameOver {
@@ -1570,45 +1579,42 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     fn update_timers(&mut self, dt_ms: u32) {
-        if self.state == MachineState::Boot && self.elapsed_ms >= 3_200 {
+        if self.state == MachineState::Boot && self.elapsed_ms >= 1_200 {
             self.state = MachineState::Attract;
-            self.emit_sound(sound::ATTRACT_MUSIC, false);
+            self.attract.index = 0; // Start at DeffAttractModeKahunaLogo
+            self.attract.timer_ms = 0;
+            if !self.attract.attract_music_started {
+                self.attract.attract_music_started = true;
+                self.emit_sound(sound::ATTRACT_MUSIC, false);
+            }
             self.set_banner(format!("{} - PRESS START", self.game_title.title()), 0);
         }
 
         if self.state == MachineState::Attract {
-            let phase = ((self.elapsed_ms / 4_000) % 5) as usize;
+            self.attract.tick(dt_ms);
+            let cur = self.attract.current();
             if self.game_title == GameTitle::Swe1 {
-                match phase {
-                    0 => {
-                        self.active_anim_hint = "anim_battle_droid_intro_battle".to_string();
-                        self.status_banner = if self.free_play || self.credits > 0 {
-                            "STAR WARS EPISODE I - PRESS START".to_string()
-                        } else {
-                            "STAR WARS EPISODE I - INSERT COIN".to_string()
-                        };
-                    }
-                    1 => {
-                        self.active_anim_hint = "anim_jedi_battle_intro_frame".to_string();
-                        self.status_banner = format!(
-                            "GRAND CHAMPION: {} {}",
-                            self.high_scores[0].initials.iter().collect::<String>(),
-                            self.high_scores[0].score
-                        );
-                    }
-                    2 => {
-                        self.active_anim_hint = "anim_jedi_battle_maul_chop_single".to_string();
-                        self.status_banner = "SPELL J-E-D-I FOR DARTH MAUL DUEL".to_string();
-                    }
-                    3 => {
-                        self.active_anim_hint = "anim_podrace_intro_movie".to_string();
-                        self.status_banner = "BOONTA EVE PODRACE".to_string();
-                    }
-                    _ => {
-                        self.active_anim_hint = "anim_hangar_droid_explosion".to_string();
-                        self.status_banner = "THEED HANGAR 3-BALL MULTIBALL".to_string();
-                    }
-                }
+                self.active_anim_hint = cur.anim_hint().unwrap_or("").to_string();
+                self.status_banner = match cur {
+                    AttractDeff::KahunaLogo | AttractDeff::P2kLogo | AttractDeff::HasbroAd => String::new(),
+                    AttractDeff::SlideShow => "STAR WARS EPISODE I".to_string(),
+                    AttractDeff::Hstd => "HIGHEST SCORES".to_string(),
+                    AttractDeff::JediTableYouth => "JEDI YOUTH".to_string(),
+                    AttractDeff::JediTableKnight => "JEDI KNIGHT".to_string(),
+                    AttractDeff::JediTableMaster => "JEDI MASTER".to_string(),
+                    AttractDeff::JediTableSpirit => "JEDI SPIRIT".to_string(),
+                    AttractDeff::RampComboChampion => "RAMP COMBO CHAMPION".to_string(),
+                    AttractDeff::ScoreAwards => "REPLAY & EXTRA BALL".to_string(),
+                    AttractDeff::EmailAddress => "PINBALL 2000".to_string(),
+                    AttractDeff::WebPage => "WWW.PINBALL.COM".to_string(),
+                    AttractDeff::Scores => "LAST GAME SCORES".to_string(),
+                    AttractDeff::GameCredits1 => "WILLIAMS ELECTRONICS".to_string(),
+                    AttractDeff::GameCredits2 => "LUCASFILM LTD.".to_string(),
+                    AttractDeff::GameCredits3 => "DESIGN & SOFTWARE".to_string(),
+                    AttractDeff::GameCredits4 => "PINBALL 2000 TEAM".to_string(),
+                    AttractDeff::CustomMessage => String::new(),
+                    AttractDeff::HtpScene => "SHOOT SHIELD -> START SCENE".to_string(),
+                };
             }
         }
 
@@ -1826,25 +1832,15 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
     fn render_frame(&mut self) {
         if self.state == MachineState::Boot {
-            self.video.draw_text("WILLIAMS PINBALL 2000", 320, 48, 0x7FE0, 2);
-            self.video.draw_text(self.game_title.title(), 320, 88, 0x7FFF, 2);
-            self.video.draw_text("PRISM ROM & HARDWARE CHECK ... OK", 320, 140, 0x03E0, 1);
-            self.video.draw_text(
-                if self.coin_door_closed {
-                    "POWER DRIVER BOARD: ONLINE (HV READY)"
-                } else {
-                    "POWER DRIVER BOARD: COIN DOOR OPEN"
-                },
-                320,
-                165,
-                0x03FF,
-                1,
-            );
-            self.video.draw_text("INITIALIZING XINA ENGINE...", 320, 200, 0x5EF7, 1);
+            self.active_anim_hint.clear();
+            self.video.draw_text("WILLIAMS PINBALL 2000", 320, 62, 0x7FE0, 2);
+            self.video.draw_text(self.game_title.title(), 320, 100, 0x7FFF, 2);
+            self.video.draw_text("XINA / PRISM ROM CHECK ... OK", 320, 150, 0x03E0, 1);
             self.video.present();
             return;
         }
         if self.state == MachineState::Diagnostics {
+            self.active_anim_hint.clear();
             let (title, rows) = self.admin_display_lines();
             self.video.draw_text(&title, 320, 22, 0x7FE0, 2);
             for (i, (line, selected)) in rows.iter().enumerate() {
@@ -1868,31 +1864,71 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.video.present();
             return;
         }
-        let frame_idx = (self.elapsed_ms / 32) as usize;
-        self.video.draw_sprite(AssetId(0), frame_idx, 210, 20, 0);
-        self.video.draw_text(&self.status_banner, 320, 190, 0x7FE0, 2);
+        let frame_idx = match self.attract.current() {
+            AttractDeff::P2kLogo if self.state == MachineState::Attract => (self.attract.timer_ms / 66) as usize,
+            AttractDeff::KahunaLogo if self.state == MachineState::Attract => (self.attract.timer_ms / 40) as usize,
+            _ => (self.elapsed_ms / 32) as usize,
+        };
+        if !self.active_anim_hint.is_empty() {
+            self.video.draw_sprite(AssetId(0), frame_idx, 210, 20, 0);
+        }
         match self.state {
             MachineState::Attract => {
-                if ((self.elapsed_ms / 4_000) % 5) == 1 {
-                    for (i, hs) in self.high_scores.iter().take(4).enumerate() {
-                        let ini: String = hs.initials.iter().collect();
-                        self.video.draw_text(
-                            &format!("#{} {}  {:>10}", i + 1, ini, hs.score),
-                            320,
-                            72 + (i as i32) * 24,
-                            0x7FFF,
-                            2,
-                        );
+                match self.attract.current() {
+                    AttractDeff::Hstd => {
+                        self.video.draw_text("HIGHEST SCORES", 320, 26, 0x7FE0, 2);
+                        for (i, hs) in self.high_scores.iter().take(4).enumerate() {
+                            let ini: String = hs.initials.iter().collect();
+                            self.video.draw_text(
+                                &format!("#{} {}  {:>10}", i + 1, ini, hs.score),
+                                320,
+                                68 + (i as i32) * 26,
+                                0x7FFF,
+                                2,
+                            );
+                        }
+                    }
+                    AttractDeff::JediTableYouth
+                    | AttractDeff::JediTableKnight
+                    | AttractDeff::JediTableMaster
+                    | AttractDeff::JediTableSpirit => {
+                        self.video.draw_text(&self.status_banner, 320, 32, 0x03FF, 2);
+                        self.video.draw_text("QGJ   OBI   ANI   PAD", 320, 96, 0x7FFF, 2);
+                        self.video.draw_text("DEFEAT DARTH MAUL TO ADVANCE", 320, 140, 0x7FE0, 1);
+                    }
+                    AttractDeff::ScoreAwards => {
+                        self.video.draw_text("REPLAY AT 15,000,000", 320, 74, 0x7FE0, 2);
+                        self.video.draw_text("EXTRA BALL AT 4 SCENES", 320, 114, 0x7FFF, 2);
+                    }
+                    AttractDeff::GameCredits1
+                    | AttractDeff::GameCredits2
+                    | AttractDeff::GameCredits3
+                    | AttractDeff::GameCredits4 => {
+                        self.video.draw_text(&self.status_banner, 320, 74, 0x7FE0, 2);
+                        self.video.draw_text("STAR WARS EPISODE I PINBALL", 320, 116, 0x7FFF, 2);
+                    }
+                    _ => {
+                        if !self.status_banner.is_empty() {
+                            self.video.draw_text(&self.status_banner, 320, 190, 0x7FE0, 2);
+                        }
                     }
                 }
-                let cred_txt = if self.free_play {
-                    "FREE PLAY".to_string()
-                } else {
-                    format!("CREDITS {}", self.credits)
-                };
-                self.video.draw_text(&cred_txt, 320, 220, 0x03FF, 1);
+                // DeffAttractModePriceBackground: blink FREE PLAY / CREDITS every 500 ms
+                if (self.elapsed_ms / 500) % 2 == 0 {
+                    let price_txt = if self.free_play {
+                        "FREE PLAY - PRESS START".to_string()
+                    } else if self.credits > 0 {
+                        format!("CREDITS {} - PRESS START", self.credits)
+                    } else {
+                        "INSERT COIN".to_string()
+                    };
+                    self.video.draw_text(&price_txt, 320, 222, 0x03FF, 1);
+                }
             }
             MachineState::InGame | MachineState::Tilt => {
+                if !self.status_banner.is_empty() {
+                    self.video.draw_text(&self.status_banner, 320, 190, 0x7FE0, 2);
+                }
                 self.video.draw_text(
                     &format!("P{}  BALL {}   {:>10}", self.current_player + 1, self.current_ball, self.score),
                     320,
