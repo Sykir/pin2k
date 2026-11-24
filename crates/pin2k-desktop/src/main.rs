@@ -87,9 +87,13 @@ struct Cli {
     #[arg(long = "mod")]
     mods: Vec<PathBuf>,
 
-    /// Optional localhost HTTP port for live 640×480 Holoprojector + Playfield + WebAudio UI.
+    /// Optional HTTP port for live 640×480 Holoprojector + Playfield + WebAudio UI.
     #[arg(long)]
     web_port: Option<u16>,
+
+    /// Bind address for `--web-port` (default: `0.0.0.0` for Docker/Kubernetes/LAN access).
+    #[arg(long, default_value = "0.0.0.0")]
+    web_bind: String,
 
     /// Built-in automated switch script to execute (`none` or `demo`).
     #[arg(long, default_value = "none")]
@@ -494,7 +498,7 @@ fn main() -> Result<()> {
     }
 
     if let Some(port) = cli.web_port {
-        spawn_web_server(port, Arc::clone(&shared_web), cli.assets_dir.clone())?;
+        spawn_web_server(&cli.web_bind, port, Arc::clone(&shared_web), cli.assets_dir.clone())?;
     }
 
     let rom_version_str = if let Some(ref bundle) = update_bundle {

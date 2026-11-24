@@ -83,12 +83,13 @@ impl AudioBackend for WebAudioBridge {
 }
 
 pub fn spawn_web_server(
+    bind_addr: &str,
     port: u16,
     shared: Arc<Mutex<SharedWebState>>,
     assets_dir: Option<PathBuf>,
 ) -> anyhow::Result<()> {
-    let listener = TcpListener::bind(("127.0.0.1", port))?;
-    println!("Live Pinball 2000 Web Cabinet UI listening at http://127.0.0.1:{port}");
+    let listener = TcpListener::bind((bind_addr, port))?;
+    println!("Live Pinball 2000 Web Cabinet UI listening at http://{bind_addr}:{port}");
 
     thread::spawn(move || {
         for stream in listener.incoming().flatten() {
