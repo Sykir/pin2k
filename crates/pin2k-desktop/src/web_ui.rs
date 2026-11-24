@@ -118,7 +118,8 @@ fn handle_client(
     let first_line = req.lines().next().unwrap_or("");
     let mut parts = first_line.split_whitespace();
     let method = parts.next().unwrap_or("GET");
-    let path = parts.next().unwrap_or("/");
+    let raw_path = parts.next().unwrap_or("/");
+    let path = raw_path.split('?').next().unwrap_or(raw_path);
 
     if method == "POST" && path.starts_with("/api/switch/") {
         if let Ok(sw_id) = path.trim_start_matches("/api/switch/").parse::<u8>() {
@@ -206,7 +207,8 @@ const INDEX_HTML: &str = r#"<!doctype html>
 </head>
 <body>
   <h2>STAR WARS EPISODE I — PINBALL 2000 (RUST PORT)</h2>
-  <img id="screen" src="/frame.png" alt="Pinball 2000 Display">
+  <img id="screen" src="frame.png" alt="Pinball 2000 Display">
+  <div id="hud" style="margin-top:8px; color:#93c5fd; font-size:14px;">LOADING...</div>
   <div class="controls">
     <button onclick="hit(64)">Coin [C]</button>
     <button onclick="hit(2)">Start [S]</button>
@@ -228,28 +230,46 @@ const INDEX_HTML: &str = r#"<!doctype html>
 <script>
 let lastSoundSeq = 0;
 let bgAudio = null;
-function hit(sw) { fetch('/api/switch/' + sw, {method:'POST'}); }
+function hit(sw) { fetch('api/switch/' + sw, {method:'POST'}); }
 document.addEventListener('keydown', (e) => {
   const map = {c:64, s:2, z:85, m:84, x:87, '.':86, l:36, r:37, h:34, p:32, k:22, j:45, '1':72, '2':73, '3':74, '4':75};
   const sw = map[e.key.toLowerCase()];
   if (sw !== undefined) hit(sw);
 });
+
+// Double-buffered frame loop: waits for each PNG to decode before swapping, never aborts in-flight frames
+function pumpFrame() {
+  const pre = new Image();
+  pre.onload = () => {
+    document.getElementById('screen').src = pre.src;
+    setTimeout(pumpFrame, 45);
+  };
+  pre.onerror = () => {
+    setTimeout(pumpFrame, 250);
+  };
+  pre.src = 'frame.png?t=' + Date.now();
+}
+pumpFrame();
+
 setInterval(async () => {
-  document.getElementById('screen').src = '/frame.png?t=' + Date.now();
   try {
-    const r = await fetch('/api/state');
+    const r = await fetch('api/state');
     const st = await r.json();
+    if (st.state) {
+      document.getElementById('hud').textContent =
+        `${st.state} | BALL ${st.ball} | CREDITS ${st.credits} | SCORE ${st.score} | ${st.rank} | ${st.banner}`;
+    }
     if (st.sound_seq && st.sound_seq !== lastSoundSeq) {
       lastSoundSeq = st.sound_seq;
       if (st.sound_file) {
-        const a = new Audio('/audio/' + st.sound_file);
+        const a = new Audio('audio/' + st.sound_file);
         a.loop = !!st.sound_loop;
         if (st.sound_loop) { if (bgAudio) bgAudio.pause(); bgAudio = a; }
         a.play().catch(()=>{});
       }
     }
   } catch (_) {}
-}, 80);
+}, 120);
 </script>
 </body>
 </html>
