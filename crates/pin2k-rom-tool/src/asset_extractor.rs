@@ -8,6 +8,7 @@
 use std::fs;
 use std::path::Path;
 
+use image::{Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
 
 use crate::gfx_decoder::{
@@ -102,7 +103,7 @@ pub fn extract_named_animations(
     out_dir: &Path,
     filter: Option<&str>,
     max_anims: Option<usize>,
-    max_frames_per_anim: usize,
+    max_frames_per_anim: Option<usize>,
 ) -> Result<GfxManifest, RomToolError> {
     fs::create_dir_all(out_dir)?;
     let filter_lower = filter.map(|s| s.to_ascii_lowercase());
@@ -178,7 +179,10 @@ pub fn extract_named_animations(
         };
 
         let mut canvas = vec![P2K_TRANSPARENT_KEY_RGB555; (anim_w as usize) * (anim_h as usize)];
-        let frames_to_decode = (num_frames as usize).min(max_frames_per_anim.max(1));
+        let frames_to_decode = match max_frames_per_anim {
+            Some(max_f) => (num_frames as usize).min(max_f.max(1)),
+            None => num_frames as usize,
+        };
         let mut exported_frames = Vec::new();
         let mut comp_codes = Vec::new();
 
@@ -252,6 +256,207 @@ pub fn extract_named_animations(
         .map_err(|e| RomToolError::InvalidFormat(format!("JSON serialize error: {e}")))?;
     fs::write(out_dir.join("gfx_manifest.json"), manifest_json)?;
 
+    Ok(manifest)
+}
+
+/// Metadata for a single glyph inside a Pinball 2000 bitmap font atlas.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FontGlyphEntry {
+    pub code: u8,
+    pub atlas_x: u32,
+    pub atlas_y: u32,
+    pub width: u32,
+    pub height: u32,
+    pub x_offset: i32,
+    pub y_offset: i32,
+    pub advance_extra: i32,
+}
+
+/// Metadata for an extracted Pinball 2000 `FontData` bitmap font.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FontManifestEntry {
+    pub name: String,
+    pub symbol_name: String,
+    pub font_addr: u32,
+    pub ascent: u32,
+    pub line_height: u32,
+    pub num_colors: u32,
+    pub default_spacing: i32,
+    pub atlas_file: String,
+    pub atlas_width: u32,
+    pub atlas_height: u32,
+    pub glyphs: Vec<FontGlyphEntry>,
+}
+
+/// Manifest written to `fonts_manifest.json`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FontsManifest {
+    pub fonts_exported: usize,
+    pub fonts: Vec<FontManifestEntry>,
+}
+
+/// Discovers and extracts all `font_*_data_ptr` bitmap fonts into PNG atlases + `fonts_manifest.json`.
+pub fn extract_fonts(
+    mem: &PrismMemorySpace<'_>,
+    symbols: &SymbolTable,
+    out_dir: &Path,
+) -> Result<FontsManifest, RomToolError> {
+    fs::create_dir_all(out_dir)?;
+    let mut fonts = Vec::new();
+
+    for sym in &symbols.entries {
+        if !sym.name.starts_with("font_") || !sym.name.ends_with("_data_ptr") {
+            continue;
+        }
+        let Some(font_addr) = mem.read_u32(sym.address) else {
+            continue;
+        };
+        let Some(fd) = mem.slice_from(font_addr) else {
+            continue;
+        };
+        if fd.len() < 24 {
+            continue;
+        }
+        let num_chars = u32::from_le_bytes(fd[0..4].try_into().unwrap()) as usize;
+        let ascent = u32::from_le_bytes(fd[4..8].try_into().unwrap());
+        let line_height = u32::from_le_bytes(fd[8..12].try_into().unwrap());
+        let num_colors = u32::from_le_bytes(fd[12..16].try_into().unwrap());
+        let default_spacing = i32::from_le_bytes(fd[16..20].try_into().unwrap());
+        let chars_ptr = u32::from_le_bytes(fd[20..24].try_into().unwrap());
+
+        if num_chars == 0 || num_chars > 512 {
+            continue;
+        }
+        let Some(chars_slice) = mem.slice_from(chars_ptr) else {
+            continue;
+        };
+        if chars_slice.len() < num_chars * 28 {
+            continue;
+        }
+
+        // First pass: collect glyph headers and compute atlas dimensions (512px max width)
+        struct RawGlyph<'a> {
+            code: u8,
+            x_offset: i32,
+            y_offset: i32,
+            width: u32,
+            height: u32,
+            advance_extra: i32,
+            pixels: &'a [u8],
+        }
+        let mut raw_glyphs = Vec::with_capacity(num_chars);
+        for ci in 0..num_chars {
+            let off = ci * 28;
+            let code = chars_slice[off];
+            let x_offset = i32::from_le_bytes(chars_slice[off + 4..off + 8].try_into().unwrap());
+            let y_offset = i32::from_le_bytes(chars_slice[off + 8..off + 12].try_into().unwrap());
+            let width = u32::from_le_bytes(chars_slice[off + 12..off + 16].try_into().unwrap());
+            let height = u32::from_le_bytes(chars_slice[off + 16..off + 20].try_into().unwrap());
+            let advance_extra = i32::from_le_bytes(chars_slice[off + 20..off + 24].try_into().unwrap());
+            let pix_ptr = u32::from_le_bytes(chars_slice[off + 24..off + 28].try_into().unwrap());
+            if width == 0 || width > 256 || height == 0 || height > 256 {
+                continue;
+            }
+            let Some(pix_slice) = mem.slice_from(pix_ptr) else {
+                continue;
+            };
+            let need = (width as usize) * (height as usize);
+            if pix_slice.len() < need {
+                continue;
+            }
+            raw_glyphs.push(RawGlyph {
+                code,
+                x_offset,
+                y_offset,
+                width,
+                height,
+                advance_extra,
+                pixels: &pix_slice[..need],
+            });
+        }
+        if raw_glyphs.is_empty() {
+            continue;
+        }
+
+        let atlas_w = 512u32;
+        let mut cur_x = 1u32;
+        let mut cur_y = 1u32;
+        let mut row_h = 0u32;
+        let mut placements = Vec::with_capacity(raw_glyphs.len());
+        for g in &raw_glyphs {
+            if cur_x + g.width + 1 > atlas_w {
+                cur_x = 1;
+                cur_y += row_h + 1;
+                row_h = 0;
+            }
+            placements.push((cur_x, cur_y));
+            cur_x += g.width + 1;
+            row_h = row_h.max(g.height);
+        }
+        let atlas_h = (cur_y + row_h + 1).max(1);
+        let mut img = RgbaImage::from_pixel(atlas_w, atlas_h, Rgba([0, 0, 0, 0]));
+        let mut glyph_entries = Vec::with_capacity(raw_glyphs.len());
+
+        for (g, (ax, ay)) in raw_glyphs.iter().zip(placements.iter().copied()) {
+            for py in 0..g.height {
+                for px in 0..g.width {
+                    let idx = g.pixels[(py * g.width + px) as usize];
+                    let rgba = match idx {
+                        0 => continue,
+                        1 => Rgba([255, 255, 255, 255]),
+                        2 => Rgba([24, 24, 24, 255]),
+                        n => {
+                            let v = 255u8.saturating_sub(n.saturating_sub(1).saturating_mul(40));
+                            Rgba([v, v, v, 255])
+                        }
+                    };
+                    img.put_pixel(ax + px, ay + py, rgba);
+                }
+            }
+            glyph_entries.push(FontGlyphEntry {
+                code: g.code,
+                atlas_x: ax,
+                atlas_y: ay,
+                width: g.width,
+                height: g.height,
+                x_offset: g.x_offset,
+                y_offset: g.y_offset,
+                advance_extra: g.advance_extra,
+            });
+        }
+
+        let clean_name = sym
+            .name
+            .trim_end_matches("_data_ptr")
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+            .collect::<String>();
+        let atlas_file = format!("{clean_name}.png");
+        save_png(&img, &out_dir.join(&atlas_file))
+            .map_err(|e| RomToolError::InvalidFormat(format!("Font PNG save error: {e}")))?;
+
+        fonts.push(FontManifestEntry {
+            name: clean_name,
+            symbol_name: sym.name.clone(),
+            font_addr,
+            ascent,
+            line_height,
+            num_colors,
+            default_spacing,
+            atlas_file,
+            atlas_width: atlas_w,
+            atlas_height: atlas_h,
+            glyphs: glyph_entries,
+        });
+    }
+
+    let manifest = FontsManifest {
+        fonts_exported: fonts.len(),
+        fonts,
+    };
+    let json = serde_json::to_string_pretty(&manifest)
+        .map_err(|e| RomToolError::InvalidFormat(format!("JSON serialize error: {e}")))?;
+    fs::write(out_dir.join("fonts_manifest.json"), json)?;
     Ok(manifest)
 }
 

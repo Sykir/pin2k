@@ -6,9 +6,10 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use pin2k_rom_tool::asset_extractor::{
-    extract_named_animations, extract_pb2kslib_sounds, PrismMemorySpace,
+    extract_fonts, extract_named_animations, extract_pb2kslib_sounds, PrismMemorySpace,
 };
 use pin2k_rom_tool::elf_writer::{wrap_raw_x86_to_elf, ElfWrapOptions};
+use pin2k_rom_tool::gamecode_extractor::extract_gamecode_script;
 use pin2k_rom_tool::gfx_decoder::{
     decode_palette, decode_raw_image, render_palette_swatch, save_png, PaletteFormat, PixelFormat,
     PreviewOptions,
@@ -291,9 +292,9 @@ enum Commands {
         #[arg(long)]
         max_anims: Option<usize>,
 
-        /// Maximum frames to decode per animation (default: 32).
-        #[arg(long, default_value_t = 32)]
-        max_frames: usize,
+        /// Maximum frames to decode per animation (omit to extract ALL frames).
+        #[arg(long)]
+        max_frames: Option<usize>,
 
         /// Optional path to `{game}_sound.bin` (`pb2kslib` container) to extract `.ogg` audio.
         #[arg(long)]
@@ -302,6 +303,29 @@ enum Commands {
         /// Optional cap on number of audio tracks to extract.
         #[arg(long)]
         max_sounds: Option<usize>,
+    },
+
+    /// Extract hardware tables, switch handlers, attract state machine, and game logic into `game_script.json`.
+    ExtractGamecode {
+        /// Optional Pinball 2000 ROM update package (directory, `.exe`, or `.zip`).
+        #[arg(long)]
+        update: Option<PathBuf>,
+
+        /// Path to `*_game.rom` (when `--update` is not provided).
+        #[arg(long)]
+        game: Option<PathBuf>,
+
+        /// Path to `*_symbols.rom` (when `--update` is not provided).
+        #[arg(long)]
+        symbols: Option<PathBuf>,
+
+        /// Optional reconstructed 64 MiB PRISM flat ROM (`prism_flat.bin`).
+        #[arg(long)]
+        prism_flat: Option<PathBuf>,
+
+        /// Output directory for `game_script.json`.
+        #[arg(short, long)]
+        output_dir: PathBuf,
     },
 }
 
@@ -955,6 +979,14 @@ fn main() -> Result<()> {
                     manifest.total_animations_discovered,
                     gfx_dir.display()
                 );
+
+                let fonts_dir = output_dir.join("fonts");
+                let fonts_manifest = extract_fonts(&mem, &symtab, &fonts_dir)?;
+                println!(
+                    "Extracted {} bitmap fonts -> {}/fonts_manifest.json",
+                    fonts_manifest.fonts_exported,
+                    fonts_dir.display()
+                );
             }
 
             if let Some(snd_path) = sound_bin {
@@ -968,6 +1000,50 @@ fn main() -> Result<()> {
                     snd_dir.display()
                 );
             }
+        }
+
+        Commands::ExtractGamecode {
+            update,
+            game,
+            symbols,
+            prism_flat,
+            output_dir,
+        } => {
+            let (game_bytes, sym_bytes, header, bar3_bytes) = if let Some(upd_path) = update.as_ref()
+            {
+                let b = load_update_bundle(upd_path)?;
+                (b.game, b.symbols, Some(b.header), Some(b.flash))
+            } else if let (Some(game_path), Some(sym_path)) = (game.as_ref(), symbols.as_ref()) {
+                (fs::read(game_path)?, fs::read(sym_path)?, None, None)
+            } else {
+                bail!("provide either `--update <DIR|.exe|.zip>` or both `--game` and `--symbols`");
+            };
+
+            let prism_bytes = match prism_flat.as_ref() {
+                Some(p) => fs::read(p)?,
+                None => Vec::new(),
+            };
+            let symtab = SymbolTable::parse(&sym_bytes)?;
+            let mem = PrismMemorySpace {
+                game_rom: &game_bytes,
+                game_load_addr: 0x0010_0000,
+                prism_flat: &prism_bytes,
+                bar3_flash: bar3_bytes.as_deref(),
+            };
+            let script = extract_gamecode_script(&mem, &symtab, header.as_ref(), &output_dir)?;
+            println!(
+                "Extracted gamecode script for {} (#{} v{}) -> {}/game_script.json (switches={}, drives={}, lamps={}, attract={}, modes={}, rules={})",
+                script.meta.title,
+                script.meta.game_number,
+                script.meta.version,
+                output_dir.display(),
+                script.hardware.switches.len(),
+                script.hardware.drives.len(),
+                script.hardware.lamps.len(),
+                script.attract.len(),
+                script.modes.len(),
+                script.rules.len()
+            );
         }
     }
 

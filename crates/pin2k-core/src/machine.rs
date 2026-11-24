@@ -11,6 +11,7 @@ use crate::events::{GameEvent, TimestampedEvent};
 use crate::mods::{HomebrewSwitchRule, ModManifest};
 use crate::rfm_rules::{GameTitle, RfmMultiball, RfmState, RfmWave};
 use crate::rfm_tables::{rfm_drive, rfm_drive_name, rfm_lamp, rfm_sound, rfm_sw, rfm_switch_name};
+use crate::script_engine::{GameScript, ScriptAction, ScriptRuntime, ScriptTrigger};
 use crate::swe1_rules::{
     default_high_scores, ActiveMultiball, ActiveSceneState, HighScoreEntry, JediRank, PlayerState,
     Swe1Scene,
@@ -87,6 +88,7 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub score_multiplier: u64,
     pub mod_switch_rules: Vec<HomebrewSwitchRule>,
     pub mod_lit_lamps: Vec<u8>,
+    pub script_runtime: Option<ScriptRuntime>,
 
     debouncer: SwitchDebouncer,
     event_log: Vec<TimestampedEvent>,
@@ -155,6 +157,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             score_multiplier: 1,
             mod_switch_rules: Vec::new(),
             mod_lit_lamps: Vec::new(),
+            script_runtime: None,
             debouncer,
             event_log: Vec::new(),
         }
@@ -177,6 +180,177 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         for rule in &manifest.switch_rules {
             self.mod_switch_rules.push(rule.clone());
+        }
+    }
+
+    /// Loads an extracted `GameScript` (`game_script.json`) and activates script-driven execution.
+    pub fn load_game_script(&mut self, script: GameScript) {
+        self.balls_per_game = script.meta.balls_per_game.max(1);
+        self.adjustments.balls_per_game = self.balls_per_game;
+        self.adjustments.ball_save_secs = script.meta.ball_save_secs;
+        self.status_banner = format!("{} v{} - PRESS START", script.meta.title, script.meta.version);
+        if script.meta.game_number == 50069 {
+            self.game_title = GameTitle::Swe1;
+        } else if script.meta.game_number == 50070 {
+            self.game_title = GameTitle::Rfm;
+        }
+        self.script_runtime = Some(ScriptRuntime::new(script));
+        self.eval_script_trigger(ScriptTrigger::OnBoot);
+    }
+
+    /// Evaluates all `GameScript` rules matching `trigger` whose conditions hold.
+    pub fn eval_script_trigger(&mut self, trigger: ScriptTrigger) -> bool {
+        let Some(ref rt) = self.script_runtime else {
+            return false;
+        };
+        let ball_in_play = self.balls_in_play > 0 && self.state == MachineState::InGame;
+        let not_tilted = self.state != MachineState::Tilt;
+        let matched_actions: Vec<Vec<ScriptAction>> = rt
+            .script
+            .rules
+            .iter()
+            .filter(|r| r.trigger == trigger)
+            .filter(|r| rt.eval_conditions(&r.conditions, ball_in_play, not_tilted))
+            .map(|r| r.actions.clone())
+            .collect();
+
+        if matched_actions.is_empty() {
+            return false;
+        }
+        for actions in matched_actions {
+            self.execute_script_actions(&actions);
+        }
+        true
+    }
+
+    fn execute_script_actions(&mut self, actions: &[ScriptAction]) {
+        for act in actions {
+            match act {
+                ScriptAction::AddScore { points } => self.add_score(*points),
+                ScriptAction::SetVar { var, value } => {
+                    if let Some(ref mut rt) = self.script_runtime {
+                        rt.vars.insert(var.clone(), *value);
+                    }
+                }
+                ScriptAction::IncVar { var, delta } => {
+                    if let Some(ref mut rt) = self.script_runtime {
+                        let e = rt.vars.entry(var.clone()).or_insert(0);
+                        *e = e.saturating_add(*delta);
+                    }
+                }
+                ScriptAction::SetBit { var, bit } => {
+                    if let Some(ref mut rt) = self.script_runtime {
+                        let e = rt.vars.entry(var.clone()).or_insert(0);
+                        *e |= 1i64 << (*bit as u32 & 63);
+                    }
+                }
+                ScriptAction::ClearVar { var } => {
+                    if let Some(ref mut rt) = self.script_runtime {
+                        rt.vars.insert(var.clone(), 0);
+                    }
+                }
+                ScriptAction::PulseDrive { drive_id, ms } => {
+                    self.emit_coil(*drive_id, *ms);
+                }
+                ScriptAction::SetLamp { lamp_id, on } => {
+                    if let Some(ref mut rt) = self.script_runtime {
+                        if *on {
+                            rt.lit_lamps.insert(*lamp_id);
+                        } else {
+                            rt.lit_lamps.remove(lamp_id);
+                        }
+                    }
+                }
+                ScriptAction::PlaySound { sound_id } => {
+                    self.emit_sound(SoundId(*sound_id), false);
+                }
+                ScriptAction::PlayMusic { sound_id } => {
+                    self.emit_sound(SoundId(*sound_id), true);
+                }
+                ScriptAction::PlayAnim { anim } => {
+                    self.active_anim_hint = anim.clone();
+                }
+                ScriptAction::ShowBanner { text } => {
+                    self.set_banner(text.clone(), 3_000);
+                }
+                ScriptAction::StartMode { mode } => {
+                    let mode_def = self
+                        .script_runtime
+                        .as_ref()
+                        .and_then(|rt| rt.script.modes.iter().find(|m| m.id == *mode).cloned());
+                    if let Some(ref mut rt) = self.script_runtime {
+                        let dur = mode_def
+                            .as_ref()
+                            .and_then(|m| m.duration_secs.map(|s| s.saturating_mul(1000)));
+                        rt.active_modes.insert(mode.clone(), dur);
+                    }
+                    if let Some(m) = mode_def {
+                        if let Some(anim) = m.anim_hint {
+                            self.active_anim_hint = anim;
+                        }
+                        if let Some(sid) = m.sound_id {
+                            self.emit_sound(SoundId(sid), false);
+                        }
+                        if let Some(mid) = m.music_id {
+                            self.emit_sound(SoundId(mid), true);
+                        }
+                        self.execute_script_actions(&m.on_enter);
+                    }
+                    self.eval_script_trigger(ScriptTrigger::OnModeEnter { mode: mode.clone() });
+                }
+                ScriptAction::EndMode { mode } => {
+                    let on_exit = self.script_runtime.as_mut().and_then(|rt| {
+                        rt.active_modes.remove(mode);
+                        rt.script
+                            .modes
+                            .iter()
+                            .find(|m| m.id == *mode)
+                            .map(|m| m.on_exit.clone())
+                    });
+                    if let Some(acts) = on_exit {
+                        self.execute_script_actions(&acts);
+                    }
+                    self.eval_script_trigger(ScriptTrigger::OnModeExit { mode: mode.clone() });
+                }
+                ScriptAction::StartTimer { name, ticks } => {
+                    if let Some(ref mut rt) = self.script_runtime {
+                        rt.timers.insert(name.clone(), *ticks);
+                    }
+                }
+                ScriptAction::StartMultiball { balls } => {
+                    let extra = balls.saturating_sub(self.balls_in_play);
+                    if extra > 0 {
+                        self.pending_eject_balls = self.pending_eject_balls.saturating_add(extra);
+                    }
+                    self.set_banner(format!("{balls}-BALL MULTIBALL!"), 4_000);
+                }
+                ScriptAction::AwardExtraBall => {
+                    if let Some(p) = self.players.get_mut(self.current_player) {
+                        p.extra_balls = p.extra_balls.saturating_add(1);
+                    }
+                    self.set_banner("EXTRA BALL AWARDED!", 3_500);
+                }
+                ScriptAction::AdvanceScene => {
+                    if self.active_scene.is_some() {
+                        self.advance_active_scene("SCENE ADVANCE!", 250_000);
+                    } else if let Some(p) = self.players.get_mut(self.current_player) {
+                        let scene = p.choose_next_scene();
+                        self.active_scene = Some(ActiveSceneState {
+                            scene,
+                            hits_remaining: scene.required_hits(),
+                            timer_ms: scene.duration_ms(),
+                        });
+                        self.active_anim_hint = scene.anim_hint().to_string();
+                        self.set_banner(format!("SCENE: {}", scene.title()), 3_000);
+                    }
+                }
+                ScriptAction::CollectBonus => {
+                    self.add_score(250_000);
+                }
+                ScriptAction::EjectBall => {
+                    self.pending_eject_balls = self.pending_eject_balls.saturating_add(1);
+                }
+            }
         }
     }
 
@@ -341,10 +515,33 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
             MachineState::InGame => {
                 // Evaluate mod / homebrew switch rules first
-                let matched = self.apply_mod_switch_rules(id);
+                let matched_mod = self.apply_mod_switch_rules(id);
+                let matched_script = self.eval_script_trigger(ScriptTrigger::OnSwitch { sw_id: id });
                 if self.game_title == GameTitle::Homebrew {
-                    if !matched {
+                    if !matched_mod && !matched_script {
                         self.handle_homebrew_builtin_switch(id);
+                    }
+                    return;
+                }
+                if matched_script && self.script_runtime.is_some() {
+                    // Script handled this switch; still run core ball/flipper/trough mechanics if needed
+                    if matches!(
+                        id,
+                        sw::TROUGH_BALL_1
+                            | sw::TROUGH_BALL_2
+                            | sw::TROUGH_BALL_3
+                            | sw::TROUGH_BALL_4
+                            | sw::LEFT_FLIPPER_BUTTON
+                            | sw::RIGHT_FLIPPER_BUTTON
+                            | sw::SHOOTER_LANE
+                            | sw::PLUMB_TILT
+                            | sw::START_BUTTON
+                    ) {
+                        match self.game_title {
+                            GameTitle::Swe1 => self.handle_ingame_switch_closed(id),
+                            GameTitle::Rfm => self.handle_rfm_ingame_switch_closed(id),
+                            GameTitle::Homebrew => {}
+                        }
                     }
                     return;
                 }
@@ -1732,6 +1929,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 for &lid in &self.mod_lit_lamps {
                     self.hw.set_lamp(lid, LampState::On);
                 }
+                if let Some(ref rt) = self.script_runtime {
+                    for &lid in &rt.lit_lamps {
+                        self.hw.set_lamp(lid, LampState::On);
+                    }
+                }
                 if self.game_title == GameTitle::Homebrew {
                     self.hw.set_lamp(lamp::START_BUTTON, LampState::On);
                     if self.ball_save_ms > 0 {
@@ -1872,6 +2074,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         if !self.active_anim_hint.is_empty() {
             self.video.draw_sprite(AssetId(0), frame_idx, 210, 20, 0);
         }
+
         match self.state {
             MachineState::Attract => {
                 match self.attract.current() {

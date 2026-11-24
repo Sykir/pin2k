@@ -2,6 +2,7 @@
 
 pub mod asset_extractor;
 pub mod elf_writer;
+pub mod gamecode_extractor;
 pub mod gfx_decoder;
 pub mod interleave;
 pub mod prism;

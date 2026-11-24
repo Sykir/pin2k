@@ -25,7 +25,7 @@ use clap::Parser;
 use compositor::SoftwareCompositor;
 use pin2k_core::rfm_tables::rfm_sw;
 use pin2k_core::swe1_tables::sw;
-use pin2k_core::{GameTitle, ModManifest, Pin2kMachine};
+use pin2k_core::{GameScript, GameTitle, ModManifest, Pin2kMachine};
 use pin2k_hal::{
     LptPort, NativeSerialPort, PdbDriver, PlayfieldSignature, SerialPdbPort, TracedLptPort,
     VirtualPdbPort,
@@ -78,6 +78,10 @@ struct Cli {
     /// Path to extracted SWE1 assets directory (containing `gfx/gfx_manifest.json` and `audio/sound_manifest.json`).
     #[arg(long)]
     assets_dir: Option<PathBuf>,
+
+    /// Path to extracted `game_script.json` (auto-detected at `<assets-dir>/scripts/game_script.json` when omitted).
+    #[arg(long)]
+    game_script: Option<PathBuf>,
 
     /// Optional Pinball 2000 ROM update package (directory, `.exe`, or `.zip`) to validate & report active ROM version.
     #[arg(long)]
@@ -546,6 +550,25 @@ fn main() -> Result<()> {
             mod_dir.display()
         );
         machine.apply_mod(manifest);
+    }
+
+    let script_path = cli.game_script.clone().or_else(|| {
+        cli.assets_dir
+            .as_ref()
+            .map(|d| d.join("scripts").join("game_script.json"))
+            .filter(|p| p.is_file())
+    });
+    if let Some(ref sp) = script_path {
+        let script = GameScript::load_from_file(sp)?;
+        println!(
+            "Loaded gamecode script '{}' (#{} v{}, {} rules, {} modes)",
+            script.meta.title,
+            script.meta.game_number,
+            script.meta.version,
+            script.rules.len(),
+            script.modes.len()
+        );
+        machine.load_game_script(script);
     }
     let demo_events = match cli.script.as_str() {
         "demo" => build_demo_script(),

@@ -7,6 +7,7 @@ pub mod machine;
 pub mod mods;
 pub mod rfm_rules;
 pub mod rfm_tables;
+pub mod script_engine;
 pub mod swe1_rules;
 pub mod swe1_tables;
 pub mod switch_matrix;
@@ -18,6 +19,7 @@ pub use attract::{AttractController, AttractDeff};
 pub use events::{GameEvent, TimestampedEvent};
 pub use machine::{DiagPage, MachineState, Pin2kMachine};
 pub use mods::{HomebrewSwitchRule, ModManifest};
+pub use script_engine::{GameScript, ScriptAction, ScriptRuntime, ScriptTrigger};
 pub use rfm_rules::{GameTitle, RfmMultiball, RfmState, RfmWave};
 pub use swe1_rules::{
     ActiveMultiball, ActiveSceneState, HighScoreEntry, JediRank, PlayerState, Swe1Scene,
