@@ -15,10 +15,16 @@ use std::path::{Path, PathBuf};
 use image::{ImageBuffer, ImageFormat, Rgba, RgbaImage};
 use pin2k_core::swe1_tables::{lamp, SWE1_DRIVES};
 use pin2k_hal::{AssetId, LampState, VideoBackend};
-use pin2k_rom_tool::asset_extractor::GfxManifest;
+use pin2k_rom_tool::asset_extractor::{FontGlyphEntry, FontManifestEntry, FontsManifest, GfxManifest};
 
 pub const SCREEN_W: u32 = 640;
 pub const SCREEN_H: u32 = 480;
+
+pub struct LoadedFont {
+    pub meta: FontManifestEntry,
+    pub atlas: RgbaImage,
+    pub glyphs: HashMap<u8, FontGlyphEntry>,
+}
 
 pub struct LoadedAnim {
     pub name: String,
@@ -48,8 +54,9 @@ pub struct SoftwareCompositor {
     pub frames_presented: u64,
     anims: Vec<LoadedAnim>,
     anim_lookup: HashMap<String, usize>,
+    fonts: HashMap<String, LoadedFont>,
     active_anim_idx: Option<usize>,
-    anim_elapsed_ms: u64,
+    pub(crate) anim_elapsed_ms: u64,
     anim_loop: bool,
     podrace_scene_ticks: usize,
     queued_texts: Vec<(String, i32, i32, [u8; 4], u8)>,
@@ -71,6 +78,7 @@ impl SoftwareCompositor {
             frames_presented: 0,
             anims: Vec::new(),
             anim_lookup: HashMap::new(),
+            fonts: HashMap::new(),
             active_anim_idx: None,
             anim_elapsed_ms: 0,
             anim_loop: true,
@@ -114,6 +122,34 @@ impl SoftwareCompositor {
         if !self.anims.is_empty() {
             self.active_anim_idx = Some(0);
         }
+
+        // Load all 19 extracted Pinball 2000 bitmap fonts from `<assets_dir>/fonts/fonts_manifest.json`
+        let fonts_dir = assets_dir.join("fonts");
+        let fonts_manifest_path = fonts_dir.join("fonts_manifest.json");
+        if fonts_manifest_path.exists() {
+            if let Ok(fraw) = fs::read_to_string(&fonts_manifest_path) {
+                if let Ok(fm) = serde_json::from_str::<FontsManifest>(&fraw) {
+                    for fentry in fm.fonts {
+                        let atlas_path = fonts_dir.join(&fentry.atlas_file);
+                        if let Ok(img) = image::open(&atlas_path) {
+                            let mut glyphs = HashMap::new();
+                            for g in &fentry.glyphs {
+                                glyphs.insert(g.code, g.clone());
+                            }
+                            self.fonts.insert(
+                                fentry.name.clone(),
+                                LoadedFont {
+                                    meta: fentry,
+                                    atlas: img.to_rgba8(),
+                                    glyphs,
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(self.anims.len())
     }
 
@@ -372,13 +408,7 @@ impl VideoBackend for SoftwareCompositor {
             .map(|a| a.name.clone())
             .unwrap_or_default();
 
-        if active_name == "anim_podrace_1" {
-            self.render_podrace_scene(false);
-        } else if active_name == "anim_podrace_closeup" {
-            self.render_podrace_scene(true);
-        } else if active_name == "anim_spinner_1" {
-            self.render_ingame_spinners();
-        } else {
+        if !self.render_specialized_scene(&active_name) {
             self.podrace_scene_ticks = 0;
             if let Some(idx) = self.active_anim_idx {
                 let elapsed = self.anim_elapsed_ms;
@@ -405,9 +435,13 @@ impl VideoBackend for SoftwareCompositor {
             }
         }
 
-        // Draw queued centered HUD texts (auto-scaling down if > 624px wide)
+        // Draw queued centered HUD texts using extracted Pinball 2000 bitmap fonts (with 8x8 fallback)
         let texts = std::mem::take(&mut self.queued_texts);
         for (txt, cx, y, color, mut scale) in texts {
+            let font_name = Self::pick_bitmap_font(scale, &txt);
+            if self.draw_bitmap_text(font_name, &txt, cx, y, color) {
+                continue;
+            }
             while scale > 1 && (txt.len() as i32) * 8 * (scale as i32) > 624 {
                 scale -= 1;
             }
@@ -444,7 +478,7 @@ impl VideoBackend for SoftwareCompositor {
 }
 
 impl SoftwareCompositor {
-    fn blit_named(&mut self, name: &str, frame_idx: usize, ox: i32, oy: i32, scale_x: u32) -> bool {
+    pub(crate) fn blit_named(&mut self, name: &str, frame_idx: usize, ox: i32, oy: i32, scale_x: u32) -> bool {
         let Some(&idx) = self.anim_lookup.get(name) else {
             return false;
         };
@@ -465,7 +499,7 @@ impl SoftwareCompositor {
     /// - Race (`t >= 60`): Sky + scrolling Beggar's Canyon horizon + rushing desert floor +
     ///   rival podracer / explosion + 100-frame Anakin's Podracer + Checkpoint & Speedometer HUD
     /// - Victory (`victory == true`): Sky + Horizon + Ground + `anim_podrace_closeup` camera flyby
-    fn render_podrace_scene(&mut self, victory: bool) {
+    pub(crate) fn render_podrace_scene(&mut self, victory: bool) {
         let t = self.podrace_scene_ticks;
         self.podrace_scene_ticks = self.podrace_scene_ticks.saturating_add(1);
 
@@ -524,9 +558,121 @@ impl SoftwareCompositor {
         );
     }
 
+    /// Selects the authentic Pinball 2000 bitmap font name for a given scale and text length.
+    fn pick_bitmap_font(scale: u8, text: &str) -> &'static str {
+        let len = text.len();
+        if scale >= 2 {
+            if len <= 18 {
+                "font_starwars_19_data"
+            } else if len <= 26 {
+                "font_shadow_15_narrow_data"
+            } else {
+                "font_shadow_11_narrow_data"
+            }
+        } else if len <= 28 {
+            "font_shadow_9_data"
+        } else {
+            "font_system_7_data"
+        }
+    }
+
+    /// All 19 extracted Pinball 2000 font identifiers available in `fonts_manifest.json`.
+    #[allow(dead_code)]
+    pub const ALL_EXTRACTED_FONTS: [&'static str; 19] = [
+        "font_basic_19_data",
+        "font_kahuna_shadow_9_data",
+        "font_shadow_7_data",
+        "font_shadow_7_narrow_data",
+        "font_shadow_9_data",
+        "font_shadow_9_narrow_data",
+        "font_shadow_11_data",
+        "font_shadow_11_narrow_data",
+        "font_shadow_15_data",
+        "font_shadow_15_narrow_data",
+        "font_shadow_22_data",
+        "font_starwars_19_data",
+        "font_system_7_data",
+        "font_system_9_data",
+        "font_system_10_data",
+        "font_system_11_data",
+        "font_system_15_data",
+        "font_system_20_data",
+        "font_system_fxd6x7_data",
+    ];
+
+    /// Renders `text` centered at `cx` using an extracted Pinball 2000 bitmap font atlas.
+    pub fn draw_bitmap_text(
+        &mut self,
+        font_name: &str,
+        text: &str,
+        cx: i32,
+        y: i32,
+        color: [u8; 4],
+    ) -> bool {
+        let Some(font) = self.fonts.get(font_name) else {
+            return false;
+        };
+        let spacing = font.meta.default_spacing.max(1);
+        let mut total_w = 0i32;
+        for ch in text.bytes() {
+            if let Some(g) = font.glyphs.get(&ch) {
+                let adv = if g.advance_extra != 0 { g.advance_extra } else { spacing };
+                total_w += g.width as i32 + adv;
+            } else {
+                total_w += 6 + spacing;
+            }
+        }
+        let mut cur_x = (cx - total_w / 2).max(4);
+        if total_w > 632 {
+            // Fall back to a narrower font if available
+            if font_name != "font_system_7_data" {
+                return self.draw_bitmap_text("font_system_7_data", text, cx, y, color);
+            }
+        }
+        let ascent = font.meta.ascent as i32;
+        for ch in text.bytes() {
+            let Some(g) = font.glyphs.get(&ch) else {
+                cur_x += 6 + spacing;
+                continue;
+            };
+            let gx = cur_x + g.x_offset;
+            let gy = y + ascent + g.y_offset - g.height as i32;
+            for py in 0..g.height {
+                let dy = gy + py as i32;
+                if !(0..240).contains(&dy) {
+                    continue;
+                }
+                for px in 0..g.width {
+                    let dx = gx + px as i32;
+                    if !(0..SCREEN_W as i32).contains(&dx) {
+                        continue;
+                    }
+                    let src = font.atlas.get_pixel(g.atlas_x + px, g.atlas_y + py);
+                    if src[3] == 0 {
+                        continue;
+                    }
+                    let out = if src[0] > 180 {
+                        Rgba(color)
+                    } else {
+                        Rgba([
+                            ((src[0] as u16 * color[0] as u16) / 255) as u8,
+                            ((src[1] as u16 * color[1] as u16) / 255) as u8,
+                            ((src[2] as u16 * color[2] as u16) / 255) as u8,
+                            255,
+                        ])
+                    };
+                    self.native_240.put_pixel(dx as u32, dy as u32, out);
+                }
+            }
+            let adv = if g.advance_extra != 0 { g.advance_extra } else { spacing };
+            cur_x += g.width as i32 + adv;
+        }
+        true
+    }
+
     /// Renders the authentic SWE1 InGame Holoprojector Spinners (`anim_spinner_1` + `anim_spinner_2`
     /// with brackets and `anim_naboo_fighter_tiny_rotate` center ship).
-    fn render_ingame_spinners(&mut self) {
+    pub(crate) fn render_ingame_spinners(&mut self) {
         let f60 = ((self.anim_elapsed_ms * 60) / 1000) as usize;
         // Left Spinner + bracket
         let _ = self.blit_named("anim_spinner_bracket_left", 0, 38, 72, 1);

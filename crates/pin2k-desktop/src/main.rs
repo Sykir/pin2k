@@ -10,6 +10,7 @@
 
 mod audio;
 mod compositor;
+mod scenes_compositor;
 mod web_ui;
 
 use std::fs::{self, OpenOptions};

@@ -179,7 +179,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                             Swe1Scene::ALL[p.next_scene_idx % Swe1Scene::ALL.len()]
                         };
                         self.set_shield_raised(true);
-                        self.active_anim_hint = "anim_shield_block_wipe".to_string();
+                        self.emit_sound(sound::SHIELD_GONE_CALLOUT, false);
+                        self.active_anim_hint = selected.holo_anim_hint().to_string();
                         self.set_banner(
                             format!("SHIELD DOWN! SELECT: {} (FLIPPERS) -> SHOOT SCOOP/RAMP!", selected.title()),
                             4_000,
@@ -307,7 +308,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             (p.next_scene_idx + n - 1) % n
         };
         let scene = Swe1Scene::ALL[p.next_scene_idx];
-        self.active_anim_hint = scene.intro_anim_hint().to_string();
+        self.active_anim_hint = scene.holo_anim_hint().to_string();
         self.emit_sound(sound::LASER_SFX_OR_CLICK(), false);
         self.set_banner(format!("SELECT MODE: {} (SCOOP/RAMP TO START)", scene.title()), 3_000);
     }
@@ -345,6 +346,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.pending_eject_balls = self.pending_eject_balls.saturating_add(1);
         self.ball_save_ms = 20_000;
         self.emit_sound(sound::DUEL_OF_THE_FATES_LOOP, true);
+        self.emit_sound(sound::SITH_LIGHTSABRE_ON, false);
         self.active_anim_hint = "anim_jedi_battle_intro_movie".to_string();
         self.emit_event(GameEvent::MultiballStarted {
             mode: "DARTH MAUL SABER DUEL".to_string(),
@@ -488,6 +490,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.audits.maul_duels_won = self.audits.maul_duels_won.saturating_add(1);
                 self.add_score(5_000_000);
                 self.emit_sound(sound::MAIN_THEME_LOOP, true);
+                self.emit_sound(sound::DARTH_MAUL_DEATH_YELL, false);
                 self.emit_event(GameEvent::JediRankPromoted { rank: new_rank });
                 self.active_anim_hint = "anim_jedi_battle_maul_death_1".to_string();
                 self.set_banner(

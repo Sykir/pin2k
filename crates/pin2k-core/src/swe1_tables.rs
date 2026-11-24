@@ -180,6 +180,14 @@ pub mod sound {
     pub const EXPLOSION: SoundId = SoundId(0x0259);            // acd_explosion_1
     pub const SHIELD_HIT_SFX: SoundId = SoundId(0x038B);       // acd_ricochet1
     pub const JET_BUMPER_SFX: SoundId = SoundId(0x038A);       // acd_laserpulse
+    pub const SHIELD_GONE_CALLOUT: SoundId = SoundId(0x01B5);  // acd_ric_olie_were_not_gonna_make_it_the_shields_are_gone
+    pub const DARTH_MAUL_INTRO: SoundId = SoundId(0x000D);     // acd_darth_maul_intro
+    pub const DARTH_MAUL_DEATH_YELL: SoundId = SoundId(0x01C1); // acd_darth_maul_final_death_yell
+    pub const SITH_LIGHTSABRE_ON: SoundId = SoundId(0x02C8);   // acd_sith_lightsabre_turn_on
+    pub const JEDI_LIGHTSABRE_ON: SoundId = SoundId(0x02C4);   // acd_jedi_lightsabre_turn_on
+    pub const SPACE_EXPLOSION_1: SoundId = SoundId(0x0261);    // acd_space_explosion_1
+    pub const ENDING_CELEBRATION: SoundId = SoundId(0x002F);   // acd_ending_celebration_tune
+    pub const PODRACE_START_ENGINES: SoundId = SoundId(0x044D); // acd_green_announcer_start_your_engines
 
     #[allow(non_snake_case)]
     pub const fn LASER_SFX_OR_CLICK() -> SoundId {
