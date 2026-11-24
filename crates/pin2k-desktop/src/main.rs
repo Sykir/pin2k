@@ -729,6 +729,7 @@ fn main() -> Result<()> {
         // Update active animation selection from SWE1 game state before ticking
         let hint = machine.active_anim_hint.clone();
         machine.video.select_anim_by_hint(&hint);
+        machine.video.tick_clock(16);
 
         machine.tick(16);
 

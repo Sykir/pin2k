@@ -87,22 +87,63 @@ impl Swe1Scene {
         }
     }
 
-    /// Extracted animation prefix in `gfx_manifest.json` matching this SWE1 scene.
-    pub const fn anim_hint(self) -> &'static str {
+    /// Extracted intro movie/badge animation in `gfx_manifest.json` played BEFORE ball eject.
+    pub const fn intro_anim_hint(self) -> &'static str {
         match self {
             Swe1Scene::BattleDroid => "anim_battle_droid_intro_battle",
-            Swe1Scene::DestroyerDroid => "anim_ddroid",
-            Swe1Scene::FederationFighter => "anim_federation_fighter",
-            Swe1Scene::GunganBattle => "anim_gungan_sub_chomp",
-            Swe1Scene::HangarEscape => "anim_hangar_droid_explosion",
+            Swe1Scene::DestroyerDroid => "anim_destroyer_droid_intro_movie",
+            Swe1Scene::FederationFighter => "anim_federation_fighter_intro_battle",
+            Swe1Scene::GunganBattle => "anim_sub_escape_intro_movie",
+            Swe1Scene::HangarEscape => "anim_hangar_escape_intro_movie",
             Swe1Scene::HoverTank => "anim_hover_tank_intro_movie",
             Swe1Scene::Podrace => "anim_podrace_intro_movie",
+            Swe1Scene::ProbeDroid => "anim_probe_droid_intro_movie",
+            Swe1Scene::QueenFashion => "anim_queen_ship_intro_movie",
+            Swe1Scene::JarJarJuggle => "anim_jarjar_juggle_intro_movie",
+            Swe1Scene::WattosChance => "anim_wattos_chance_intro_badge",
+            Swe1Scene::MosEspaCantina => "anim_musical_chairs_intro_movie",
+        }
+    }
+
+    /// Extracted gameplay animation played AFTER the intro finishes and ball is ejected.
+    pub const fn gameplay_anim_hint(self) -> &'static str {
+        match self {
+            Swe1Scene::BattleDroid => "anim_bdroid_on_stap",
+            Swe1Scene::DestroyerDroid => "anim_destroyer_droid_l_roll",
+            Swe1Scene::FederationFighter => "anim_federation_fighter",
+            Swe1Scene::GunganBattle => "anim_gungan_sub_chomp",
+            Swe1Scene::HangarEscape => "anim_hangar_droid_run",
+            Swe1Scene::HoverTank => "anim_hover_tank",
+            Swe1Scene::Podrace => "anim_podrace_1",
             Swe1Scene::ProbeDroid => "anim_sith_probe_queen_shoot_1",
             Swe1Scene::QueenFashion => "anim_fashion_queen",
             Swe1Scene::JarJarJuggle => "anim_jarjar_juggle",
             Swe1Scene::WattosChance => "anim_watto_cube",
             Swe1Scene::MosEspaCantina => "anim_chairs",
         }
+    }
+
+    /// Exact intro duration in milliseconds matching the 15 fps ROM movie frame counts.
+    pub const fn intro_duration_ms(self) -> u32 {
+        match self {
+            Swe1Scene::BattleDroid => 3_666,       // 55 frames @ 15fps
+            Swe1Scene::DestroyerDroid => 4_466,    // 67 frames @ 15fps
+            Swe1Scene::FederationFighter => 3_500,
+            Swe1Scene::GunganBattle => 3_666,      // 55 frames @ 15fps
+            Swe1Scene::HangarEscape => 4_933,      // 74 frames @ 15fps
+            Swe1Scene::HoverTank => 3_500,
+            Swe1Scene::Podrace => 3_666,           // 55 frames @ 15fps
+            Swe1Scene::ProbeDroid => 5_533,        // 83 frames @ 15fps
+            Swe1Scene::QueenFashion => 3_500,
+            Swe1Scene::JarJarJuggle => 4_466,      // 67 frames @ 15fps
+            Swe1Scene::WattosChance => 2_200,
+            Swe1Scene::MosEspaCantina => 3_733,    // 56 frames @ 15fps
+        }
+    }
+
+    /// Extracted animation prefix in `gfx_manifest.json` matching this SWE1 scene.
+    pub const fn anim_hint(self) -> &'static str {
+        self.intro_anim_hint()
     }
 
     pub const fn required_hits(self) -> u8 {
@@ -195,6 +236,8 @@ pub struct ActiveSceneState {
     pub scene: Swe1Scene,
     pub hits_remaining: u8,
     pub timer_ms: u32,
+    #[serde(default)]
+    pub intro_remaining_ms: u32,
 }
 
 /// Active multiball mode (`MainMultiball` or `JediMultiball` Darth Maul Saber Duel).
@@ -220,6 +263,8 @@ pub struct PlayerState {
     pub scenes_completed: u16, // 12-bit mask of completed `Swe1Scene`
     pub next_scene_idx: usize,
     pub shield_health: u8, // 0..=12; 0 opens Shield Popper to start scene!
+    #[serde(default)]
+    pub scene_select_ready: bool,
     pub laser_shots: u8,
     pub bonus_multiplier: u8, // 1..=5
     pub bonus_points: u64,
@@ -237,6 +282,7 @@ impl Default for PlayerState {
             scenes_completed: 0,
             next_scene_idx: 0,
             shield_health: 6,
+            scene_select_ready: false,
             laser_shots: 3,
             bonus_multiplier: 1,
             bonus_points: 10_000,

@@ -22,6 +22,7 @@ pub const SCREEN_H: u32 = 480;
 
 pub struct LoadedAnim {
     pub name: String,
+    pub fps: u32,
     pub height: u32,
     frame_paths: Vec<PathBuf>,
     decoded_frames: Vec<RgbaImage>,
@@ -48,6 +49,8 @@ pub struct SoftwareCompositor {
     anims: Vec<LoadedAnim>,
     anim_lookup: HashMap<String, usize>,
     active_anim_idx: Option<usize>,
+    anim_elapsed_ms: u64,
+    anim_loop: bool,
     podrace_scene_ticks: usize,
     queued_texts: Vec<(String, i32, i32, [u8; 4], u8)>,
     queued_frame: usize,
@@ -69,6 +72,8 @@ impl SoftwareCompositor {
             anims: Vec::new(),
             anim_lookup: HashMap::new(),
             active_anim_idx: None,
+            anim_elapsed_ms: 0,
+            anim_loop: true,
             podrace_scene_ticks: 0,
             queued_texts: Vec::new(),
             queued_frame: 0,
@@ -99,6 +104,7 @@ impl SoftwareCompositor {
                 self.anim_lookup.insert(clean.clone(), idx);
                 self.anims.push(LoadedAnim {
                     name: clean,
+                    fps: entry.fps.max(1),
                     height: entry.height,
                     frame_paths,
                     decoded_frames: Vec::new(),
@@ -145,6 +151,7 @@ impl SoftwareCompositor {
             self.anim_lookup.insert(folder_name.clone(), idx);
             self.anims.push(LoadedAnim {
                 name: folder_name.clone(),
+                fps: 30,
                 height,
                 frame_paths,
                 decoded_frames: Vec::new(),
@@ -162,31 +169,53 @@ impl SoftwareCompositor {
         Ok(loaded)
     }
 
+    /// Advances the compositor's animation clock by `dt_ms` (e.g. 16 ms per 60 Hz frame).
+    pub fn tick_clock(&mut self, dt_ms: u64) {
+        self.anim_elapsed_ms = self.anim_elapsed_ms.saturating_add(dt_ms);
+    }
+
+    fn is_oneshot_anim(name: &str) -> bool {
+        let l = name.to_ascii_lowercase();
+        l.contains("intro_movie")
+            || l.contains("_single")
+            || l.contains("_death")
+            || l.contains("_clash")
+            || l.contains("explosion")
+            || l == "anim_p2k_logo_animated"
+            || l == "anim_klogo_zoom_back"
+            || l == "anim_attract_hasbro_ad"
+    }
+
     /// Selects the best-matching loaded SWE1 animation for `hint` (exact match, then full-height substring match).
-    /// An empty `hint` clears the active sprite so pure text/starfield screens render cleanly.
+    /// Resets the animation clock when switching to a different animation, and enforces one-shot vs loop mode.
     pub fn select_anim_by_hint(&mut self, hint: &str) {
         if hint.is_empty() {
             self.active_anim_idx = None;
+            self.anim_elapsed_ms = 0;
             return;
         }
-        if let Some(&idx) = self.anim_lookup.get(hint) {
-            self.active_anim_idx = Some(idx);
-            return;
-        }
-        let lower = hint.to_ascii_lowercase();
-        if let Some((idx, _)) = self
-            .anims
-            .iter()
-            .enumerate()
-            .find(|(_, a)| a.height >= 90 && a.name.to_ascii_lowercase().contains(&lower))
-            .or_else(|| {
-                self.anims
-                    .iter()
-                    .enumerate()
-                    .find(|(_, a)| a.name.to_ascii_lowercase().contains(&lower))
-            })
-        {
-            self.active_anim_idx = Some(idx);
+        let target_idx = if let Some(&idx) = self.anim_lookup.get(hint) {
+            Some(idx)
+        } else {
+            let lower = hint.to_ascii_lowercase();
+            self.anims
+                .iter()
+                .enumerate()
+                .find(|(_, a)| a.height >= 90 && a.name.to_ascii_lowercase().contains(&lower))
+                .or_else(|| {
+                    self.anims
+                        .iter()
+                        .enumerate()
+                        .find(|(_, a)| a.name.to_ascii_lowercase().contains(&lower))
+                })
+                .map(|(i, _)| i)
+        };
+        if let Some(idx) = target_idx {
+            if self.active_anim_idx != Some(idx) {
+                self.active_anim_idx = Some(idx);
+                self.anim_elapsed_ms = 0;
+                self.anim_loop = !Self::is_oneshot_anim(&self.anims[idx].name);
+            }
         }
     }
 
@@ -343,18 +372,26 @@ impl VideoBackend for SoftwareCompositor {
             .map(|a| a.name.clone())
             .unwrap_or_default();
 
-        if active_name == "anim_podrace_intro_movie" {
+        if active_name == "anim_podrace_1" {
             self.render_podrace_scene(false);
         } else if active_name == "anim_podrace_closeup" {
             self.render_podrace_scene(true);
         } else {
             self.podrace_scene_ticks = 0;
             if let Some(idx) = self.active_anim_idx {
+                let elapsed = self.anim_elapsed_ms;
+                let looping = self.anim_loop;
                 if let Some(anim) = self.anims.get_mut(idx) {
-                    let qf = self.queued_frame;
+                    let fps = anim.fps.max(1) as u64;
                     let frames = anim.ensure_decoded();
                     if !frames.is_empty() {
-                        let f = &frames[qf % frames.len()];
+                        let raw_idx = ((elapsed * fps) / 1000) as usize;
+                        let fi = if looping {
+                            raw_idx % frames.len()
+                        } else {
+                            raw_idx.min(frames.len() - 1)
+                        };
+                        let f = &frames[fi];
                         let scale_x = if f.width() <= 240 { 2u32 } else { 1u32 };
                         let draw_w = f.width() * scale_x;
                         let draw_h = f.height();
