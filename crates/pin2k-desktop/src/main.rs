@@ -23,8 +23,9 @@ use anyhow::Result;
 use audio::CompositeAudioBackend;
 use clap::Parser;
 use compositor::SoftwareCompositor;
+use pin2k_core::rfm_tables::rfm_sw;
 use pin2k_core::swe1_tables::sw;
-use pin2k_core::Pin2kMachine;
+use pin2k_core::{GameTitle, Pin2kMachine};
 use pin2k_hal::{
     LptPort, NativeSerialPort, PdbDriver, PlayfieldSignature, SerialPdbPort, TracedLptPort,
     VirtualPdbPort,
@@ -77,6 +78,10 @@ struct Cli {
     /// Optional Pinball 2000 ROM update package (directory, `.exe`, or `.zip`) to validate & report active ROM version.
     #[arg(long)]
     rom_update: Option<PathBuf>,
+
+    /// Game ruleset to run (`auto`, `swe1`, or `rfm`). `auto` detects `#50069`/`#50070` from `--rom-update` or playfield probe.
+    #[arg(long, default_value = "auto")]
+    game: String,
 
     /// Optional localhost HTTP port for live 640×480 Holoprojector + Playfield + WebAudio UI.
     #[arg(long)]
@@ -241,6 +246,7 @@ fn open_lpt_backend(
     spec: &str,
     serial_device: Option<&str>,
     serial_baud: u32,
+    virtual_sig: PlayfieldSignature,
 ) -> Result<(DynamicLptBackend, String)> {
     if let Some(dev) = serial_device.or_else(|| spec.strip_prefix("serial:")) {
         let port = NativeSerialPort::open(dev, serial_baud)?;
@@ -251,8 +257,8 @@ fn open_lpt_backend(
     }
     if spec == "emulated" {
         return Ok((
-            DynamicLptBackend::Virtual(VirtualPdbPort::new(PlayfieldSignature::Swe1)),
-            "emulated (VirtualPdbPort SWE1)".to_string(),
+            DynamicLptBackend::Virtual(VirtualPdbPort::new(virtual_sig)),
+            format!("emulated (VirtualPdbPort {virtual_sig:?})"),
         ));
     }
     #[cfg(target_os = "linux")]
@@ -283,8 +289,8 @@ fn open_lpt_backend(
     }
     let _ = parse_hex_or_dec;
     Ok((
-        DynamicLptBackend::Virtual(VirtualPdbPort::new(PlayfieldSignature::Swe1)),
-        "auto -> VirtualPdbPort (no physical port detected)".to_string(),
+        DynamicLptBackend::Virtual(VirtualPdbPort::new(virtual_sig)),
+        format!("auto -> VirtualPdbPort ({virtual_sig:?})"),
     ))
 }
 
@@ -370,13 +376,53 @@ fn build_podrace_script() -> Vec<(u64, u8, u64)> {
     ]
 }
 
+fn build_rfm_demo_script() -> Vec<(u64, u8, u64)> {
+    vec![
+        (4, sw::LEFT_COIN, 4),
+        (10, rfm_sw::START_BUTTON, 4),
+        (18, rfm_sw::LEFT_TOP_LANE, 4),        // RFM Skill Shot (+500,000)
+        (26, rfm_sw::MARTIAN_TARGET_1, 3),     // 7 Martian Targets -> Martian Attack Multiball!
+        (32, rfm_sw::MARTIAN_TARGET_2, 3),
+        (38, rfm_sw::MARTIAN_TARGET_3, 3),
+        (44, rfm_sw::MARTIAN_TARGET_4, 3),
+        (50, rfm_sw::MARTIAN_TARGET_5, 3),
+        (56, rfm_sw::MARTIAN_TARGET_6, 3),
+        (62, rfm_sw::MARTIAN_TARGET_7, 3),
+        (74, rfm_sw::CENTER_DEFLECTOR_PANEL, 4), // Start Mars Kneads Women!
+        (84, rfm_sw::LEFT_RAMP_EXIT, 4),
+        (94, rfm_sw::RIGHT_RAMP_EXIT, 4),
+    ]
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    let update_bundle = match cli.rom_update.as_ref() {
+        Some(upd_path) => Some(pin2k_rom_tool::prism::load_update_bundle(upd_path)?),
+        None => None,
+    };
+
+    let requested_title = match cli.game.to_ascii_lowercase().as_str() {
+        "rfm" => Some(GameTitle::Rfm),
+        "swe1" => Some(GameTitle::Swe1),
+        _ => update_bundle.as_ref().map(|b| {
+            if b.header.game_number == 50070 {
+                GameTitle::Rfm
+            } else {
+                GameTitle::Swe1
+            }
+        }),
+    };
+    let virtual_sig = match requested_title {
+        Some(GameTitle::Rfm) => PlayfieldSignature::Rfm,
+        _ => PlayfieldSignature::Swe1,
+    };
 
     let (dyn_lpt, lpt_desc) = open_lpt_backend(
         &cli.lpt_device,
         cli.serial_device.as_deref(),
         cli.serial_baud,
+        virtual_sig,
     )?;
     let lpt = match cli.lpt_trace.as_ref() {
         Some(trace_path) => {
@@ -424,8 +470,7 @@ fn main() -> Result<()> {
         spawn_web_server(port, Arc::clone(&shared_web), cli.assets_dir.clone())?;
     }
 
-    let rom_version_str = if let Some(ref upd_path) = cli.rom_update {
-        let bundle = pin2k_rom_tool::prism::load_update_bundle(upd_path)?;
+    let rom_version_str = if let Some(ref bundle) = update_bundle {
         format!(
             "{} (#{}) v{}.{:02} (XINA {})",
             bundle.header.game_name,
@@ -435,21 +480,30 @@ fn main() -> Result<()> {
             bundle.header.xina_version
         )
     } else {
-        "SWE1 (#50069) native Rust rules".to_string()
+        match requested_title {
+            Some(GameTitle::Rfm) => "RFM (#50070) native Rust rules".to_string(),
+            _ => "SWE1 (#50069) native Rust rules".to_string(),
+        }
     };
 
+    let active_game = requested_title.unwrap_or(match detected_sig {
+        PlayfieldSignature::Rfm => GameTitle::Rfm,
+        _ => GameTitle::Swe1,
+    });
+
     println!(
-        "pin2k-desktop initialized: ROM=[{}], LPT=[{}], playfield_probe={:?}, fuses=(0x{:02X},0x{:02X}), loaded_anims={}",
-        rom_version_str, lpt_desc, detected_sig, fuses.0, fuses.1, loaded_anims
+        "pin2k-desktop initialized: GAME={:?}, ROM=[{}], LPT=[{}], playfield_probe={:?}, fuses=(0x{:02X},0x{:02X}), loaded_anims={}",
+        active_game, rom_version_str, lpt_desc, detected_sig, fuses.0, fuses.1, loaded_anims
     );
 
     if let Some(ref out_dir) = cli.frames_out_dir {
         fs::create_dir_all(out_dir)?;
     }
 
-    let mut machine = Pin2kMachine::with_audio(pdb, compositor, audio);
+    let mut machine = Pin2kMachine::with_game(pdb, compositor, audio, active_game);
     let demo_events = match cli.script.as_str() {
         "demo" => build_demo_script(),
+        "rfm-demo" => build_rfm_demo_script(),
         "diagnostics" => build_diag_script(),
         "admin" => build_admin_script(),
         "podrace" => build_podrace_script(),
