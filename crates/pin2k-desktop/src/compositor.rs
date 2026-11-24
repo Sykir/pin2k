@@ -107,6 +107,57 @@ impl SoftwareCompositor {
         Ok(self.anims.len())
     }
 
+    /// Loads custom `.png` animation folders from `<mod_dir>/gfx/<anim_name>/*.png`,
+    /// overriding or adding animations for mods & standalone homebrew games.
+    pub fn load_mod_assets(
+        &mut self,
+        mod_dir: &Path,
+        anim_overrides: &HashMap<String, String>,
+    ) -> anyhow::Result<usize> {
+        let gfx_dir = mod_dir.join("gfx");
+        if !gfx_dir.is_dir() {
+            return Ok(0);
+        }
+        let mut loaded = 0usize;
+        for entry in fs::read_dir(&gfx_dir)? {
+            let entry = entry?;
+            let p = entry.path();
+            if !p.is_dir() {
+                continue;
+            }
+            let Some(folder_name) = p.file_name().and_then(|s| s.to_str()).map(str::to_string) else {
+                continue;
+            };
+            let mut frame_paths: Vec<PathBuf> = fs::read_dir(&p)?
+                .filter_map(|f| f.ok().map(|x| x.path()))
+                .filter(|fp| fp.extension().and_then(|s| s.to_str()) == Some("png"))
+                .collect();
+            frame_paths.sort();
+            if frame_paths.is_empty() {
+                continue;
+            }
+            let height = image::image_dimensions(&frame_paths[0]).map(|(_, h)| h).unwrap_or(120);
+            let idx = self.anims.len();
+            self.anim_lookup.insert(folder_name.clone(), idx);
+            self.anims.push(LoadedAnim {
+                name: folder_name.clone(),
+                height,
+                frame_paths,
+                decoded_frames: Vec::new(),
+            });
+            for (target_hint, src_folder) in anim_overrides {
+                if src_folder == &folder_name {
+                    self.anim_lookup.insert(target_hint.clone(), idx);
+                }
+            }
+            loaded += 1;
+        }
+        if self.active_anim_idx.is_none() && !self.anims.is_empty() {
+            self.active_anim_idx = Some(0);
+        }
+        Ok(loaded)
+    }
+
     /// Selects the best-matching loaded SWE1 animation for `hint` (exact match, then full-height substring match).
     pub fn select_anim_by_hint(&mut self, hint: &str) {
         if let Some(&idx) = self.anim_lookup.get(hint) {

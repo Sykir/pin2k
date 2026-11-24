@@ -25,7 +25,7 @@ use clap::Parser;
 use compositor::SoftwareCompositor;
 use pin2k_core::rfm_tables::rfm_sw;
 use pin2k_core::swe1_tables::sw;
-use pin2k_core::{GameTitle, Pin2kMachine};
+use pin2k_core::{GameTitle, ModManifest, Pin2kMachine};
 use pin2k_hal::{
     LptPort, NativeSerialPort, PdbDriver, PlayfieldSignature, SerialPdbPort, TracedLptPort,
     VirtualPdbPort,
@@ -79,9 +79,13 @@ struct Cli {
     #[arg(long)]
     rom_update: Option<PathBuf>,
 
-    /// Game ruleset to run (`auto`, `swe1`, or `rfm`). `auto` detects `#50069`/`#50070` from `--rom-update` or playfield probe.
+    /// Game ruleset to run (`auto`, `swe1`, `rfm`, or `homebrew`). `auto` detects `#50069`/`#50070` or `mod.json`.
     #[arg(long, default_value = "auto")]
     game: String,
+
+    /// One or more Mod / Homebrew directories containing `mod.json`, optional `gfx/`, and `audio/`.
+    #[arg(long = "mod")]
+    mods: Vec<PathBuf>,
 
     /// Optional localhost HTTP port for live 640×480 Holoprojector + Playfield + WebAudio UI.
     #[arg(long)]
@@ -402,16 +406,34 @@ fn main() -> Result<()> {
         None => None,
     };
 
+    let mut loaded_mods = Vec::new();
+    for mod_dir in &cli.mods {
+        let m = ModManifest::load_from_dir(mod_dir)
+            .map_err(|e| anyhow::anyhow!("failed to load mod '{}': {e}", mod_dir.display()))?;
+        loaded_mods.push((mod_dir.clone(), m));
+    }
+
+    let mod_base = loaded_mods
+        .iter()
+        .find_map(|(_, m)| m.base_game.as_deref())
+        .map(str::to_ascii_lowercase);
+
     let requested_title = match cli.game.to_ascii_lowercase().as_str() {
         "rfm" => Some(GameTitle::Rfm),
         "swe1" => Some(GameTitle::Swe1),
-        _ => update_bundle.as_ref().map(|b| {
-            if b.header.game_number == 50070 {
-                GameTitle::Rfm
-            } else {
-                GameTitle::Swe1
-            }
-        }),
+        "homebrew" => Some(GameTitle::Homebrew),
+        _ => match mod_base.as_deref() {
+            Some("homebrew") => Some(GameTitle::Homebrew),
+            Some("rfm") => Some(GameTitle::Rfm),
+            Some("swe1") => Some(GameTitle::Swe1),
+            _ => update_bundle.as_ref().map(|b| {
+                if b.header.game_number == 50070 {
+                    GameTitle::Rfm
+                } else {
+                    GameTitle::Swe1
+                }
+            }),
+        },
     };
     let virtual_sig = match requested_title {
         Some(GameTitle::Rfm) => PlayfieldSignature::Rfm,
@@ -453,18 +475,23 @@ fn main() -> Result<()> {
     let fuses = pdb.read_fuse_status();
 
     let mut compositor = SoftwareCompositor::new();
-    let loaded_anims = if let Some(ref dir) = cli.assets_dir {
+    let mut loaded_anims = if let Some(ref dir) = cli.assets_dir {
         compositor.load_assets(dir)?
     } else {
         0
     };
 
     let shared_web = Arc::new(Mutex::new(SharedWebState::default()));
-    let audio = CompositeAudioBackend::new(
+    let mut audio = CompositeAudioBackend::new(
         Arc::clone(&shared_web),
         cli.assets_dir.as_deref(),
         !cli.no_native_audio,
     );
+
+    for (mod_dir, manifest) in &loaded_mods {
+        loaded_anims += compositor.load_mod_assets(mod_dir, &manifest.anim_overrides)?;
+        audio.apply_mod_audio(mod_dir, &manifest.sound_overrides);
+    }
 
     if let Some(port) = cli.web_port {
         spawn_web_server(port, Arc::clone(&shared_web), cli.assets_dir.clone())?;
@@ -501,6 +528,16 @@ fn main() -> Result<()> {
     }
 
     let mut machine = Pin2kMachine::with_game(pdb, compositor, audio, active_game);
+    for (mod_dir, manifest) in &loaded_mods {
+        println!(
+            "Loaded mod '{}' v{} by {} ({})",
+            manifest.name,
+            manifest.version,
+            manifest.author,
+            mod_dir.display()
+        );
+        machine.apply_mod(manifest);
+    }
     let demo_events = match cli.script.as_str() {
         "demo" => build_demo_script(),
         "rfm-demo" => build_rfm_demo_script(),

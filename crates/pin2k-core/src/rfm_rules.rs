@@ -3,13 +3,15 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Supported Williams Pinball 2000 titles.
+/// Supported Williams Pinball 2000 titles and Homebrew mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameTitle {
     /// *Star Wars Episode I* (`#50069`)
     Swe1,
     /// *Revenge From Mars* (`#50070`)
     Rfm,
+    /// Standalone community Homebrew game (`mod.json`)
+    Homebrew,
 }
 
 impl GameTitle {
@@ -17,6 +19,7 @@ impl GameTitle {
         match self {
             GameTitle::Swe1 => "STAR WARS EPISODE I",
             GameTitle::Rfm => "REVENGE FROM MARS",
+            GameTitle::Homebrew => "PINBALL 2000 HOMEBREW",
         }
     }
 }

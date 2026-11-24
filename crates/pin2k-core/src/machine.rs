@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::admin::{AdminScreen, GameAdjustments, GameAudits, ADMIN_SOUND_PRESETS};
 use crate::events::{GameEvent, TimestampedEvent};
+use crate::mods::{HomebrewSwitchRule, ModManifest};
 use crate::rfm_rules::{GameTitle, RfmMultiball, RfmState, RfmWave};
 use crate::rfm_tables::{rfm_drive, rfm_drive_name, rfm_lamp, rfm_sound, rfm_sw, rfm_switch_name};
 use crate::swe1_rules::{
@@ -80,6 +81,9 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub adjustments: GameAdjustments,
     pub audits: GameAudits,
     pub last_switch_hit: Option<u8>,
+    pub score_multiplier: u64,
+    pub mod_switch_rules: Vec<HomebrewSwitchRule>,
+    pub mod_lit_lamps: Vec<u8>,
 
     debouncer: SwitchDebouncer,
     event_log: Vec<TimestampedEvent>,
@@ -144,21 +148,44 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             adjustments: GameAdjustments::default(),
             audits: GameAudits::default(),
             last_switch_hit: None,
+            score_multiplier: 1,
+            mod_switch_rules: Vec::new(),
+            mod_lit_lamps: Vec::new(),
             debouncer,
             event_log: Vec::new(),
         }
     }
 
+    /// Applies a Mod or Homebrew `ModManifest` (`mod.json`) onto the running machine.
+    pub fn apply_mod(&mut self, manifest: &ModManifest) {
+        if let Some(ref banner) = manifest.attract_banner {
+            self.status_banner = banner.clone();
+        }
+        if let Some(bpg) = manifest.balls_per_game {
+            self.balls_per_game = bpg.max(1);
+            self.adjustments.balls_per_game = self.balls_per_game;
+        }
+        if let Some(bs) = manifest.ball_save_secs {
+            self.adjustments.ball_save_secs = bs;
+        }
+        if let Some(mult) = manifest.score_multiplier {
+            self.score_multiplier = mult.max(1);
+        }
+        for rule in &manifest.switch_rules {
+            self.mod_switch_rules.push(rule.clone());
+        }
+    }
+
     fn game_switch_name(&self, id: u8) -> &'static str {
         match self.game_title {
-            GameTitle::Swe1 => switch_name(id),
+            GameTitle::Swe1 | GameTitle::Homebrew => switch_name(id),
             GameTitle::Rfm => rfm_switch_name(id),
         }
     }
 
     fn game_drive_name(&self, id: u8) -> &'static str {
         match self.game_title {
-            GameTitle::Swe1 => drive_name(id),
+            GameTitle::Swe1 | GameTitle::Homebrew => drive_name(id),
             GameTitle::Rfm => rfm_drive_name(id),
         }
     }
@@ -198,9 +225,10 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     fn add_score(&mut self, pts: u64) {
+        let scaled = pts.saturating_mul(self.score_multiplier.max(1));
         if let Some(p) = self.players.get_mut(self.current_player) {
-            p.score = p.score.saturating_add(pts);
-            p.bonus_points = p.bonus_points.saturating_add(pts / 10);
+            p.score = p.score.saturating_add(scaled);
+            p.bonus_points = p.bonus_points.saturating_add(scaled / 10);
             self.score = p.score;
             if p.score > self.audits.highest_score {
                 self.audits.highest_score = p.score;
@@ -298,10 +326,21 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.on_ball_drained();
                 }
             }
-            MachineState::InGame => match self.game_title {
-                GameTitle::Swe1 => self.handle_ingame_switch_closed(id),
-                GameTitle::Rfm => self.handle_rfm_ingame_switch_closed(id),
-            },
+            MachineState::InGame => {
+                // Evaluate mod / homebrew switch rules first
+                let matched = self.apply_mod_switch_rules(id);
+                if self.game_title == GameTitle::Homebrew {
+                    if !matched {
+                        self.handle_homebrew_builtin_switch(id);
+                    }
+                    return;
+                }
+                match self.game_title {
+                    GameTitle::Swe1 => self.handle_ingame_switch_closed(id),
+                    GameTitle::Rfm => self.handle_rfm_ingame_switch_closed(id),
+                    GameTitle::Homebrew => {}
+                }
+            }
         }
     }
 
@@ -1447,6 +1486,60 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
     }
 
+    fn apply_mod_switch_rules(&mut self, id: u8) -> bool {
+        let mut matched = false;
+        let rules: Vec<HomebrewSwitchRule> = self
+            .mod_switch_rules
+            .iter()
+            .filter(|r| r.sw_id == id)
+            .cloned()
+            .collect();
+        for rule in rules {
+            matched = true;
+            if rule.points > 0 {
+                self.add_score(rule.points);
+            }
+            if let Some(coil) = rule.coil_id {
+                self.emit_coil(coil, rule.pulse_ms);
+            }
+            if let Some(sid) = rule.sound_id {
+                self.emit_sound(SoundId(sid), false);
+            }
+            if let Some(lid) = rule.lamp_id {
+                if !self.mod_lit_lamps.contains(&lid) {
+                    self.mod_lit_lamps.push(lid);
+                }
+            }
+            if let Some(ref b) = rule.banner {
+                self.set_banner(b.clone(), 2_500);
+            }
+            if let Some(ref anim) = rule.anim_hint {
+                self.active_anim_hint = anim.clone();
+            }
+        }
+        matched
+    }
+
+    fn handle_homebrew_builtin_switch(&mut self, id: u8) {
+        match id {
+            sw::START_BUTTON => self.try_start_or_add_player(),
+            sw::LEFT_FLIPPER_BUTTON => {
+                self.emit_coil(drive::LEFT_FLIPPER_POWER, 40);
+                self.hw.set_drive_hold(drive::LEFT_FLIPPER_HOLD, true);
+            }
+            sw::RIGHT_FLIPPER_BUTTON => {
+                self.emit_coil(drive::RIGHT_FLIPPER_POWER, 40);
+                self.hw.set_drive_hold(drive::RIGHT_FLIPPER_HOLD, true);
+            }
+            sw::TROUGH_BALL_1 | sw::TROUGH_BALL_2 | sw::TROUGH_BALL_3 | sw::TROUGH_BALL_4 => {
+                if self.balls_in_play > 0 && self.eject_cooldown_ms == 0 {
+                    self.on_ball_drained();
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn finish_game(&mut self) {
         self.state = MachineState::Attract;
         self.audio.stop_all();
@@ -1578,6 +1671,16 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.hw.set_lamp(lamp::COIN_DOOR, LampState::On);
             }
             MachineState::InGame => {
+                for &lid in &self.mod_lit_lamps {
+                    self.hw.set_lamp(lid, LampState::On);
+                }
+                if self.game_title == GameTitle::Homebrew {
+                    self.hw.set_lamp(lamp::START_BUTTON, LampState::On);
+                    if self.ball_save_ms > 0 {
+                        self.hw.set_lamp(lamp::SHOOT_AGAIN, LampState::On);
+                    }
+                    return;
+                }
                 if self.game_title == GameTitle::Rfm {
                     self.update_rfm_lamps();
                     return;
@@ -1911,5 +2014,49 @@ mod tests {
             rfm_sw::CENTER_DEFLECTOR_PANEL,
         );
         assert_eq!(machine.rfm.active_wave, Some(RfmWave::MarsKneadsWomen));
+    }
+
+    #[test]
+    fn homebrew_mod_manifest_drives_custom_rules_and_scoring() {
+        let vboard = VirtualPdbPort::default();
+        let pdb = PdbDriver::new(vboard);
+        let mut machine = Pin2kMachine::with_game(
+            pdb,
+            HeadlessVideo::default(),
+            HeadlessAudio::default(),
+            GameTitle::Homebrew,
+        );
+
+        let manifest = ModManifest {
+            id: "space-cadet-hb".into(),
+            name: "Space Cadet Homebrew".into(),
+            author: "Pin2k Community".into(),
+            version: "1.0.0".into(),
+            base_game: Some("homebrew".into()),
+            attract_banner: Some("SPACE CADET - INSERT COIN".into()),
+            balls_per_game: Some(5),
+            ball_save_secs: Some(20),
+            score_multiplier: Some(2),
+            switch_rules: vec![HomebrewSwitchRule {
+                sw_id: sw::RAMP_MADE_LEFT,
+                points: 100_000,
+                coil_id: Some(drive::LIGHTSABER_NEON),
+                pulse_ms: 80,
+                sound_id: Some(0x0015),
+                lamp_id: Some(lamp::EXTRA_BALL),
+                banner: Some("WARP RAMP! +200,000".into()),
+                anim_hint: Some("warp_anim".into()),
+            }],
+            ..Default::default()
+        };
+        machine.apply_mod(&manifest);
+        assert_eq!(machine.balls_per_game, 5);
+        assert_eq!(machine.status_banner, "SPACE CADET - INSERT COIN");
+
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
+        assert_eq!(machine.score, 200_000);
+        assert_eq!(machine.active_anim_hint, "warp_anim");
+        assert!(machine.hw.port.is_drive_active(drive::LIGHTSABER_NEON));
     }
 }

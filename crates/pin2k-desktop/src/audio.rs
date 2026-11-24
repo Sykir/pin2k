@@ -31,6 +31,7 @@ enum AudioCmd {
 pub struct CompositeAudioBackend {
     web: WebAudioBridge,
     sound_files: Arc<HashMap<u16, String>>,
+    override_paths: Arc<HashMap<u16, PathBuf>>,
     audio_dir: Option<PathBuf>,
     native_tx: Option<Sender<AudioCmd>>,
     volume: f32,
@@ -58,7 +59,7 @@ impl CompositeAudioBackend {
             }
         }
 
-        let native_tx = if enable_native && audio_dir.is_some() {
+        let native_tx = if enable_native {
             Some(spawn_native_audio_worker())
         } else {
             None
@@ -67,28 +68,57 @@ impl CompositeAudioBackend {
         Self {
             web,
             sound_files: Arc::new(map),
+            override_paths: Arc::new(HashMap::new()),
             audio_dir,
             native_tx,
             volume: 0.85,
         }
+    }
+
+    /// Registers custom `.ogg` audio overrides from `<mod_dir>/audio/` for mods & homebrew games.
+    pub fn apply_mod_audio(&mut self, mod_dir: &Path, overrides: &HashMap<String, String>) {
+        let adir = mod_dir.join("audio");
+        if !adir.is_dir() {
+            return;
+        }
+        let mut next = (*self.override_paths).clone();
+        for (hex_id, rel_file) in overrides {
+            let trimmed = hex_id.trim_start_matches("0x").trim_start_matches("0X");
+            if let Ok(id) = u16::from_str_radix(trimmed, 16).or_else(|_| hex_id.parse::<u16>()) {
+                let p = adir.join(rel_file);
+                if p.exists() {
+                    next.insert(id, p);
+                }
+            }
+        }
+        self.override_paths = Arc::new(next);
     }
 }
 
 impl AudioBackend for CompositeAudioBackend {
     fn play_sound(&mut self, id: SoundId, looping: bool) {
         self.web.play_sound(id, looping);
-        if let (Some(tx), Some(dir)) = (&self.native_tx, &self.audio_dir) {
-            let fname = self
-                .sound_files
-                .get(&id.0)
-                .cloned()
-                .unwrap_or_else(|| format!("S{:04X}.ogg", id.0));
-            let path = dir.join(fname);
-            if path.exists() {
+        if let Some(tx) = &self.native_tx {
+            if let Some(path) = self.override_paths.get(&id.0) {
                 let _ = tx.send(AudioCmd::Play {
-                    file: path,
+                    file: path.clone(),
                     volume: self.volume,
                 });
+                return;
+            }
+            if let Some(ref dir) = self.audio_dir {
+                let fname = self
+                    .sound_files
+                    .get(&id.0)
+                    .cloned()
+                    .unwrap_or_else(|| format!("S{:04X}.ogg", id.0));
+                let path = dir.join(fname);
+                if path.exists() {
+                    let _ = tx.send(AudioCmd::Play {
+                        file: path,
+                        volume: self.volume,
+                    });
+                }
             }
         }
     }
