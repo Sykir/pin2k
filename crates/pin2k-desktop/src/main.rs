@@ -71,6 +71,10 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     no_native_audio: bool,
 
+    /// Show lower-half playfield lamp/coil debug telemetry instead of full-screen 640×480 native display.
+    #[arg(long, default_value_t = false)]
+    telemetry_overlay: bool,
+
     /// Path to extracted SWE1 assets directory (containing `gfx/gfx_manifest.json` and `audio/sound_manifest.json`).
     #[arg(long)]
     assets_dir: Option<PathBuf>,
@@ -479,6 +483,7 @@ fn main() -> Result<()> {
     let fuses = pdb.read_fuse_status();
 
     let mut compositor = SoftwareCompositor::new();
+    compositor.native_fullscreen = !cli.telemetry_overlay;
     let mut loaded_anims = if let Some(ref dir) = cli.assets_dir {
         compositor.load_assets(dir)?
     } else {
@@ -612,24 +617,26 @@ fn main() -> Result<()> {
             }
         }
 
-        // Overlay live playfield lamps & PDB coil telemetry onto lower screen half
-        let lamps_copy = *machine.hw.lamp_states();
-        let drive_mask = machine.hw.active_drive_mask();
-        let pdb_ok = machine.hw.pdb_present;
-        let door_ok = machine.coin_door_closed;
+        // Overlay live playfield lamps & PDB coil telemetry onto lower screen half only when `--telemetry-overlay` is enabled
         let rank_str = machine.players[machine.current_player].jedi_rank.label();
-        let lasers = machine.players[machine.current_player].laser_shots;
-        machine.video.draw_playfield_telemetry(
-            &lamps_copy,
-            drive_mask,
-            pdb_ok,
-            door_ok,
-            machine.credits,
-            machine.current_ball,
-            rank_str,
-            lasers,
-            machine.elapsed_ms,
-        );
+        if cli.telemetry_overlay {
+            let lamps_copy = *machine.hw.lamp_states();
+            let drive_mask = machine.hw.active_drive_mask();
+            let pdb_ok = machine.hw.pdb_present;
+            let door_ok = machine.coin_door_closed;
+            let lasers = machine.players[machine.current_player].laser_shots;
+            machine.video.draw_playfield_telemetry(
+                &lamps_copy,
+                drive_mask,
+                pdb_ok,
+                door_ok,
+                machine.credits,
+                machine.current_ball,
+                rank_str,
+                lasers,
+                machine.elapsed_ms,
+            );
+        }
 
         if let Some(ref out_dir) = cli.frames_out_dir {
             let p = out_dir.join(format!("frame_{frame:04}.png"));

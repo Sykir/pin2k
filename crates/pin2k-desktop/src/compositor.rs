@@ -42,6 +42,8 @@ impl LoadedAnim {
 
 pub struct SoftwareCompositor {
     pub framebuffer: RgbaImage,
+    pub native_240: RgbaImage,
+    pub native_fullscreen: bool,
     pub frames_presented: u64,
     anims: Vec<LoadedAnim>,
     anim_lookup: HashMap<String, usize>,
@@ -61,6 +63,8 @@ impl SoftwareCompositor {
     pub fn new() -> Self {
         Self {
             framebuffer: ImageBuffer::from_pixel(SCREEN_W, SCREEN_H, Rgba([6, 8, 18, 255])),
+            native_240: ImageBuffer::from_pixel(SCREEN_W, 240, Rgba([5, 7, 15, 255])),
+            native_fullscreen: true,
             frames_presented: 0,
             anims: Vec::new(),
             anim_lookup: HashMap::new(),
@@ -316,16 +320,16 @@ impl VideoBackend for SoftwareCompositor {
     }
 
     fn present(&mut self) {
-        // Clear upper 640x245 holoprojector viewport + lower background
-        for px in self.framebuffer.pixels_mut() {
+        // Render into native 640x240 MediaGX logical buffer first
+        for px in self.native_240.pixels_mut() {
             *px = Rgba([5, 7, 15, 255]);
         }
 
-        // Draw starfield backdrop in holoprojector zone
+        // Draw starfield backdrop
         for i in 0..48u32 {
             let sx = (i.wrapping_mul(137) + (self.frames_presented as u32) / 2) % SCREEN_W;
             let sy = i.wrapping_mul(53) % 235;
-            self.framebuffer.put_pixel(sx, sy, Rgba([110, 130, 180, 255]));
+            self.native_240.put_pixel(sx, sy, Rgba([110, 130, 180, 255]));
         }
 
         let active_name = self
@@ -340,7 +344,6 @@ impl VideoBackend for SoftwareCompositor {
             self.render_podrace_scene(true);
         } else {
             self.podrace_scene_ticks = 0;
-            // Blit active extracted SWE1 animation centered in upper holoprojector area
             if let Some(idx) = self.active_anim_idx {
                 if let Some(anim) = self.anims.get_mut(idx) {
                     let qf = self.queued_frame;
@@ -352,7 +355,7 @@ impl VideoBackend for SoftwareCompositor {
                         let draw_h = f.height();
                         let ox = ((SCREEN_W as i32) - (draw_w as i32)) / 2;
                         let oy = (185i32 - (draw_h as i32)).max(4);
-                        blit_rgba_clipped(&mut self.framebuffer, f, ox, oy, scale_x, 240);
+                        blit_rgba_clipped(&mut self.native_240, f, ox, oy, scale_x, 240);
                     }
                 }
             }
@@ -367,11 +370,30 @@ impl VideoBackend for SoftwareCompositor {
             let char_w = 8 * (scale as i32);
             let total_w = (txt.len() as i32) * char_w;
             let start_x = (cx - total_w / 2).max(8);
-            draw_string(&mut self.framebuffer, &txt, start_x, y, color, scale);
+            draw_string(&mut self.native_240, &txt, start_x, y, color, scale);
         }
 
-        // Divider line between Pepper's Ghost CRT top and cabinet telemetry bottom
-        fill_rect(&mut self.framebuffer, 0, 244, SCREEN_W as i32, 2, [70, 130, 220, 255]);
+        if self.native_fullscreen {
+            // Authentic MediaGX 640x240 -> 640x480 vertical scan-doubler
+            let src_raw = self.native_240.as_raw();
+            let dst_raw = self.framebuffer.as_mut();
+            let row_bytes = (SCREEN_W as usize) * 4;
+            for y in 0..240usize {
+                let src_row = &src_raw[y * row_bytes..(y + 1) * row_bytes];
+                dst_raw[(y * 2) * row_bytes..(y * 2 + 1) * row_bytes].copy_from_slice(src_row);
+                dst_raw[(y * 2 + 1) * row_bytes..(y * 2 + 2) * row_bytes].copy_from_slice(src_row);
+            }
+        } else {
+            // Split debug mode: 640x240 top + telemetry bottom
+            let src_raw = self.native_240.as_raw();
+            let dst_raw = self.framebuffer.as_mut();
+            let row_bytes = (SCREEN_W as usize) * 4;
+            dst_raw[..240 * row_bytes].copy_from_slice(src_raw);
+            for px in dst_raw[240 * row_bytes..].chunks_exact_mut(4) {
+                px.copy_from_slice(&[5, 7, 15, 255]);
+            }
+            fill_rect(&mut self.framebuffer, 0, 244, SCREEN_W as i32, 2, [70, 130, 220, 255]);
+        }
 
         self.frames_presented += 1;
     }
@@ -390,7 +412,7 @@ impl SoftwareCompositor {
             return false;
         }
         let f = frames[frame_idx % frames.len()].clone();
-        blit_rgba_clipped(&mut self.framebuffer, &f, ox, oy, scale_x, 242);
+        blit_rgba_clipped(&mut self.native_240, &f, ox, oy, scale_x, 240);
         true
     }
 
@@ -447,9 +469,9 @@ impl SoftwareCompositor {
             let _ = self.blit_named("anim_podrace_checkpoint", 0, 224, 10, 1);
         }
         let mph = 615 + ((race_t * 4) % 332);
-        fill_rect(&mut self.framebuffer, 488, 8, 142, 16, [10, 18, 34, 255]);
+        fill_rect(&mut self.native_240, 488, 8, 142, 16, [10, 18, 34, 255]);
         draw_string(
-            &mut self.framebuffer,
+            &mut self.native_240,
             &format!("SPEED {mph} MPH"),
             496,
             12,

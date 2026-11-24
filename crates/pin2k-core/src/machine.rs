@@ -19,6 +19,7 @@ use crate::switch_matrix::{SwitchDebouncer, SwitchEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MachineState {
+    Boot,
     Attract,
     InGame,
     Tilt,
@@ -114,7 +115,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             video,
             audio,
             game_title,
-            state: MachineState::Attract,
+            state: MachineState::Boot,
             elapsed_ms: 0,
             free_play: true,
             credits: 0,
@@ -300,7 +301,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
 
         // Service / Diagnostics menu entry (`Sw 72..75`)
-        if id == sw::DIAG_ENTER && self.state == MachineState::Attract {
+        if id == sw::DIAG_ENTER && matches!(self.state, MachineState::Boot | MachineState::Attract) {
             self.state = MachineState::Diagnostics;
             self.diag_page = DiagPage::SwitchTest;
             self.admin_screen = AdminScreen::Root { cursor: 0 };
@@ -310,6 +311,12 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
 
         match self.state {
+            MachineState::Boot => {
+                if id == sw::START_BUTTON {
+                    self.state = MachineState::Attract;
+                    self.try_start_or_add_player();
+                }
+            }
             MachineState::Attract => {
                 if id == sw::START_BUTTON {
                     self.try_start_or_add_player();
@@ -1563,6 +1570,48 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     fn update_timers(&mut self, dt_ms: u32) {
+        if self.state == MachineState::Boot && self.elapsed_ms >= 3_200 {
+            self.state = MachineState::Attract;
+            self.emit_sound(sound::ATTRACT_MUSIC, false);
+            self.set_banner(format!("{} - PRESS START", self.game_title.title()), 0);
+        }
+
+        if self.state == MachineState::Attract {
+            let phase = ((self.elapsed_ms / 4_000) % 5) as usize;
+            if self.game_title == GameTitle::Swe1 {
+                match phase {
+                    0 => {
+                        self.active_anim_hint = "anim_battle_droid_intro_battle".to_string();
+                        self.status_banner = if self.free_play || self.credits > 0 {
+                            "STAR WARS EPISODE I - PRESS START".to_string()
+                        } else {
+                            "STAR WARS EPISODE I - INSERT COIN".to_string()
+                        };
+                    }
+                    1 => {
+                        self.active_anim_hint = "anim_jedi_battle_intro_frame".to_string();
+                        self.status_banner = format!(
+                            "GRAND CHAMPION: {} {}",
+                            self.high_scores[0].initials.iter().collect::<String>(),
+                            self.high_scores[0].score
+                        );
+                    }
+                    2 => {
+                        self.active_anim_hint = "anim_jedi_battle_maul_chop_single".to_string();
+                        self.status_banner = "SPELL J-E-D-I FOR DARTH MAUL DUEL".to_string();
+                    }
+                    3 => {
+                        self.active_anim_hint = "anim_podrace_intro_movie".to_string();
+                        self.status_banner = "BOONTA EVE PODRACE".to_string();
+                    }
+                    _ => {
+                        self.active_anim_hint = "anim_hangar_droid_explosion".to_string();
+                        self.status_banner = "THEED HANGAR 3-BALL MULTIBALL".to_string();
+                    }
+                }
+            }
+        }
+
         if self.banner_timer_ms > 0 {
             self.banner_timer_ms = self.banner_timer_ms.saturating_sub(dt_ms);
         }
@@ -1640,6 +1689,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
 
         match self.state {
+            MachineState::Boot => {
+                self.hw.set_lamp(lamp::COIN_DOOR, LampState::On);
+            }
             MachineState::Attract => {
                 // Attract lamp sweep (`LeffAttractMode`)
                 if self.game_title == GameTitle::Rfm {
@@ -1773,6 +1825,25 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     fn render_frame(&mut self) {
+        if self.state == MachineState::Boot {
+            self.video.draw_text("WILLIAMS PINBALL 2000", 320, 48, 0x7FE0, 2);
+            self.video.draw_text(self.game_title.title(), 320, 88, 0x7FFF, 2);
+            self.video.draw_text("PRISM ROM & HARDWARE CHECK ... OK", 320, 140, 0x03E0, 1);
+            self.video.draw_text(
+                if self.coin_door_closed {
+                    "POWER DRIVER BOARD: ONLINE (HV READY)"
+                } else {
+                    "POWER DRIVER BOARD: COIN DOOR OPEN"
+                },
+                320,
+                165,
+                0x03FF,
+                1,
+            );
+            self.video.draw_text("INITIALIZING XINA ENGINE...", 320, 200, 0x5EF7, 1);
+            self.video.present();
+            return;
+        }
         if self.state == MachineState::Diagnostics {
             let (title, rows) = self.admin_display_lines();
             self.video.draw_text(&title, 320, 22, 0x7FE0, 2);
@@ -1799,14 +1870,39 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         let frame_idx = (self.elapsed_ms / 32) as usize;
         self.video.draw_sprite(AssetId(0), frame_idx, 210, 20, 0);
-        self.video.draw_text(&self.status_banner, 320, 195, 0x7FE0, 2);
-        self.video.draw_text(
-            &format!("SCORE {:>10}", self.score),
-            320,
-            220,
-            0x7FFF,
-            2,
-        );
+        self.video.draw_text(&self.status_banner, 320, 190, 0x7FE0, 2);
+        match self.state {
+            MachineState::Attract => {
+                if ((self.elapsed_ms / 4_000) % 5) == 1 {
+                    for (i, hs) in self.high_scores.iter().take(4).enumerate() {
+                        let ini: String = hs.initials.iter().collect();
+                        self.video.draw_text(
+                            &format!("#{} {}  {:>10}", i + 1, ini, hs.score),
+                            320,
+                            72 + (i as i32) * 24,
+                            0x7FFF,
+                            2,
+                        );
+                    }
+                }
+                let cred_txt = if self.free_play {
+                    "FREE PLAY".to_string()
+                } else {
+                    format!("CREDITS {}", self.credits)
+                };
+                self.video.draw_text(&cred_txt, 320, 220, 0x03FF, 1);
+            }
+            MachineState::InGame | MachineState::Tilt => {
+                self.video.draw_text(
+                    &format!("P{}  BALL {}   {:>10}", self.current_player + 1, self.current_ball, self.score),
+                    320,
+                    218,
+                    0x7FFF,
+                    2,
+                );
+            }
+            _ => {}
+        }
         self.video.present();
     }
 }
