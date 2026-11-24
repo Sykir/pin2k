@@ -18,6 +18,7 @@ use pin2k_hal::{AudioBackend, SoundId};
 use pin2k_rom_tool::asset_extractor::SoundManifest;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum DebugCommand {
     LaunchMode(String),
     PlayAnim(String),

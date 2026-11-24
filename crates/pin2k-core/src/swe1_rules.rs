@@ -129,6 +129,64 @@ impl Swe1Scene {
             _ => sound::BATTLE_MUSIC_LOOP,
         }
     }
+
+    /// Minimum scenes started before this scene becomes eligible (`scene_info` table `0x2e179c`).
+    pub const fn min_scenes_started(self) -> u32 {
+        match self {
+            Swe1Scene::MosEspaCantina
+            | Swe1Scene::DestroyerDroid
+            | Swe1Scene::HoverTank
+            | Swe1Scene::WattosChance => 1,
+            Swe1Scene::QueenFashion => 2,
+            _ => 0,
+        }
+    }
+
+    /// Shield hits required to open the saucer for the next scene (`Scenes::reset_remaining_hits`):
+    /// `1` for the very first scene, `3` for all subsequent scenes.
+    pub const fn shield_hits_to_qualify(scenes_started: u32) -> u8 {
+        if scenes_started == 0 { 1 } else { 3 }
+    }
+}
+
+/// Exact scoring and rule constants extracted from `swe1_0166.elf` (SWE1 v1.66).
+pub mod scoring {
+    pub const SKILL_SHOT_CAP: u64 = 3_000_000;
+    pub const BONUS_PER_SHIP: u64 = 100_000;
+    pub const BONUS_MAX_MULTIPLIER: u8 = 5;
+    pub const JET_NORMAL: u64 = 10_310;
+    pub const JET_SUPER: u64 = 51_550;
+    pub const DROP_TARGET: u64 = 2_310;
+    pub const LASER_FIRE: u64 = 1_000;
+    pub const JEDI_LETTERS_COMPLETE: u64 = 2_000_000;
+    pub const MULTIBALL_START: u64 = 500_000;
+    pub const MULTIBALL_JACKPOT: u64 = 1_000_000;
+    pub const MULTIBALL_SUPER_JACKPOT: u64 = 5_000_000;
+    pub const JEDI_MB_START: u64 = 500_000;
+    pub const JEDI_MB_ATTACK_MAUL: u64 = 500_000;
+    pub const JEDI_MB_ATTACK_MAUL_COMBO: u64 = 700_000;
+    pub const JEDI_MB_ATTACK_QUIGON: u64 = 1_000_000;
+    pub const BATTLE_DROID_SHIELD_HIT: u64 = 400_000;
+    pub const BATTLE_DROID_TARGET: u64 = 200_000;
+    pub const BATTLE_DROID_STAP_DESTROY: u64 = 250_000;
+    pub const BATTLE_DROID_STAP_BONUS: u64 = 500_000;
+    pub const BATTLE_DROID_COMPLETE: u64 = 2_250_000;
+    pub const GUNGAN_SHOT: u64 = 50_000;
+    pub const PODRACE_SHOT: u64 = 50_000;
+    pub const QUEEN_FASHION_SPIN: u64 = 20_000;
+    pub const QUEEN_FASHION_MATCH: u64 = 500_000;
+    pub const MUSICAL_CHAIRS_JUMP: u64 = 70_000;
+    pub const MUSICAL_CHAIRS_CENTER: u64 = 200_000;
+    pub const HOVER_TANK_HIT: u64 = 50_000;
+    pub const HOVER_TANK_DESTROY: u64 = 250_000;
+    pub const DESTROYER_DROID_HIT: u64 = 50_000;
+    pub const DESTROYER_DROID_DESTROY: u64 = 250_000;
+    pub const DESTROYER_DROID_SHIP: u64 = 450_000;
+    pub const PROBE_DROID_HIT: u64 = 70_000;
+    pub const PROBE_DROID_DESTROY: u64 = 250_000;
+    pub const WATTOS_CHANCE_SPIN: u64 = 20_000;
+    pub const WATTOS_CHANCE_WIN: u64 = 250_000;
+    pub const HANGAR_ESCAPE_HIT: u64 = 20_000;
 }
 
 /// Active running holoprojector scene state.
@@ -239,4 +297,23 @@ pub fn default_high_scores() -> Vec<HighScoreEntry> {
         HighScoreEntry { initials: ['A', 'N', 'I'], score: 45_000_000, rank: JediRank::Knight },
         HighScoreEntry { initials: ['P', 'A', 'D'], score: 30_000_000, rank: JediRank::Youth },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_swe1_extracted_rules_and_scoring() {
+        assert_eq!(Swe1Scene::shield_hits_to_qualify(0), 1);
+        assert_eq!(Swe1Scene::shield_hits_to_qualify(1), 3);
+        assert_eq!(Swe1Scene::BattleDroid.min_scenes_started(), 0);
+        assert_eq!(Swe1Scene::MosEspaCantina.min_scenes_started(), 1);
+        assert_eq!(Swe1Scene::QueenFashion.min_scenes_started(), 2);
+
+        assert_eq!(scoring::BONUS_PER_SHIP * 10 * (scoring::BONUS_MAX_MULTIPLIER as u64), 5_000_000);
+        assert_eq!(scoring::JET_NORMAL, 10_310);
+        assert_eq!(scoring::JET_SUPER, 51_550);
+        assert_eq!(scoring::MULTIBALL_SUPER_JACKPOT, 5_000_000);
+    }
 }
