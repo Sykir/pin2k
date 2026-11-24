@@ -357,6 +357,52 @@ fn build_demo_script() -> Vec<(u64, u8, u64)> {
     ]
 }
 
+/// Comprehensive full-game showcase exercising Boot, Attract Mode, Skill Shot,
+/// all 12 SWE1 holoprojector scenes, Lasers, Jet Bumpers, Darth Maul Duel,
+/// Hangar 3-Ball Multiball, End-of-Ball Bonus, and Operator Diagnostics.
+fn build_all_sequences_script() -> Vec<(u64, u8, u64)> {
+    let mut ev = vec![
+        (102, sw::LEFT_COIN, 4),
+        (110, sw::START_BUTTON, 4),
+        (122, sw::JETS_ROLLOVER, 4), // Skill Shot!
+    ];
+    // For each of the 12 scenes (launched every 30 frames starting at frame 140),
+    // fire shots inside the scene so animations + scoring + completion trigger.
+    for idx in 0..12u64 {
+        let base = 140 + idx * 30;
+        ev.push((base + 8, sw::SHIELD_HIT, 4));
+        ev.push((base + 14, sw::RAMP_MADE_LEFT, 4));
+        ev.push((base + 20, sw::RAMP_MADE_RIGHT, 4));
+    }
+    // Lasers + Jet Bumpers (G-U-N-G-A-N -> Super Jets) at frames 500..536
+    ev.extend_from_slice(&[
+        (502, sw::LEFT_BANK_UPPER, 3),
+        (506, sw::LEFT_ACTION_BUTTON, 3),
+        (510, sw::RIGHT_ACTION_BUTTON, 3),
+        (514, sw::UPPER_JET, 3),
+        (518, sw::MIDDLE_JET, 3),
+        (522, sw::LOWER_JET, 3),
+        (526, sw::UPPER_JET, 3),
+        (530, sw::MIDDLE_JET, 3),
+        (534, sw::LOWER_JET, 3), // 6th Jet -> Super Jets!
+        // Darth Maul Duel combos (launched at frame 540)
+        (548, sw::RAMP_MADE_LEFT, 4),
+        (556, sw::RAMP_MADE_RIGHT, 4),
+        (564, sw::RAMP_MADE_LEFT, 4),
+        // Hangar 3-Ball Multiball Jackpots (launched at frame 575)
+        (584, sw::RAMP_MADE_LEFT, 4),
+        (594, sw::RAMP_MADE_RIGHT, 4),
+        (604, sw::SHIELD_POPPER, 4), // Super Jackpot!
+        // Drain -> End-of-Ball Bonus
+        (630, sw::TROUGH_BALL_1, 6),
+        // Operator Diagnostics
+        (675, sw::DIAG_ENTER, 4),
+        (690, sw::DIAG_UP, 4),
+        (702, sw::DIAG_ENTER, 4),
+    ]);
+    ev
+}
+
 fn build_diag_script() -> Vec<(u64, u8, u64)> {
     vec![
         (4, sw::DIAG_ENTER, 4),  // Enter Admin Root Menu
@@ -604,6 +650,7 @@ fn main() -> Result<()> {
         "diagnostics" => build_diag_script(),
         "admin" => build_admin_script(),
         "podrace" => build_podrace_script(),
+        "all-sequences" => build_all_sequences_script(),
         _ => Vec::new(),
     };
 
@@ -619,6 +666,18 @@ fn main() -> Result<()> {
         // Queue Swe1Scene::Podrace (index 6) right before Center Scoop entry in `--script podrace`
         if cli.script == "podrace" && frame == 25 {
             machine.players[0].next_scene_idx = 6;
+        }
+
+        // In `--script all-sequences`, sequentially trigger all 12 scenes, Darth Maul Duel, and Hangar Multiball
+        if cli.script == "all-sequences" {
+            if frame >= 140 && frame < 500 && (frame - 140) % 30 == 0 {
+                let scene_idx = (frame - 140) / 30;
+                machine.debug_launch_mode(&format!("scene:{scene_idx}"));
+            } else if frame == 540 {
+                machine.debug_launch_mode("darth_maul_duel");
+            } else if frame == 575 {
+                machine.debug_launch_mode("hangar_multiball");
+            }
         }
 
         // Apply scripted switch presses/releases
