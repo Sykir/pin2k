@@ -26,7 +26,29 @@ pub enum MachineState {
     Attract,
     InGame,
     Tilt,
+    HighScoreEntry,
     Diagnostics,
+}
+
+const HSTD_ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HstdEntrySession {
+    pub queue: Vec<(usize, u64, JediRank)>,
+    pub initials: [char; 3],
+    pub cursor: usize,
+    pub char_idx: usize,
+}
+
+impl Default for HstdEntrySession {
+    fn default() -> Self {
+        Self {
+            queue: Vec::new(),
+            initials: ['A', 'A', 'A'],
+            cursor: 0,
+            char_idx: 0,
+        }
+    }
 }
 
 /// Operator diagnostic menu page (`DiagnosticSwitchTestDeff`, `DiagnosticCoilTestDeff`, `DiagnosticSingleLampDeff`).
@@ -83,6 +105,7 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub active_anim_hint: String,
     pub diag_page: DiagPage,
     pub admin_screen: AdminScreen,
+    pub hstd_session: HstdEntrySession,
     pub adjustments: GameAdjustments,
     pub audits: GameAudits,
     pub last_switch_hit: Option<u8>,
@@ -153,6 +176,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             active_anim_hint: String::new(),
             diag_page: DiagPage::SwitchTest,
             admin_screen: AdminScreen::Root { cursor: 0 },
+            hstd_session: HstdEntrySession::default(),
             adjustments: GameAdjustments::default(),
             audits: GameAudits::default(),
             last_switch_hit: None,
@@ -690,6 +714,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 }
             }
             MachineState::Diagnostics => self.handle_diagnostics_switch(id),
+            MachineState::HighScoreEntry => self.handle_hstd_entry_switch(id),
             MachineState::Tilt => {
                 if matches!(id, sw::TROUGH_BALL_1 | sw::TROUGH_BALL_2 | sw::TROUGH_BALL_3 | sw::TROUGH_BALL_4) {
                     self.on_ball_drained();
@@ -1933,28 +1958,95 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     fn finish_game(&mut self) {
-        self.state = MachineState::Attract;
         self.attract.last_game_played = true;
-        self.attract.index = 13; // DeffAttractModeScores
-        self.attract.timer_ms = 0;
         self.audio.stop_all();
         self.emit_sound(sound::GAME_OVER_MUSIC, false);
         self.emit_event(GameEvent::GameOver {
             final_score: self.score,
         });
 
-        for p in &self.players {
-            if p.score > self.high_scores.last().map(|h| h.score).unwrap_or(0) {
-                self.high_scores.push(HighScoreEntry {
-                    initials: ['J', 'E', 'D'],
-                    score: p.score,
-                    rank: p.jedi_rank,
-                });
-                self.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
-                self.high_scores.truncate(4);
-            }
+        let threshold = if self.high_scores.len() < 4 {
+            0
+        } else {
+            self.high_scores.last().map(|h| h.score).unwrap_or(0)
+        };
+        let qualifiers: Vec<(usize, u64, JediRank)> = self
+            .players
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.score > threshold)
+            .map(|(idx, p)| (idx + 1, p.score, p.jedi_rank))
+            .collect();
+
+        if !qualifiers.is_empty() {
+            let first_p = qualifiers[0].0;
+            self.hstd_session = HstdEntrySession {
+                queue: qualifiers,
+                initials: ['A', 'A', 'A'],
+                cursor: 0,
+                char_idx: 0,
+            };
+            self.state = MachineState::HighScoreEntry;
+            self.set_banner(format!("PLAYER {first_p} HIGH SCORE! ENTER INITIALS"), 0);
+        } else {
+            self.state = MachineState::Attract;
+            self.attract.index = 13; // DeffAttractModeScores
+            self.attract.timer_ms = 0;
+            self.set_banner(format!("GAME OVER - FINAL SCORE: {}", self.score), 5_000);
         }
-        self.set_banner(format!("GAME OVER - FINAL SCORE: {}", self.score), 5_000);
+    }
+
+    fn handle_hstd_entry_switch(&mut self, id: u8) {
+        if self.hstd_session.queue.is_empty() {
+            self.state = MachineState::Attract;
+            return;
+        }
+        let n = HSTD_ALPHABET.len();
+        match id {
+            sw::LEFT_FLIPPER_BUTTON | sw::DIAG_DOWN => {
+                self.hstd_session.char_idx = (self.hstd_session.char_idx + n - 1) % n;
+                let ch = HSTD_ALPHABET[self.hstd_session.char_idx] as char;
+                self.hstd_session.initials[self.hstd_session.cursor] = ch;
+                self.emit_sound(sound::LASER_SFX_OR_CLICK(), false);
+            }
+            sw::RIGHT_FLIPPER_BUTTON | sw::DIAG_UP => {
+                self.hstd_session.char_idx = (self.hstd_session.char_idx + 1) % n;
+                let ch = HSTD_ALPHABET[self.hstd_session.char_idx] as char;
+                self.hstd_session.initials[self.hstd_session.cursor] = ch;
+                self.emit_sound(sound::LASER_SFX_OR_CLICK(), false);
+            }
+            sw::START_BUTTON | sw::LEFT_ACTION_BUTTON | sw::RIGHT_ACTION_BUTTON => {
+                self.emit_sound(sound::COIN_CREDIT, false);
+                if self.hstd_session.cursor < 2 {
+                    self.hstd_session.cursor += 1;
+                    let cur_ch = self.hstd_session.initials[self.hstd_session.cursor] as u8;
+                    self.hstd_session.char_idx =
+                        HSTD_ALPHABET.iter().position(|&c| c == cur_ch).unwrap_or(0);
+                } else {
+                    let (_, score, rank) = self.hstd_session.queue.remove(0);
+                    self.high_scores.push(HighScoreEntry {
+                        initials: self.hstd_session.initials,
+                        score,
+                        rank,
+                    });
+                    self.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
+                    self.high_scores.truncate(4);
+
+                    if let Some(&(next_p, _, _)) = self.hstd_session.queue.first() {
+                        self.hstd_session.initials = ['A', 'A', 'A'];
+                        self.hstd_session.cursor = 0;
+                        self.hstd_session.char_idx = 0;
+                        self.set_banner(format!("PLAYER {next_p} HIGH SCORE! ENTER INITIALS"), 0);
+                    } else {
+                        self.state = MachineState::Attract;
+                        self.attract.index = 13; // DeffAttractModeScores
+                        self.attract.timer_ms = 0;
+                        self.set_banner(format!("HIGH SCORE SAVED!"), 4_000);
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     fn update_timers(&mut self, dt_ms: u32) {
@@ -2106,6 +2198,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
             MachineState::Tilt => {
                 self.hw.set_lamp(lamp::COIN_DOOR, LampState::On);
+            }
+            MachineState::HighScoreEntry => {
+                self.hw.set_lamp(lamp::START_BUTTON, LampState::Blinking { period_ms: 250 });
+                self.hw.set_lamp(lamp::LEFT_FLIPPER, LampState::On);
+                self.hw.set_lamp(lamp::RIGHT_FLIPPER, LampState::On);
             }
             MachineState::InGame => {
                 for &lid in &self.mod_lit_lamps {
@@ -2320,6 +2417,41 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     218,
                     0x7FFF,
                     2,
+                );
+            }
+            MachineState::HighScoreEntry => {
+                let (p_num, p_score, p_rank) = self
+                    .hstd_session
+                    .queue
+                    .first()
+                    .copied()
+                    .unwrap_or((1, self.score, JediRank::Padawan));
+                self.video.draw_text("GREAT SCORE - ENTER INITIALS", 320, 28, 0x7FE0, 2);
+                self.video.draw_text(
+                    &format!("PLAYER {p_num}  -  {p_score} ({})", p_rank.label()),
+                    320,
+                    64,
+                    0x7FFF,
+                    2,
+                );
+                let mut slots = String::new();
+                for (i, &ch) in self.hstd_session.initials.iter().enumerate() {
+                    if i > 0 {
+                        slots.push_str("   ");
+                    }
+                    if i == self.hstd_session.cursor {
+                        slots.push_str(&format!("[{ch}]"));
+                    } else {
+                        slots.push_str(&format!(" {ch} "));
+                    }
+                }
+                self.video.draw_text(&slots, 320, 118, 0x03FF, 3);
+                self.video.draw_text(
+                    "FLIPPERS: SELECT LETTER   START: CONFIRM",
+                    320,
+                    196,
+                    0x5EF7,
+                    1,
                 );
             }
             _ => {}
@@ -2575,5 +2707,47 @@ mod tests {
         assert_eq!(machine.score, 200_000);
         assert_eq!(machine.active_anim_hint, "warp_anim");
         assert!(machine.hw.port.is_drive_active(drive::LIGHTSABER_NEON));
+    }
+
+    #[test]
+    fn high_score_entry_lets_player_pick_initials_and_persists() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine = Pin2kMachine::new(driver, HeadlessVideo::default());
+
+        // Start 1-player game with a top high score
+        machine.adjustments.ball_save_secs = 0;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
+        machine.add_score(95_000_000);
+
+        // Drain balls until Game Over -> HighScoreEntry (handles any replay/extra ball)
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, !c), sw::TROUGH_BALL_1);
+        for _ in 0..10 {
+            if machine.state != MachineState::InGame {
+                break;
+            }
+            machine.eject_cooldown_ms = 0;
+            machine.ball_save_ms = 0;
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::TROUGH_BALL_1);
+            for _ in 0..10 {
+                machine.tick(16);
+            }
+        }
+
+        assert_eq!(machine.state, MachineState::HighScoreEntry);
+
+        // Select 'B' (1 right flip) -> confirm, 'C' (2 right flips) -> confirm, 'A' -> confirm
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_FLIPPER_BUTTON);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
+
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_FLIPPER_BUTTON);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_FLIPPER_BUTTON);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
+
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
+
+        assert_eq!(machine.state, MachineState::Attract);
+        assert_eq!(machine.high_scores[0].initials, ['B', 'C', 'A']);
+        assert!(machine.high_scores[0].score >= 95_000_000);
     }
 }
