@@ -659,8 +659,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             return;
         }
 
-        // Service / Diagnostics menu entry (`Sw 72..75`)
-        if id == sw::DIAG_ENTER && matches!(self.state, MachineState::Boot | MachineState::Attract) {
+        // Service / Diagnostics menu entry (`Sw 72..75`) — accessible from Boot, Attract, InGame, or Tilt
+        if id == sw::DIAG_ENTER && self.state != MachineState::Diagnostics {
             self.state = MachineState::Diagnostics;
             self.diag_page = DiagPage::SwitchTest;
             self.admin_screen = AdminScreen::Root { cursor: 0 };
