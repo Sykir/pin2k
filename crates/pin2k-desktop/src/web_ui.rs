@@ -294,18 +294,48 @@ const INDEX_HTML: &str = r#"<!doctype html>
     <button onclick="hit(75)">Admin Enter [4]</button>
   </div>
   <div class="controls" style="margin-top:14px; border-top:1px solid #1e293b; padding-top:10px;">
-    <strong style="width:100%; text-align:center; color:#38bdf8;">DEBUG &amp; MODE LAUNCHER (100% Native Script + Extracted Assets)</strong>
-    <button onclick="dbgMode('ingame')">Start Game</button>
-    <button onclick="dbgMode('skill_shot')">Skill Shot</button>
-    <button onclick="dbgMode('podrace')">Podrace Scene</button>
-    <button onclick="dbgMode('hangar_multiball')">Hangar Multiball</button>
-    <button onclick="dbgMode('darth_maul_duel')">Darth Maul Duel</button>
-    <button onclick="dbgMode('battle_droid')">Battle Droid</button>
+    <strong style="width:100%; text-align:center; color:#38bdf8;">MENU DEBUG — ÉTATS, JEUX &amp; SCÈNES</strong>
+    <button onclick="dbgMode('game:swe1')">Game: SWE1</button>
+    <button onclick="dbgMode('game:rfm')">Game: RFM</button>
+    <button onclick="dbgMode('boot')">Boot</button>
     <button onclick="dbgMode('attract')">Attract</button>
+    <button onclick="dbgMode('ingame')">InGame</button>
+    <button onclick="dbgMode('skill_shot')">Skill Shot</button>
+    <button onclick="dbgMode('hangar_multiball')">Hangar MB</button>
+    <button onclick="dbgMode('darth_maul_duel')">Maul Duel</button>
+    <button onclick="dbgMode('hstd_entry')">High Score Entry</button>
     <button onclick="dbgMode('admin')">Admin Menu</button>
+    <button onclick="dbgMode('debug')">Debug Menu</button>
     <button onclick="fetch('api/debug/score/1000000',{method:'POST'})">+1M Score</button>
-    <input id="customMode" placeholder="mode/scene (ex: scene:4)" style="background:#0f172a;color:#f8fafc;border:1px solid #475569;padding:6px;border-radius:4px;">
-    <button onclick="dbgMode(document.getElementById('customMode').value)">Launch</button>
+    <select id="swe1Scene" onchange="if(this.value) dbgMode(this.value)" style="background:#0f172a;color:#f8fafc;border:1px solid #475569;padding:6px;border-radius:4px;">
+      <option value="">-- SWE1 Scène (1..12) --</option>
+      <option value="scene:0">01: Battle Droid Invasion</option>
+      <option value="scene:1">02: Destroyer Droids</option>
+      <option value="scene:2">03: Federation Fighters</option>
+      <option value="scene:3">04: Gungan Energy Battle</option>
+      <option value="scene:4">05: Theed Hangar Escape</option>
+      <option value="scene:5">06: AAT Hover Tank</option>
+      <option value="scene:6">07: Boonta Eve Podrace</option>
+      <option value="scene:7">08: Sith Probe Droids</option>
+      <option value="scene:8">09: Queen Amidala Wardrobe</option>
+      <option value="scene:9">10: Jar Jar Juggle</option>
+      <option value="scene:10">11: Watto's Chance Cube</option>
+      <option value="scene:11">12: Mos Espa Cantina</option>
+    </select>
+    <select id="rfmWave" onchange="if(this.value) dbgMode(this.value)" style="background:#0f172a;color:#f8fafc;border:1px solid #475569;padding:6px;border-radius:4px;">
+      <option value="">-- RFM Vagues &amp; Modes --</option>
+      <option value="rfm_wave:0">01: Mars Kneads Women</option>
+      <option value="rfm_wave:1">02: Big-O-Beam</option>
+      <option value="rfm_wave:2">03: Paris in Peril</option>
+      <option value="rfm_wave:3">04: Tower of Terror</option>
+      <option value="rfm_wave:4">05: Leaning Tower</option>
+      <option value="rfm_wave:5">06: Secret Weapon</option>
+      <option value="rfm_wave:6">07: Alien Drive-In</option>
+      <option value="rfm_wave:7">08: Martian Bowling</option>
+      <option value="rfm_wave:8">09: Attack Mars!</option>
+      <option value="capture_multiball">RFM: Capture Multiball</option>
+      <option value="martian_attack">RFM: Martian Attack</option>
+    </select>
   </div>
   <div id="dbPanel" style="margin-top:12px; width:640px; background:#0f172a; border:1px solid #1e293b; border-radius:6px; padding:10px; font-size:12px; color:#cbd5e1;">
     Loading Local DB (Scores &amp; Audits)...

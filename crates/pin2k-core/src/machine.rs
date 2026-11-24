@@ -5,7 +5,9 @@ use pin2k_hal::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::admin::{AdminScreen, GameAdjustments, GameAudits, ADMIN_SOUND_PRESETS};
+use crate::admin::{
+    AdminScreen, GameAdjustments, GameAudits, ADMIN_SOUND_PRESETS, DEBUG_LAUNCH_PRESETS,
+};
 use crate::attract::{AttractController, AttractDeff};
 use crate::events::{GameEvent, TimestampedEvent};
 use crate::mods::{HomebrewSwitchRule, ModManifest};
@@ -283,6 +285,33 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     pub fn debug_launch_mode(&mut self, target: &str) -> bool {
         let key = target.trim().to_ascii_lowercase();
         match key.as_str() {
+            "game:swe1" | "swe1" => {
+                self.game_title = GameTitle::Swe1;
+                self.cut_all_holds();
+                self.state = MachineState::Attract;
+                self.balls_in_play = 0;
+                self.active_scene = None;
+                self.set_banner("GAME: STAR WARS EPISODE I", 3_000);
+                return true;
+            }
+            "game:rfm" | "rfm" => {
+                self.game_title = GameTitle::Rfm;
+                self.cut_all_holds();
+                self.state = MachineState::Attract;
+                self.balls_in_play = 0;
+                self.active_scene = None;
+                self.set_banner("GAME: REVENGE FROM MARS", 3_000);
+                return true;
+            }
+            "boot" => {
+                self.cut_all_holds();
+                self.state = MachineState::Boot;
+                self.elapsed_ms = 0;
+                self.balls_in_play = 0;
+                self.active_scene = None;
+                self.set_banner("DEBUG: BOOT SEQUENCE", 2_000);
+                return true;
+            }
             "attract" => {
                 self.cut_all_holds();
                 self.state = MachineState::Attract;
@@ -293,6 +322,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
             "ingame" | "start" => {
                 if self.state != MachineState::InGame {
+                    if !matches!(self.state, MachineState::Boot | MachineState::Attract) {
+                        self.state = MachineState::Attract;
+                    }
                     self.try_start_or_add_player();
                 }
                 self.set_banner("DEBUG: IN GAME", 3_000);
@@ -305,6 +337,26 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.set_banner("DEBUG: ADMIN MENU", 3_000);
                 return true;
             }
+            "debug" | "debug_menu" => {
+                self.cut_all_holds();
+                self.state = MachineState::Diagnostics;
+                self.admin_screen = AdminScreen::DebugLauncher { cursor: 0 };
+                self.set_banner("DEBUG LAUNCHER", 3_000);
+                return true;
+            }
+            "hstd_entry" | "high_score_entry" => {
+                self.cut_all_holds();
+                let score = self.score.max(95_000_000);
+                self.hstd_session = HstdEntrySession {
+                    queue: vec![(1, score, JediRank::Knight)],
+                    initials: ['A', 'A', 'A'],
+                    cursor: 0,
+                    char_idx: 0,
+                };
+                self.state = MachineState::HighScoreEntry;
+                self.set_banner("DEBUG: HIGH SCORE ENTRY", 3_000);
+                return true;
+            }
             "tilt" => {
                 self.cut_all_holds();
                 self.state = MachineState::Tilt;
@@ -314,8 +366,43 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             _ => {}
         }
 
+        // RFM Waves (`rfm_wave:0`..`8`, `capture_multiball`, `martian_attack`)
+        if let Some(wave_idx_str) = key.strip_prefix("rfm_wave:") {
+            if let Some(wave) = wave_idx_str
+                .parse::<usize>()
+                .ok()
+                .and_then(|i| RfmWave::ALL.get(i).copied())
+            {
+                self.game_title = GameTitle::Rfm;
+                if self.state != MachineState::InGame {
+                    self.try_start_or_add_player();
+                }
+                self.rfm.active_wave = Some(wave);
+                self.rfm.wave_hits_left = wave.required_hits();
+                self.set_banner(format!("RFM WAVE: {}", wave.title()), 4_000);
+                return true;
+            }
+        }
+        if key == "capture_multiball" || key == "martian_attack" {
+            self.game_title = GameTitle::Rfm;
+            if self.state != MachineState::InGame {
+                self.try_start_or_add_player();
+            }
+            self.rfm.multiball = if key == "capture_multiball" {
+                RfmMultiball::CaptureMultiball { jackpots: 0 }
+            } else {
+                RfmMultiball::MartianAttack
+            };
+            self.balls_in_play = 3;
+            self.set_banner(format!("RFM: {}", key.to_ascii_uppercase()), 4_000);
+            return true;
+        }
+
         // Ensure we are InGame for scene/mode launches
         if self.state != MachineState::InGame {
+            if !matches!(self.state, MachineState::Boot | MachineState::Attract) {
+                self.state = MachineState::Attract;
+            }
             self.try_start_or_add_player();
         }
 
@@ -801,6 +888,10 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.admin_screen = AdminScreen::Root { cursor: 3 };
                     self.set_banner("OPERATOR ADMIN MENU", 3_000);
                 }
+                AdminScreen::DebugLauncher { .. } => {
+                    self.admin_screen = AdminScreen::Root { cursor: 4 };
+                    self.set_banner("OPERATOR ADMIN MENU", 3_000);
+                }
             },
             sw::DIAG_ENTER => match self.admin_screen {
                 AdminScreen::Root { cursor } => {
@@ -808,7 +899,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                         0 => AdminScreen::DiagnosticsMenu { cursor: 0 },
                         1 => AdminScreen::Audits { cursor: 0 },
                         2 => AdminScreen::Adjustments { cursor: 0 },
-                        _ => AdminScreen::Utilities { cursor: 0 },
+                        3 => AdminScreen::Utilities { cursor: 0 },
+                        _ => AdminScreen::DebugLauncher { cursor: 0 },
                     };
                 }
                 AdminScreen::DiagnosticsMenu { cursor } => {
@@ -858,12 +950,17 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 AdminScreen::Utilities { cursor } => {
                     self.execute_utility(cursor);
                 }
+                AdminScreen::DebugLauncher { cursor } => {
+                    if let Some(&(target, _)) = DEBUG_LAUNCH_PRESETS.get(cursor as usize) {
+                        self.debug_launch_mode(target);
+                    }
+                }
             },
             sw::DIAG_UP | sw::DIAG_DOWN => {
                 let step: i16 = if id == sw::DIAG_UP { 1 } else { -1 };
                 match self.admin_screen {
                     AdminScreen::Root { cursor } => {
-                        let next = (cursor as i16 + step).rem_euclid(4) as u8;
+                        let next = (cursor as i16 + step).rem_euclid(5) as u8;
                         self.admin_screen = AdminScreen::Root { cursor: next };
                     }
                     AdminScreen::DiagnosticsMenu { cursor } => {
@@ -907,6 +1004,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     AdminScreen::Utilities { cursor } => {
                         let next = (cursor as i16 + step).rem_euclid(3) as u8;
                         self.admin_screen = AdminScreen::Utilities { cursor: next };
+                    }
+                    AdminScreen::DebugLauncher { cursor } => {
+                        let len = DEBUG_LAUNCH_PRESETS.len() as i16;
+                        let next = (cursor as i16 + step).rem_euclid(len) as u8;
+                        self.admin_screen = AdminScreen::DebugLauncher { cursor: next };
                     }
                 }
             }
@@ -1005,6 +1107,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     ("AUDITS".into(), cursor == 1),
                     ("ADJUSTMENTS".into(), cursor == 2),
                     ("UTILITIES".into(), cursor == 3),
+                    ("DEBUG LAUNCHER".into(), cursor == 4),
                 ],
             ),
             AdminScreen::DiagnosticsMenu { cursor } => (
@@ -1089,6 +1192,14 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     ("FACTORY DEFAULTS".into(), cursor == 2),
                 ],
             ),
+            AdminScreen::DebugLauncher { cursor } => {
+                let start = (cursor as usize / 4) * 4;
+                let end = (start + 4).min(DEBUG_LAUNCH_PRESETS.len());
+                let rows = (start..end)
+                    .map(|idx| (DEBUG_LAUNCH_PRESETS[idx].1.to_string(), idx == cursor as usize))
+                    .collect();
+                ("DEBUG LAUNCHER (SCENES/GAMES)".to_string(), rows)
+            }
         }
     }
 
@@ -2749,5 +2860,27 @@ mod tests {
         assert_eq!(machine.state, MachineState::Attract);
         assert_eq!(machine.high_scores[0].initials, ['B', 'C', 'A']);
         assert!(machine.high_scores[0].score >= 95_000_000);
+    }
+
+    #[test]
+    fn debug_menu_launches_all_states_scenes_and_games() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine = Pin2kMachine::new(driver, HeadlessVideo::default());
+
+        assert!(machine.debug_launch_mode("debug"));
+        assert_eq!(machine.state, MachineState::Diagnostics);
+        assert_eq!(machine.admin_screen, AdminScreen::DebugLauncher { cursor: 0 });
+
+        assert!(machine.debug_launch_mode("scene:6"));
+        assert_eq!(machine.state, MachineState::InGame);
+        assert_eq!(machine.active_scene.as_ref().map(|s| s.scene), Some(Swe1Scene::Podrace));
+
+        assert!(machine.debug_launch_mode("rfm_wave:8"));
+        assert_eq!(machine.game_title, GameTitle::Rfm);
+        assert_eq!(machine.rfm.active_wave, Some(RfmWave::AttackMars));
+
+        assert!(machine.debug_launch_mode("hstd_entry"));
+        assert_eq!(machine.state, MachineState::HighScoreEntry);
     }
 }
