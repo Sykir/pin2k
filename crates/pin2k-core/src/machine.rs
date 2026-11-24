@@ -12,6 +12,7 @@ use crate::mods::{HomebrewSwitchRule, ModManifest};
 use crate::rfm_rules::{GameTitle, RfmMultiball, RfmState, RfmWave};
 use crate::rfm_tables::{rfm_drive, rfm_drive_name, rfm_lamp, rfm_sound, rfm_sw, rfm_switch_name};
 use crate::script_engine::{GameScript, ScriptAction, ScriptRuntime, ScriptTrigger};
+use crate::storage::{GameHistoryEntry, LocalDb};
 use crate::swe1_rules::{
     default_high_scores, ActiveMultiball, ActiveSceneState, HighScoreEntry, JediRank, PlayerState,
     Swe1Scene,
@@ -89,6 +90,7 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub mod_switch_rules: Vec<HomebrewSwitchRule>,
     pub mod_lit_lamps: Vec<u8>,
     pub script_runtime: Option<ScriptRuntime>,
+    pub strict_script_mode: bool,
 
     debouncer: SwitchDebouncer,
     event_log: Vec<TimestampedEvent>,
@@ -158,6 +160,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             mod_switch_rules: Vec::new(),
             mod_lit_lamps: Vec::new(),
             script_runtime: None,
+            strict_script_mode: false,
             debouncer,
             event_log: Vec::new(),
         }
@@ -196,6 +199,185 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         self.script_runtime = Some(ScriptRuntime::new(script));
         self.eval_script_trigger(ScriptTrigger::OnBoot);
+    }
+
+    pub fn active_game_number(&self) -> u32 {
+        if let Some(ref rt) = self.script_runtime {
+            rt.script.meta.game_number
+        } else {
+            match self.game_title {
+                GameTitle::Swe1 | GameTitle::Homebrew => 50069,
+                GameTitle::Rfm => 50070,
+            }
+        }
+    }
+
+    /// Restores persisted high scores, audits, and adjustments from `LocalDb`.
+    pub fn apply_db(&mut self, db: &LocalDb) {
+        let gnum = self.active_game_number();
+        if let Some(rec) = db.games.get(&gnum) {
+            if !rec.high_scores.is_empty() {
+                self.high_scores = rec.high_scores.clone();
+            }
+            self.audits = rec.audits.clone();
+            self.adjustments = rec.adjustments.clone();
+            self.free_play = self.adjustments.free_play;
+            self.balls_per_game = self.adjustments.balls_per_game.max(1);
+        }
+    }
+
+    /// Snapshots current high scores, audits, and adjustments into `LocalDb`.
+    pub fn sync_to_db(&self, db: &mut LocalDb) {
+        let gnum = self.active_game_number();
+        let rec = db.get_or_insert_game(gnum);
+        rec.high_scores = self.high_scores.clone();
+        rec.audits = self.audits.clone();
+        rec.adjustments = self.adjustments.clone();
+    }
+
+    /// Builds a `GameHistoryEntry` for the current session.
+    pub fn snapshot_game_history(&self) -> GameHistoryEntry {
+        let scores: Vec<u64> = self.players.iter().map(|p| p.score).collect();
+        let best_score = scores.iter().copied().max().unwrap_or(0);
+        let scenes_completed = self
+            .players
+            .iter()
+            .map(|p| p.scenes_completed)
+            .max()
+            .unwrap_or(0);
+        GameHistoryEntry {
+            timestamp_ms: self.elapsed_ms,
+            game_number: self.active_game_number(),
+            players: self.players.len(),
+            scores,
+            best_score,
+            scenes_completed,
+        }
+    }
+
+    /// Debug helper: immediately jumps to a state, SWE1 scene, or scripted mode.
+    pub fn debug_launch_mode(&mut self, target: &str) -> bool {
+        let key = target.trim().to_ascii_lowercase();
+        match key.as_str() {
+            "attract" => {
+                self.cut_all_holds();
+                self.state = MachineState::Attract;
+                self.balls_in_play = 0;
+                self.active_scene = None;
+                self.set_banner("DEBUG: ATTRACT MODE", 3_000);
+                return true;
+            }
+            "ingame" | "start" => {
+                if self.state != MachineState::InGame {
+                    self.try_start_or_add_player();
+                }
+                self.set_banner("DEBUG: IN GAME", 3_000);
+                return true;
+            }
+            "diagnostics" | "admin" => {
+                self.cut_all_holds();
+                self.state = MachineState::Diagnostics;
+                self.admin_screen = AdminScreen::Root { cursor: 0 };
+                self.set_banner("DEBUG: ADMIN MENU", 3_000);
+                return true;
+            }
+            "tilt" => {
+                self.cut_all_holds();
+                self.state = MachineState::Tilt;
+                self.set_banner("DEBUG: TILT", 3_000);
+                return true;
+            }
+            _ => {}
+        }
+
+        // Ensure we are InGame for scene/mode launches
+        if self.state != MachineState::InGame {
+            self.try_start_or_add_player();
+        }
+
+        // Check SWE1 scenes (`scene:0`..`scene:11` or `podrace` etc.)
+        let scene_opt = if let Some(idx_str) = key.strip_prefix("scene:") {
+            idx_str
+                .parse::<usize>()
+                .ok()
+                .and_then(|i| Swe1Scene::ALL.get(i).copied())
+        } else {
+            match key.as_str() {
+                "podrace" | "boonta" => Some(Swe1Scene::Podrace),
+                "battle_droid" => Some(Swe1Scene::BattleDroid),
+                "destroyer_droid" => Some(Swe1Scene::DestroyerDroid),
+                "federation_fighter" => Some(Swe1Scene::FederationFighter),
+                "gungan_battle" => Some(Swe1Scene::GunganBattle),
+                "hangar_escape" => Some(Swe1Scene::HangarEscape),
+                "hover_tank" => Some(Swe1Scene::HoverTank),
+                "probe_droid" => Some(Swe1Scene::ProbeDroid),
+                "queen_fashion" => Some(Swe1Scene::QueenFashion),
+                "jar_jar_juggle" => Some(Swe1Scene::JarJarJuggle),
+                "wattos_chance" => Some(Swe1Scene::WattosChance),
+                "mos_espa_cantina" => Some(Swe1Scene::MosEspaCantina),
+                _ => None,
+            }
+        };
+
+        if let Some(scene) = scene_opt {
+            self.active_scene = Some(ActiveSceneState {
+                scene,
+                hits_remaining: scene.required_hits(),
+                timer_ms: scene.duration_ms(),
+            });
+            self.active_anim_hint = scene.anim_hint().to_string();
+            self.audits.scenes_started = self.audits.scenes_started.saturating_add(1);
+            self.emit_sound(scene.music_id(), true);
+            self.emit_event(GameEvent::SceneStarted {
+                scene,
+                title: scene.title().to_string(),
+            });
+            self.set_banner(format!("DEBUG SCENE: {}", scene.title()), 4_000);
+            return true;
+        }
+
+        // Check scripted modes in `game_script.json`
+        let has_script_mode = self
+            .script_runtime
+            .as_ref()
+            .is_some_and(|rt| rt.script.modes.iter().any(|m| m.id.eq_ignore_ascii_case(&key)));
+        if has_script_mode {
+            let exact_id = self
+                .script_runtime
+                .as_ref()
+                .unwrap()
+                .script
+                .modes
+                .iter()
+                .find(|m| m.id.eq_ignore_ascii_case(&key))
+                .unwrap()
+                .id
+                .clone();
+            self.execute_script_actions(&[ScriptAction::StartMode { mode: exact_id }]);
+            return true;
+        }
+
+        false
+    }
+
+    pub fn debug_play_anim(&mut self, anim_name: &str) {
+        self.active_anim_hint = anim_name.to_string();
+        self.set_banner(format!("ANIM: {anim_name}"), 3_000);
+    }
+
+    pub fn debug_play_sound(&mut self, sound_id: u16) {
+        self.emit_sound(SoundId(sound_id), false);
+    }
+
+    pub fn debug_add_score(&mut self, points: u64) {
+        if self.state != MachineState::InGame {
+            self.try_start_or_add_player();
+        }
+        self.add_score(points);
+    }
+
+    pub fn debug_pulse_drive(&mut self, drive_id: u8, ms: u8) {
+        self.emit_coil(drive_id, ms);
     }
 
     /// Evaluates all `GameScript` rules matching `trigger` whose conditions hold.
@@ -523,8 +705,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     }
                     return;
                 }
-                if matched_script && self.script_runtime.is_some() {
-                    // Script handled this switch; still run core ball/flipper/trough mechanics if needed
+                if (matched_script || self.strict_script_mode) && self.script_runtime.is_some() {
+                    // Script handled this switch (or strict script mode is active); only run core hardware ball/flipper/trough mechanics
                     if matches!(
                         id,
                         sw::TROUGH_BALL_1

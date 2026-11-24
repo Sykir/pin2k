@@ -25,7 +25,7 @@ use clap::Parser;
 use compositor::SoftwareCompositor;
 use pin2k_core::rfm_tables::rfm_sw;
 use pin2k_core::swe1_tables::sw;
-use pin2k_core::{GameScript, GameTitle, ModManifest, Pin2kMachine};
+use pin2k_core::{GameEvent, GameScript, GameTitle, LocalDb, ModManifest, Pin2kMachine};
 use pin2k_hal::{
     LptPort, NativeSerialPort, PdbDriver, PlayfieldSignature, SerialPdbPort, TracedLptPort,
     VirtualPdbPort,
@@ -33,7 +33,7 @@ use pin2k_hal::{
 #[cfg(target_os = "linux")]
 use pin2k_hal::{DevPortLpt, LinuxPpdevPort};
 use pin2k_rom_tool::parse_hex_or_dec;
-use web_ui::{spawn_web_server, SharedWebState};
+use web_ui::{spawn_web_server, DebugCommand, SharedWebState};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -82,6 +82,18 @@ struct Cli {
     /// Path to extracted `game_script.json` (auto-detected at `<assets-dir>/scripts/game_script.json` when omitted).
     #[arg(long)]
     game_script: Option<PathBuf>,
+
+    /// Path to local JSON database (`pin2k_db.json`) for high scores, audits, and adjustments.
+    #[arg(long)]
+    db_path: Option<PathBuf>,
+
+    /// Debug: launch directly into a mode or scene (`attract`, `ingame`, `podrace`, `hangar_multiball`, `darth_maul_duel`, `scene:0`..`11`, `admin`).
+    #[arg(long)]
+    debug_mode: Option<String>,
+
+    /// Enforce strict script-only rules when `game_script.json` is loaded (disables hardcoded rule fallbacks).
+    #[arg(long, default_value_t = false)]
+    strict_script: bool,
 
     /// Optional Pinball 2000 ROM update package (directory, `.exe`, or `.zip`) to validate & report active ROM version.
     #[arg(long)]
@@ -570,6 +582,22 @@ fn main() -> Result<()> {
         );
         machine.load_game_script(script);
     }
+    machine.strict_script_mode = cli.strict_script;
+
+    let db_file_path = cli.db_path.clone().unwrap_or_else(|| {
+        cli.assets_dir
+            .as_ref()
+            .map(|d| d.join("pin2k_db.json"))
+            .unwrap_or_else(|| PathBuf::from("pin2k_db.json"))
+    });
+    let mut local_db = LocalDb::load_or_create(&db_file_path)?;
+    machine.apply_db(&local_db);
+    println!("Local DB ready at {}", db_file_path.display());
+
+    if let Some(ref dbg) = cli.debug_mode {
+        let ok = machine.debug_launch_mode(dbg);
+        println!("Debug launch '{dbg}' -> {}", if ok { "OK" } else { "unknown mode" });
+    }
     let demo_events = match cli.script.as_str() {
         "demo" => build_demo_script(),
         "rfm-demo" => build_rfm_demo_script(),
@@ -609,12 +637,33 @@ fn main() -> Result<()> {
             }
         });
 
-        // Apply web UI switch presses
+        // Apply web UI switch presses & debug commands
+        let mut pending_dbg = Vec::new();
         if let Ok(mut st) = shared_web.lock() {
             for (sw_id, closed, hold_ms) in st.pending_switches.drain(..) {
                 machine.hw.port.inner_mut().set_virtual_switch(sw_id, closed);
                 let hold_frames = (hold_ms as u64 / 16).max(2);
                 scheduled_releases.push((frame + hold_frames, sw_id));
+            }
+            pending_dbg.extend(st.pending_debug.drain(..));
+        }
+        for cmd in pending_dbg {
+            match cmd {
+                DebugCommand::LaunchMode(m) => {
+                    machine.debug_launch_mode(&m);
+                }
+                DebugCommand::PlayAnim(a) => {
+                    machine.debug_play_anim(&a);
+                }
+                DebugCommand::PlaySound(sid) => {
+                    machine.debug_play_sound(sid);
+                }
+                DebugCommand::AddScore(pts) => {
+                    machine.debug_add_score(pts);
+                }
+                DebugCommand::PulseDrive(did, ms) => {
+                    machine.debug_pulse_drive(did, ms);
+                }
             }
         }
 
@@ -625,6 +674,25 @@ fn main() -> Result<()> {
         machine.tick(16);
 
         let emitted_events = machine.drain_events();
+        let mut db_dirty = false;
+        for ev in &emitted_events {
+            if matches!(
+                ev.event,
+                GameEvent::GameOver { .. }
+                    | GameEvent::CreditAdded { .. }
+                    | GameEvent::AdjustmentChanged { .. }
+                    | GameEvent::SceneCompleted { .. }
+            ) {
+                db_dirty = true;
+            }
+            if matches!(ev.event, GameEvent::GameOver { .. }) {
+                local_db.record_game(machine.snapshot_game_history());
+            }
+        }
+        if db_dirty || (frame > 0 && frame % 600 == 0) {
+            machine.sync_to_db(&mut local_db);
+            let _ = local_db.save_to_file(&db_file_path);
+        }
         if let Some(ref mut ef) = events_file {
             for ev in &emitted_events {
                 if let Ok(line) = serde_json::to_string(ev) {
@@ -687,6 +755,19 @@ fn main() -> Result<()> {
                         "sound_loop": sloop,
                     })
                     .to_string();
+                    let gnum = machine.active_game_number();
+                    if let Some(rec) = local_db.games.get(&gnum) {
+                        if let Ok(db_str) = serde_json::to_string(rec) {
+                            st.db_json = db_str;
+                        }
+                    } else {
+                        machine.sync_to_db(&mut local_db);
+                        if let Some(rec) = local_db.games.get(&gnum) {
+                            if let Ok(db_str) = serde_json::to_string(rec) {
+                                st.db_json = db_str;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -706,6 +787,9 @@ fn main() -> Result<()> {
         machine.video.framebuffer.save(shot_path)?;
         println!("Saved 640x480 composite screenshot -> {}", shot_path.display());
     }
+
+    machine.sync_to_db(&mut local_db);
+    local_db.save_to_file(&db_file_path)?;
 
     let p = &machine.players[machine.current_player];
     println!(

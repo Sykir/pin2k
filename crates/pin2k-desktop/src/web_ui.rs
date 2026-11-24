@@ -17,12 +17,23 @@ use std::thread;
 use pin2k_hal::{AudioBackend, SoundId};
 use pin2k_rom_tool::asset_extractor::SoundManifest;
 
+#[derive(Debug, Clone)]
+pub enum DebugCommand {
+    LaunchMode(String),
+    PlayAnim(String),
+    PlaySound(u16),
+    AddScore(u64),
+    PulseDrive(u8, u8),
+}
+
 #[derive(Default)]
 pub struct SharedWebState {
     pub latest_png: Vec<u8>,
     pub status_json: String,
     pub events_json: String,
+    pub db_json: String,
     pub pending_switches: Vec<(u8, bool, u32)>, // (sw_id, closed, hold_ms)
+    pub pending_debug: Vec<DebugCommand>,
     pub active_sound_file: Option<(u64, String, bool)>, // (seq, filename, looping)
 }
 
@@ -130,6 +141,60 @@ fn handle_client(
         return write_response(&mut stream, "200 OK", "application/json", b"{\"ok\":true}");
     }
 
+    if method == "POST" && path.starts_with("/api/debug/mode/") {
+        let mode = path.trim_start_matches("/api/debug/mode/").to_string();
+        if let Ok(mut st) = shared.lock() {
+            st.pending_debug.push(DebugCommand::LaunchMode(mode));
+        }
+        return write_response(&mut stream, "200 OK", "application/json", b"{\"ok\":true}");
+    }
+
+    if method == "POST" && path.starts_with("/api/debug/anim/") {
+        let anim = path.trim_start_matches("/api/debug/anim/").to_string();
+        if let Ok(mut st) = shared.lock() {
+            st.pending_debug.push(DebugCommand::PlayAnim(anim));
+        }
+        return write_response(&mut stream, "200 OK", "application/json", b"{\"ok\":true}");
+    }
+
+    if method == "POST" && path.starts_with("/api/debug/sound/") {
+        let raw_id = path.trim_start_matches("/api/debug/sound/");
+        let parsed = if let Some(hex) = raw_id.strip_prefix("0x").or_else(|| raw_id.strip_prefix("0X")) {
+            u16::from_str_radix(hex, 16).ok()
+        } else {
+            raw_id.parse::<u16>().ok()
+        };
+        if let Some(sid) = parsed {
+            if let Ok(mut st) = shared.lock() {
+                st.pending_debug.push(DebugCommand::PlaySound(sid));
+            }
+        }
+        return write_response(&mut stream, "200 OK", "application/json", b"{\"ok\":true}");
+    }
+
+    if method == "POST" && path.starts_with("/api/debug/score/") {
+        if let Ok(pts) = path.trim_start_matches("/api/debug/score/").parse::<u64>() {
+            if let Ok(mut st) = shared.lock() {
+                st.pending_debug.push(DebugCommand::AddScore(pts));
+            }
+        }
+        return write_response(&mut stream, "200 OK", "application/json", b"{\"ok\":true}");
+    }
+
+    if path == "/api/db" {
+        let json = shared
+            .lock()
+            .map(|s| {
+                if s.db_json.is_empty() {
+                    "{}".into()
+                } else {
+                    s.db_json.clone()
+                }
+            })
+            .unwrap_or_else(|_| "{}".into());
+        return write_response(&mut stream, "200 OK", "application/json", json.as_bytes());
+    }
+
     if path == "/frame.png" {
         let png = shared
             .lock()
@@ -227,11 +292,30 @@ const INDEX_HTML: &str = r#"<!doctype html>
     <button onclick="hit(74)">Admin Up [3]</button>
     <button onclick="hit(75)">Admin Enter [4]</button>
   </div>
+  <div class="controls" style="margin-top:14px; border-top:1px solid #1e293b; padding-top:10px;">
+    <strong style="width:100%; text-align:center; color:#38bdf8;">DEBUG &amp; MODE LAUNCHER (100% Native Script + Extracted Assets)</strong>
+    <button onclick="dbgMode('ingame')">Start Game</button>
+    <button onclick="dbgMode('skill_shot')">Skill Shot</button>
+    <button onclick="dbgMode('podrace')">Podrace Scene</button>
+    <button onclick="dbgMode('hangar_multiball')">Hangar Multiball</button>
+    <button onclick="dbgMode('darth_maul_duel')">Darth Maul Duel</button>
+    <button onclick="dbgMode('battle_droid')">Battle Droid</button>
+    <button onclick="dbgMode('attract')">Attract</button>
+    <button onclick="dbgMode('admin')">Admin Menu</button>
+    <button onclick="fetch('api/debug/score/1000000',{method:'POST'})">+1M Score</button>
+    <input id="customMode" placeholder="mode/scene (ex: scene:4)" style="background:#0f172a;color:#f8fafc;border:1px solid #475569;padding:6px;border-radius:4px;">
+    <button onclick="dbgMode(document.getElementById('customMode').value)">Launch</button>
+  </div>
+  <div id="dbPanel" style="margin-top:12px; width:640px; background:#0f172a; border:1px solid #1e293b; border-radius:6px; padding:10px; font-size:12px; color:#cbd5e1;">
+    Loading Local DB (Scores &amp; Audits)...
+  </div>
 <script>
 let lastSoundSeq = 0;
 let bgAudio = null;
 function hit(sw) { fetch('api/switch/' + sw, {method:'POST'}); }
+function dbgMode(m) { if (m) fetch('api/debug/mode/' + encodeURIComponent(m), {method:'POST'}); }
 document.addEventListener('keydown', (e) => {
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
   const map = {c:64, s:2, z:85, m:84, x:87, '.':86, l:36, r:37, h:34, p:32, k:22, j:45, '1':72, '2':73, '3':74, '4':75};
   const sw = map[e.key.toLowerCase()];
   if (sw !== undefined) hit(sw);
@@ -270,6 +354,18 @@ setInterval(async () => {
     }
   } catch (_) {}
 }, 120);
+
+setInterval(async () => {
+  try {
+    const r = await fetch('api/db');
+    const db = await r.json();
+    if (db && db.audits) {
+      const hs = (db.high_scores || []).slice(0, 4).map((h, i) => `#${i+1} ${(h.initials||[]).join('')} ${h.score}`).join(' | ');
+      document.getElementById('dbPanel').innerHTML =
+        `<strong>LOCAL DB (#${db.game_number})</strong> — Games: ${db.audits.total_games_played}, Balls: ${db.audits.total_balls_played}, Scenes: ${db.audits.scenes_started}/${db.audits.scenes_completed}, Best: ${db.audits.highest_score}<br><strong>HSTD:</strong> ${hs}`;
+    }
+  } catch (_) {}
+}, 1000);
 </script>
 </body>
 </html>
