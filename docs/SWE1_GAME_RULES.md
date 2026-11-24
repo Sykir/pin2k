@@ -1,23 +1,21 @@
-# Intégralité des règles de jeu extraites des ROMs Pinball 2000
+# *Star Wars Episode I* (`SWE1 v1.66`) — Règles de jeu extraites
 
-Ce document rassemble l'ensemble des règles de gameplay, machines à états, conditions de qualification et formules de score extraites par rétro-ingénierie directe de `swe1_0166.elf` (*Star Wars Episode I v1.66*) et `rfm_0195.elf` (*Revenge From Mars 0195*).
+L'intégralité des règles, machines à états, conditions de qualification et formules de score ci-dessous provient de la rétro-ingénierie directe de `swe1_0166.elf` (`pin2000_50069_0166_04032022_B_10000000`, `15 019` symboles).
 
 ---
 
-## Partie A — *Star Wars Episode I* (`SWE1 v1.66`)
-
-### 1. Cycle de partie et démarrage (`Game`, `BallStartBallSaver`)
+## 1. Cycle de partie et démarrage (`Game`, `BallStartBallSaver`)
 - **Joueurs** : `1` à `4` joueurs par partie (`get_player_up()`, borné `0..=3`).
 - **Attract Mode** : enchaîne `20` écrans définis dans `AttractProcInfo` (`0x002d94d0`) — logos *Williams*, *Pinball 2000*, *Kahuna*, *Star Wars Episode I*, *High Scores*, *Jedi Table*, *Ramp Combo Champion*, *Crédits*, etc.
 - **Ball Saver (`BallStartBallSaver`)** : actif au lancement de chaque bille ; si la bille draine avant expiration du timer, relance automatique sans perte de bille (`auto_ball_serve()`).
 
-### 2. Skill Shot (`SkillShot`, `0x17c634`)
+## 2. Skill Shot (`SkillShot`, `0x17c634`)
 - Armé au début de la séquence de lancement (`SkillShot::hook_ball_serve_start`) si aucune scène/multiball ne bloque.
 - Désarmé dès que le plateau devient valide (`SkillShot::hook_valid_playfield_start` -> `SkillShot::stop()`).
 - **Validation** : passage par la *Sneaky Lane* (`SkillShot::hook_sneaky_lane` -> `SkillShot::award()`).
 - **Score** : progressif selon le nombre de Skill Shots réussis dans la partie, **plafonné à `3 000 000` pts** (`0x2dc6c0`), et incrémente `aud_skill_shot`.
 
-### 3. Bouclier et qualification des Scènes (`Shield`, `Scenes`, `0x177bf0..0x1787c8`)
+## 3. Bouclier et qualification des Scènes (`Shield`, `Scenes`, `0x177bf0..0x1787c8`)
 - **Disponibilité (`Scenes::are_available`)** : une scène ne peut être lancée que si :
   1. Aucun Multiball ou Rematch n'est actif (`!is_any_multiball_or_rematch_active()`),
   2. La séquence Jedi finale n'est pas déjà complétée (`!is_jedi_complete()`),
@@ -33,7 +31,7 @@ Ce document rassemble l'ensemble des règles de gameplay, machines à états, co
     - `min = 2` : `QueenFashion`
   - Lorsque toutes les `14` scènes ont été jouées, `Scenes::reset_scene_status()` réinitialise le masque.
 
-### 4. Règles et scores de chaque scène (`SWE1 v1.66`)
+## 4. Règles et scores de chaque scène
 
 | Scène | Mécanique principale extraite | Scores exacts extraits |
 |---|---|---|
@@ -53,7 +51,7 @@ Ce document rassemble l'ensemble des règles de gameplay, machines à états, co
 | **Mystery (`QuestionMark`)** | Récompense mystère immédiate | Attribuée via `QuestionMarkScene::start()` |
 | **Sub Escape** | Poursuite sous-marine : bouclier, rampes, standups bouclier, boucle gauche | Jauge de distance (`sub_set_distance`) : victoire ou dévoré |
 
-### 5. Lasers, Drop Targets, Jet Bumpers et Rampes
+## 5. Lasers, Drop Targets, Jet Bumpers et Rampes
 - **Lasers (`Lasers::fire_left` / `fire_right`, `0x146354` / `0x14648c`)** :
   - Utilisables dès qu'aucune intro de scène n'est active et que `pd_laser_count > 0`, avec cooldown de `60` ticks (`1,0 s`).
   - Décrémente le compteur de lasers, marque **`1 000` pts**, et simule un coup sur la Drop Target correspondante (`left_drop_target` / `right_drop_target`). Si la cible était déjà abaissée, propage le tir laser à la scène active.
@@ -65,7 +63,7 @@ Ce document rassemble l'ensemble des règles de gameplay, machines à états, co
 - **Rampes & Combos (`Ramps`, `RampBlocker`)** :
   - Les rampes gauche/droite déclenchent `leff_ramp_made_left` / `leff_ramp_made_right` et enchaînent les `next_combo_shot()` tant que le `RampBlocker` est en dessous de `adj_ramp_blocker_max`. Le meilleur combo est sauvegardé dans `nv_ramp_champ_data`.
 
-### 6. Lettres J-E-D-I, Jedi Multiball & Main Multiball
+## 6. Lettres J-E-D-I, Jedi Multiball & Main Multiball
 - **Lettres J-E-D-I (`JediLetters::add_letter`, `0x13bc64`)** :
   - Collecte séquentielle des 4 lettres (`0..=3`).
   - À la 4e lettre : **`2 000 000` pts** (`0x1e8480`), `aud_jedi_letters_complete`, et déclenchement du hook `0x2d` qualifiant **Jedi Multiball**. Les lettres supplémentaires après complétion incrémentent le compteur d'overflow.
@@ -80,52 +78,8 @@ Ce document rassemble l'ensemble des règles de gameplay, machines à états, co
   - Chaque Jackpot allumé (`check_jackpot`, `0x1559dc`) : **`1 000 000` pts** (`0xf4240`).
   - Lorsque tous les Jackpots sont collectés `4` fois de suite (`0x70 > 2`), attribution du **Super Jackpot** : **`5 000 000` pts** (`0x4c4b40`).
 
-### 7. Extra Ball et Bonus de fin de bille
+## 7. Extra Ball et Bonus de fin de bille
 - **Extra Ball (`ExtraBall::award`, `0x118208`)** : décrémente le crédit d'Extra Ball allumé (temporaire ou joueur) et appelle `award_extra_ball()`, puis affiche `DeffExtraBallCollected`.
 - **Bonus (`Bonus`, `DeffBonus::Run`, `0x10b554`)** :
   - `Total Bonus = build_bonus (0..=10) × build_bonus_x (1..=5) × 100 000` (plafonné à **`5 000 000` pts**).
   - Si `build_bonus == 10` et `build_bonus_x == 5`, joue la musique spéciale Bonus Maxed.
-
----
-
-## Partie B — *Revenge From Mars* (`RFM 0195 / v1.09`)
-
-### 1. Skill Shot & Super Skill Shot (`SkillShots`, `0x1a32a8..0x1a3eec`)
-- **Skill Shot (`calc_skill_shot_value`, `0x1a3658`)** :
-  - Formule exacte : `500 000 + (n - 1) × 100 000`, plafonné à **`1 500 000` pts** (`0x16e360`).
-- **Super Skill Shot (`calc_super_skill_shot_value`, `0x1a3968`)** :
-  - Activé via les boutons de flipper pendant le lancement (`allow_super_skill_shot`).
-  - Formule exacte : `1 000 000 + (n - 1) × 200 000`, plafonné à **`3 000 000` pts** (`0x2dc6c0`).
-
-### 2. Vagues de soucoupes et modes principaux (`RFM 0195`)
-- **9 Vagues principales / modes** : `MarsKneadsWomen` (`Abduction`), `WeaponWave` / `SecretWeapon`, `TowerStruggle`, `Paratrooper`, `Barnyard`, `DriveIn`, `MartianBowling`, `MartianTank`, `MartianHappyHour` (+ `BonusWave`, `FuelWave`, `SaucersWave`, `Autopsy`, `Invaders`, `QuMarkManager`).
-- **Martian Attack (`MartianAttack`, `0x112198..0x113c10`)** :
-  - Cibles martiennes (`MartianTargets`) + bombes (`MartianBombs`).
-  - Valeur de chaque Martien (`setup_martian_value`, `0x1129a0`) : `1 250 000 + (n - 1) × 250 000`, plafonnée à **`2 500 000` pts** (`0x2625a0`).
-
-### 3. Multiballs (`CaptureMultiball`, `HypnoBeamMultiball`, `MartianMultiball`)
-- **Capture Multiball (`CaptureMultiball`)** :
-  - `light_lock` : **`25 000` pts**.
-  - `award_lock` : **`50 000` pts**.
-  - `start` : **`100 000` pts**.
-- **Hypno Beam Multiball (`HypnoBeamMultiball::award_beam_hit`, `0x19edd0`)** :
-  - Chaque tir sur le rayon avant le coup final : **`250 000` pts** (`0x3d090`).
-  - Coup final (`beam_strength == 1`) :
-    - Si `jackpots == 0` : attribue une **Extra Ball** (`ExtraBall::award_eb`) + `aud_hypno_mb_eb`.
-    - Score Jackpot : `10 000 000 + jackpots × 5 000 000`, plafonné à **`50 000 000` pts** (`0x2faf080`).
-- **Martian Multiball (`MartianMultiball`)** :
-  - Cibles martiennes animées (`VbMartian`, `VrMartian`) avec scores dédiés sur `DeffMartianMultiballBacky`.
-
-### 4. Finale *Attack Mars!* et *Victory Laps* (`AttackMars`, `0x191354..0x191d24`)
-- **Qualification (`AttackMars::ok_for_qualify`, `0x191458`)** : requiert les **3 drapeaux** simultanément à `true` :
-  1. `flag_all_modes` (tous les modes/vagues complétés),
-  2. `flag_mothership` (Vaisseau-mère),
-  3. `flag_all_saucer_lights` (toutes les lumières soucoupe).
-- Une fois qualifié et lancé (`AttackMars::start`), le joueur affronte la finale puis enchaîne sur **Victory Laps** (`VictoryLaps::start`).
-
-### 5. Bonus de fin de bille (`Bonus`, `0x180764..0x2e2242`)
-- Suit 4 variables persistées par joueur (`PlayerData`) :
-  - `multiplier` (`Bonus::add_to_multiplier`),
-  - `multiplier_held_flag` (conserve le multiplicateur à la bille suivante),
-  - `switch_value` (`Bonus::add_to_switch_value`),
-  - `switch_value_held_flag` (conserve la valeur de base à la bille suivante).
