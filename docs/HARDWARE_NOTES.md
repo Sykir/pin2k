@@ -78,3 +78,29 @@ The Pinball 2000 PC communicates with the cabinet Power Driver Board over an IEE
 ### SWE1 Active-Low Opto-Interrupters (`D_NORM_CLOSED = 0x0800`)
 
 In SWE1's `SwitchTable` (`0x002df6b4`), 9 playfield switches are infrared opto-interrupters (`Sw 24..30` Trough Jam/Balls 1–4 & Ramp Enters in Col 3 = `0x7F`; `Sw 32, 39` Shield Popper & Shield Hit in Col 4 = `0x81`). Unobstructed IR beams read `1` on register `0x04` and drop to `0` when blocked by a ball; `PdbDriver` XORs with `SWE1_OPTO_NC_MASK` so physical `/dev/parport0` cabinets and `VirtualPdbPort` share identical electrical levels.
+
+---
+
+## 4. ROM Binary Table & Font Layouts (`swe1_0200.elf` / `rfm_0180.elf`)
+
+Verified directly from `game.rom` x86 disassembly (`Font::get_character_pointer` @ `0x0029862C`, `Font::plot_character_ptr` @ `0x002986C4`):
+
+- **`FontData` (24 bytes, referenced by `font_*_data_ptr`):**
+  - `+0x00`: `num_chars: u32`
+  - `+0x04`: `ascent: u32`
+  - `+0x08`: `line_height: u32`
+  - `+0x0C`: `num_colors: u32`
+  - `+0x10`: `default_spacing: i32`
+  - `+0x14`: `chars_ptr: u32` → array of `num_chars` × `Character`
+- **`Character` (28 bytes):**
+  - `+0x00`: `code: u8` (+ 3 bytes padding)
+  - `+0x04`: `x_offset: i32`
+  - `+0x08`: `y_offset: i32`
+  - `+0x0C`: `width: u32`
+  - `+0x10`: `height: u32`
+  - `+0x14`: `advance_extra: i32` (uses `FontData.default_spacing` when `0`)
+  - `+0x18`: `pixels_ptr: u32` (`width × height` indexed bytes; `0` = transparent, `1..=num_colors` = glyph shade)
+- **Hardware tables in `.data`:**
+  - `DriveTable` (48 × 24 bytes): `+0x00 flags`, `+0x04 default_pulse_ms`, `+0x08..+0x14` EN/DE/FR/ES name pointers.
+  - `LampTable` (128 × 36 bytes): `+0x00 flags`, `+0x14..+0x20` EN/DE/FR/ES name pointers.
+  - `SwitchTable` (96 × 48 bytes): `+0x04 sw_type`, `+0x08 handler_addr`, `+0x0C arg`, `+0x10 debounce_ms`, `+0x20..+0x2C` EN/DE/FR/ES name pointers.
