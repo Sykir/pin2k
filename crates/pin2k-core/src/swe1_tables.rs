@@ -160,27 +160,30 @@ pub mod lamp {
 /// Verified DCS-2 sound command IDs from `swe1_sound.bin` and SWE1 `.text` calls.
 pub mod sound {
     use super::SoundId;
-    pub const BOOT_BONG: SoundId = SoundId(0x003A);
-    pub const MAIN_THEME_LOOP: SoundId = SoundId(0x0001);
-    pub const BATTLE_MUSIC_LOOP: SoundId = SoundId(0x0002);
-    pub const PODRACE_MUSIC_LOOP: SoundId = SoundId(0x0006);
-    pub const DUEL_OF_THE_FATES_LOOP: SoundId = SoundId(0x0007);
-    pub const MULTIBALL_MUSIC_LOOP: SoundId = SoundId(0x0009);
-    pub const CANTINA_MUSIC_LOOP: SoundId = SoundId(0x000E);
-    pub const HANGAR_MUSIC_LOOP: SoundId = SoundId(0x0010);
-    pub const ATTRACT_MUSIC: SoundId = SoundId(0x012F);
-    pub const GAME_OVER_MUSIC: SoundId = SoundId(0x00E1);
+    pub const BOOT_BONG: SoundId = SoundId(0x003A);            // dcs-bong.ogg
+    pub const MAIN_THEME_LOOP: SoundId = SoundId(0x0001);      // acd_star_wars_main_theme
+    pub const MAINPLAY_LOOP: SoundId = SoundId(0x0002);        // acd_mainplay_tune
+    pub const PODRACE_MUSIC_LOOP: SoundId = SoundId(0x0009);   // acd_pod_race_music
+    pub const CANTINA_MUSIC_LOOP: SoundId = SoundId(0x000A);   // acd_jedi_council_music_chairs
+    pub const DUEL_OF_THE_FATES_LOOP: SoundId = SoundId(0x000E); // acd_darth_maul_battle_tune_1
+    pub const HANGAR_MUSIC_LOOP: SoundId = SoundId(0x0010);    // acd_generic_mode_tune_1
+    pub const JAR_JAR_MUSIC_LOOP: SoundId = SoundId(0x0013);   // acd_jar_jar_mode_music
+    pub const BATTLE_MUSIC_LOOP: SoundId = SoundId(0x0022);    // acd_droid_battle_tune
+    pub const MULTIBALL_MUSIC_LOOP: SoundId = SoundId(0x002D); // acd_multiball_tune
+    pub const WATTO_MUSIC_LOOP: SoundId = SoundId(0x0031);     // acd_watto_mode_tune
+    pub const ATTRACT_MUSIC: SoundId = SoundId(0x0001);        // acd_star_wars_main_theme
+    pub const GAME_OVER_MUSIC: SoundId = SoundId(0x000B);      // acd_lukes_theme
 
-    pub const COIN_CREDIT: SoundId = SoundId(0x0004);
-    pub const LASER_FIRE: SoundId = SoundId(0x000D);
-    pub const SABER_CLASH: SoundId = SoundId(0x0014);
-    pub const EXPLOSION: SoundId = SoundId(0x0015);
-    pub const SHIELD_HIT_SFX: SoundId = SoundId(0x0016);
-    pub const JET_BUMPER_SFX: SoundId = SoundId(0x0018);
+    pub const COIN_CREDIT: SoundId = SoundId(0x03B9);          // acd_start_button
+    pub const LASER_FIRE: SoundId = SoundId(0x02C1);           // acd_naboo_starfighter_laser
+    pub const SABER_CLASH: SoundId = SoundId(0x02C9);          // acd_lightsabre_hit_1
+    pub const EXPLOSION: SoundId = SoundId(0x0259);            // acd_explosion_1
+    pub const SHIELD_HIT_SFX: SoundId = SoundId(0x038B);       // acd_ricochet1
+    pub const JET_BUMPER_SFX: SoundId = SoundId(0x038A);       // acd_laserpulse
 
     #[allow(non_snake_case)]
     pub const fn LASER_SFX_OR_CLICK() -> SoundId {
-        SoundId(0x000D)
+        SoundId(0x0365) // acd_lightsabre_orb_rotate
     }
 }
 

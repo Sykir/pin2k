@@ -166,7 +166,9 @@ impl Swe1Scene {
         match self {
             Swe1Scene::Podrace => sound::PODRACE_MUSIC_LOOP,
             Swe1Scene::HangarEscape | Swe1Scene::FederationFighter => sound::HANGAR_MUSIC_LOOP,
-            Swe1Scene::MosEspaCantina | Swe1Scene::JarJarJuggle => sound::CANTINA_MUSIC_LOOP,
+            Swe1Scene::MosEspaCantina => sound::CANTINA_MUSIC_LOOP,
+            Swe1Scene::JarJarJuggle => sound::JAR_JAR_MUSIC_LOOP,
+            Swe1Scene::WattosChance => sound::WATTO_MUSIC_LOOP,
             _ => sound::BATTLE_MUSIC_LOOP,
         }
     }
