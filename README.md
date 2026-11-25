@@ -15,14 +15,13 @@ Réécriture native **clean-room** en Rust 64-bit de la plateforme **Williams Pi
     - **Animations & vidéos** : décode **toutes** les frames par défaut (codecs `0, 1, 20, 21, 22, 23, 30, 42, 43, 44, 45` avec transparence RGB555 `0x7C1F`) → `gfx/*.png` + `gfx/gfx_manifest.json`.
     - **Polices bitmap (`FontData` / `Character`)** : extrait toutes les polices `font_*_data_ptr` en atlas PNG RGBA8888 + métriques par glyphe → `fonts/*.png` + `fonts/fonts_manifest.json`.
     - **Audio DCS-2 (`pb2kslib`)** : déchiffrement XOR `0x3A` et extraction des pistes Vorbis → `audio/*.ogg` + `audio/sound_manifest.json`.
-- **Extraction du Gamecode en Scripts (`pin2k-rom-tool extract-gamecode`)** :
-  - Lit `SwitchTable` (96 switchs), `DriveTable` (48 bobines/flashers/néon) et `LampTable` (128 lampes) directement depuis `.data` avec noms multi-langues et masques opto.
-  - Désassembleur statique x86-32 (`lift_x86_calls`) analysant les handlers `swd_*` pour extraire les appels `score`, `generic_score`, `AudioRequest`, `traverse_and_call` et leurs arguments.
-  - Génère un script portable structuré **`game_script.json`** (tables matérielles, séquence attract, variables, modes/scènes, règles déclenchées par événements).
-- **Moteur de Jeu & Runtime Multiplateforme Windows / Linux (`pin2k-core` + `pin2k-desktop`)** :
-  - **`ScriptRuntime`** : exécute `game_script.json` (auto-détecté dans `<assets-dir>/scripts/game_script.json` ou via `--game-script`) par-dessus le moteur temps réel 60 Hz.
-  - Règles complètes *Star Wars Episode I* (`#50069`) et *Revenge From Mars* (`#50070`), support Mods/Homebrew (`mod.json`), bus d'événements JSONL (`--events-log`, `/api/events`), et Menu Opérateur complet (`Diagnostics`, `Audits`, `Adjustments`, `Utilities`).
-  - Compositeur logiciel `640×480`, audio pur-Rust (`lewton` → `winmm.dll` sous Windows / `aplay` sous Linux), UI Web + WebAudio (`--web-port`).
+- **Extraction du Gamecode & des Layouts UI (`pin2k-rom-tool`)** :
+  - `extract-gamecode` : lit `SwitchTable` (96 switchs), `DriveTable` (48 bobines/flashers/néon) et `LampTable` (128 lampes) depuis `.data`, désassemble les handlers x86-32 (`lift_x86_calls`) et génère **`game_script.json`**.
+  - `extract-layout` : parse l'ELF32 x86 (`game.rom` + symboles) en Rust pur (zéro `unsafe`) et extrait **`rom_layout_db.json`** (`14 841` symboles, `138` classes `Deff*`, `9` personnages joueurs, `14` scènes, `20` écrans Attract, `702` `ACD`, `383` `ARD` : positions, priorités Z, polices et couleurs RGB555).
+- **Moteur de Jeu & Rendu Fidèle au Matériel (`pin2k-core` + `pin2k-desktop`)** :
+  - Compositeur logiciel **`640×240` → `640×480`** trié par priorité Z (`BaseViewManager`), avec miroir `flip_x`, mise à l'échelle, teinte monochrome RGB555 et ombres sur les **19 polices bitmap ROM**.
+  - Écrans authentiques en Rust pur pour *Star Wars Episode I* (`#50069`) : barre joueurs & sabres laser (`DeffScoreDisplay`), compteur de lasers Naboo (`DeffLaserStatusBackground`), spinners virtuels déclenchés uniquement sur rampe avec son de tourniquet (`DeffVSpinner`), **20 écrans Attract Mode** (logo Star Wars + rayons lumineux colorés `DeffAttractModeKahunaLogo`), **14 scènes complètes** (intros + décors actifs), Multiballs, `DeffBonus`, `DeffMatch`, `DeffGameOver`, `DeffHSTDinitials`, `DeffTilt`, et tous les écrans **Diagnostics / Admin** (`align`, `colorbar`, `grid`, `rgb`, `fuse`, `switch`, `coil`, `lamp`).
+  - Règles *Revenge From Mars* (`#50070`), `ScriptRuntime`, Mods/Homebrew (`mod.json`), bus d'événements JSONL (`--events-log`, `/api/events`), audio pur-Rust (`lewton` → `winmm.dll` / `aplay`), et **Console Web Debug à 5 onglets** (`--web-port`).
 - **Communication Matérielle Power Driver Board (`pin2k-hal`)** :
   - Protocole filaire exact PDB sur port parallèle Linux (`/dev/parportN` `ppdev`, `/dev/port` `0x378`), pont Série Windows/Linux (`COMx`, `/dev/ttyUSB0`), et émulateur filaire `VirtualPdbPort` + `--lpt-trace`.
 
@@ -76,6 +75,11 @@ cargo build --release --workspace --target x86_64-pc-windows-gnu
   --update /chemin/vers/updates/pin2000_50069_0200_02262016_B_10000000 \
   --prism-flat ./work/swe1_prism_flat.bin \
   --output-dir ./work/swe1_assets/scripts
+
+# D. Extraire tous les layouts UI, coordonnées, polices et priorités Z depuis l'ELF
+./target/release/pin2k-rom-tool extract-layout \
+  --elf ./work/swe1_0200.elf \
+  --output-dir ./work/swe1_assets/scripts
 ```
 
 ### 3. Lancer le Jeu (`pin2k-desktop`)
@@ -107,21 +111,31 @@ cargo build --release --workspace --target x86_64-pc-windows-gnu
   --web-port 8080 --frames 0
 ```
 
-### 4. Scénarios de Démonstration & Captures Automatisées
+### 4. Scénarios de Démonstration, Mode Debug & Captures Automatisées
 
 ```bash
 ./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --script demo --frames 280 --screenshot-out ./work/demo.png
 ./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --script podrace --frames 285 --frames-out-dir ./work/podrace_frames
 ./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --script admin --frames 48 --screenshot-out ./work/admin.png
+
+# Lancement direct d'écrans / scènes / diagnostics via `--debug-mode`
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode attract:0 --frames 90 --screenshot-out ./work/kahuna.png
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode spinner_left --frames 25 --screenshot-out ./work/spinner.png
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode scene:12 --frames 250 --screenshot-out ./work/r2d2.png
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode bonus --frames 20 --screenshot-out ./work/bonus.png
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode diag:colorbar --frames 10 --screenshot-out ./work/colorbar.png
 ```
 
 ---
 
 ## Documentation Complète
 
+- **[Référence des Écrans, Layouts & Console Debug (`docs/SCREEN_LAYOUT_REFERENCE.md`)](docs/SCREEN_LAYOUT_REFERENCE.md)**
 - **[Guide d'Architecture, Compilation & CLI (`docs/ARCHITECTURE_GUIDE.md`)](docs/ARCHITECTURE_GUIDE.md)**
 - **[Référence du Format `game_script.json` & Extraction Gamecode (`docs/GAME_SCRIPT_REFERENCE.md`)](docs/GAME_SCRIPT_REFERENCE.md)**
 - **[Tableau Croisé Complet des Assets & Utilisation (`docs/ASSETS_MATRIX.md`)](docs/ASSETS_MATRIX.md)**
+- **[Inventaire d'Extraction ROM SWE1 (`docs/SWE1_EXTRACTION_INVENTORY.md`)](docs/SWE1_EXTRACTION_INVENTORY.md)** & **[Règles SWE1 (`docs/SWE1_GAME_RULES.md`)](docs/SWE1_GAME_RULES.md)**
+- **[Inventaire d'Extraction ROM RFM (`docs/RFM_EXTRACTION_INVENTORY.md`)](docs/RFM_EXTRACTION_INVENTORY.md)** & **[Règles RFM (`docs/RFM_GAME_RULES.md`)](docs/RFM_GAME_RULES.md)**
 - **[Étude Technique : Upscaling & Rendu HD (`docs/HD_UPSCALING_GUIDE.md`)](docs/HD_UPSCALING_GUIDE.md)**
 - **[Roadmap & TODO avec pourcentages (`docs/TODO.md`)](docs/TODO.md)**
 - **[Référence Matérielle, Formats ROM & Protocole PDB (`docs/HARDWARE_NOTES.md`)](docs/HARDWARE_NOTES.md)**

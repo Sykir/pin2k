@@ -104,3 +104,15 @@ Verified directly from `game.rom` x86 disassembly (`Font::get_character_pointer`
   - `DriveTable` (48 × 24 bytes): `+0x00 flags`, `+0x04 default_pulse_ms`, `+0x08..+0x14` EN/DE/FR/ES name pointers.
   - `LampTable` (128 × 36 bytes): `+0x00 flags`, `+0x14..+0x20` EN/DE/FR/ES name pointers.
   - `SwitchTable` (96 × 48 bytes): `+0x04 sw_type`, `+0x08 handler_addr`, `+0x0C arg`, `+0x10 debounce_ms`, `+0x20..+0x2C` EN/DE/FR/ES name pointers.
+
+---
+
+## 5. XINA `BaseViewManager` & Verified SWE1 UI Tables (`swe1_0200.elf`)
+
+- **Z-Sorted `BaseViewManager` Display Pipeline:** All rendered objects (animations, `Font::plot_text_*`, filled rectangles) submit a Z-priority (`0..=255` clamped in HUD/scenes; background layers at `z = 1..8`, HUD sabers at `z = 9`, player scores at `z = 10`, Laser reticle at `z = 20..21`, Spinners at `z = 22..23`, scene intros at `z = 200..203`, Tilt overlays at `z = 239..240`, Attract pricing bar at `z = 250`).
+- **`Table<score_coord>` (`0x00173f66..0x001740dd`, `DeffScoreDisplay`):**
+  - P1 `(36, 7, Left)`, P2 `(525, 7, Right)`, P3 `(36, 26, Left)`, P4 `(525, 26, Right)`. Note `x=525` leaves `535..635` unobstructed for `DeffLaserStatusBackground`.
+  - Sabers centered at `x=280, y=7, z=9`: left blade `(16, 7)`, `anim_saber_handle` `(261, 7)`, right blade `(300, 7, flip_x=true)`.
+- **`DeffAttractModeKahunaLogo` (`0x002b517c` & `0x00100fc0`):** `anim_kahuna_logo_flare` `(23, 7, z=7, 12fps)` interpolated smoothly across the 9 RGB555 colors `[0x7C06, 0x0320, 0x001F, 0x0320, 0x001F, 0x7C06, 0x0320, 0x7C06, 0x001F]` behind `anim_kahuna_logo_spinning` `(187, 80, z=8)`.
+- **`DeffVSpinner` (`0x0017eb30..0x0017f9b8`):** Left `(43, 174)`, Right `(421, 174)`, `z=22`, turnstile `ACD` cues `SPINNER_TICKS = [0x03C3, 0x03C9, 0x03CA, 0x03CB]`.
+- **`PdbDriver` Initial Sync Requirement:** `PdbDriver::read_logical_switches()` returns cached matrix columns initialized to `0` until `hw.sync()` runs its first parallel scan; `Pin2kMachine::with_game` therefore invokes `hw.sync(0)` before seeding `SwitchDebouncer` so frame 2 never emits spurious closure transitions for `TROUGH_BALL_1..4` or `COIN_DOOR`.

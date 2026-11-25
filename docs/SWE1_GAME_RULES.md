@@ -1,12 +1,14 @@
-# *Star Wars Episode I* (`SWE1 v1.66`) — Règles de jeu extraites
+# *Star Wars Episode I* (`SWE1 v1.66 / v2.00`) — Règles de jeu extraites
 
-L'intégralité des règles, machines à états, conditions de qualification et formules de score ci-dessous provient de la rétro-ingénierie directe de `swe1_0166.elf` (`pin2000_50069_0166_04032022_B_10000000`, `15 019` symboles).
+L'intégralité des règles, machines à états, conditions de qualification, formules de score et interfaces HUD ci-dessous provient de la rétro-ingénierie directe de `swe1_0166.elf` (`15 019` symboles) et `swe1_0200.elf` (`14 841` symboles).
 
 ---
 
-## 1. Cycle de partie et démarrage (`Game`, `BallStartBallSaver`)
-- **Joueurs** : `1` à `4` joueurs par partie (`get_player_up()`, borné `0..=3`).
-- **Attract Mode** : enchaîne `20` écrans définis dans `AttractProcInfo` (`0x002d94d0`) — logos *Williams*, *Pinball 2000*, *Kahuna*, *Star Wars Episode I*, *High Scores*, *Jedi Table*, *Ramp Combo Champion*, *Crédits*, etc.
+## 1. Cycle de partie, HUD & Spinners (`Game`, `DeffScoreDisplay`, `DeffLaserStatusBackground`, `DeffVSpinner`)
+- **Joueurs & personnages uniques (`DeffScoreDisplay`, `0x1725d8`)** : `1` à `4` joueurs par partie (`get_player_up()`, borné `0..=3`), chacun recevant un nom Star Wars unique issu des `9` entrées de `player_name_table_data` (`Qui-Gon`, `Jar Jar`, `Anakin`, `Amidala`, `Obi-Wan`, `R2-D2`, `Yoda`, `Watto`, `Darth Maul`), affiché avec les sabres laser gauche/droite en haut de l'écran.
+- **Indicateur de Lasers (`DeffLaserStatusBackground`, `0x1445f0`)** : affiché en haut à droite `(535, 10)` avec le Naboo Fighter rotatif (`LASER`/`LASERS`, ou `TORPEDOS` pendant *Theed Hangar Escape*), grisé monochrome lorsqu'il ne reste plus de tir.
+- **Spinners virtuels sur rampe (`VirtualSpinners` / `DeffVSpinner`, `0x17ead0`)** : totalement absents au repos ; activés **uniquement** lors d'un passage rampe (`LEFT_RAMP_ENTER`, `RIGHT_RAMP_ENTER`, `RAMP_MADE_LEFT`, `RAMP_MADE_RIGHT`) aux positions `(43, 174)` / `(421, 174)`, avec décélération progressive (~1,6 s), popup `+10000` / `+25000` et son cyclique de tourniquet DCS (`0x03C3`, `0x03C9`, `0x03CA`, `0x03CB`).
+- **Attract Mode** : enchaîne `20` écrans définis dans `AttractProcInfo` (`0x002d94d0`) — logos *Williams*, *Pinball 2000*, *Kahuna / Star Wars* + rayons lumineux colorés (9 couleurs RGB555), *SlideShow*, *High Scores*, *Jedi Table*, *Ramp Combo Champion*, *Crédits*, etc.
 - **Ball Saver (`BallStartBallSaver`)** : actif au lancement de chaque bille ; si la bille draine avant expiration du timer, relance automatique sans perte de bille (`auto_ball_serve()`).
 
 ## 2. Skill Shot (`SkillShot`, `0x17c634`)

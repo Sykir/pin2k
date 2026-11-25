@@ -107,3 +107,38 @@ Ce document décrit le format de script **`game_script.json`** (schéma `v1`) g�
 | `award_extra_ball` | — | Accorde une Extra Ball au joueur actif |
 | `advance_scene` | — | Avance ou démarre la scène Holoprojecteur suivante |
 | `collect_bonus` / `eject_ball` | — | Encaisse le bonus / demande l'éjection d'une bille |
+
+---
+
+## 4. Base de Layouts UI Extraite : `rom_layout_db.json` (`extract-layout`)
+
+En complément de `game_script.json` (logique switch/score/modes), la sous-commande **`pin2k-rom-tool extract-layout --elf <PATH> --output-dir <DIR>`** extrait directement depuis un ELF32 i386 (`swe1_0200.elf` / `rfm_0195.elf`) le fichier structuré **`rom_layout_db.json`** :
+
+```json
+{
+  "schema_version": 1,
+  "elf_symbols_count": 14841,
+  "deff_count": 138,
+  "player_names": ["Qui-Gon", "Jar Jar", "Anakin", "..."],
+  "score_coords": [ ... ],
+  "saber_table": [ ... ],
+  "kahuna_flare_colors_rgb555": [31750, 800, 31, "..."],
+  "scenes": [ ... ],
+  "attract_sequence": [ ... ],
+  "acd_commands": [ ... ],
+  "ard_descriptors": [ ... ],
+  "deffs": [
+    {
+      "class_name": "DeffScoreDisplay",
+      "methods": [ ... ],
+      "all_anims": [ ... ],
+      "all_fonts": [ ... ],
+      "all_z_priorities": [9, 10],
+      "all_colors_rgb555": [32767, 29414],
+      "all_audio_requests": [ ... ]
+    }
+  ]
+}
+```
+
+Ces métadonnées ont permis l'implémentation directe en Rust pur des écrans dans `pin2k-core` (voir [SCREEN_LAYOUT_REFERENCE.md](SCREEN_LAYOUT_REFERENCE.md)) et servent de socle pour la future unification 100 % data-driven.

@@ -39,3 +39,10 @@ Ce document recense tout ce qui est extrait de la ROM **Revenge From Mars (`#500
 | **Victory Laps** | `VictoryLaps` | Tours de victoire après *Attack Mars!* |
 | **Skill Shots, Bonus & Ball Saver** | `SkillShots`, `Bonus`, `DeffBonus`, `BallSaver`, `SceneBallSaver` | Skill Shot, Super Skill Shot, Multiplicateur, Bonus Held |
 | **Attract Mode & Système** | `AttractMode`, `RfmGame`, `Game`, `GameHooks` | Attract Mode, 4 joueurs, Tilt, Slam Tilt, diagnostics |
+
+---
+
+## 3. Lancement Direct & Extraction Layout (`pin2k-rom-tool` / Debug Console)
+
+- **`pin2k-rom-tool extract-layout --elf rfm_0195.elf --output-dir <DIR>`** est compatible avec l'ELF32 de *Revenge From Mars* pour exporter ses classes `Deff*` et métadonnées d'écran vers `rom_layout_db.json`.
+- L'émulateur `pin2k-desktop` (via `--debug-mode` ou l'onglet *Modes & Écrans* de la Console Web `--web-port`) permet de basculer à chaud sur `game:rfm`, de lancer directement les 9 vagues (`rfm_wave:0`..`8`), `capture_multiball` et `martian_attack`, ainsi que les diagnostics matériels (`SwitchTest`, `CoilTest`, `LampTest`, mires vidéo).

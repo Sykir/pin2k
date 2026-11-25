@@ -6,9 +6,10 @@ Ce document analyse les options techniques, contraintes (transparence RGB555, m�
 
 ## 1. Contraintes du Pipeline Actuel
 
-- **Résolution native ROM** : la carte PRISM / MediaGX génère une image **`640×240` RGB555 (15 bits)** doublée verticalement en **`640×480`** (scan-doubler pour la vitre Pepper's Ghost du flipper).
+- **Résolution native ROM & Compositeur Z-trié** : la carte PRISM / MediaGX génère une image **`640×240` RGB555 (15 bits)** doublée verticalement en **`640×480`** (scan-doubler pour la vitre Pepper's Ghost du flipper). `SoftwareCompositor` implémente le tri Z complet (`BaseViewManager`) avec miroir `flip_x`, teinte monochrome RGB555 et rendu des **19 polices bitmap ROM** avec ombres.
 - **Films vs Sprites** :
-  - Les films d'intro et cinématiques (codec `30`, ex. `anim_podrace_intro_movie`, `anim_jedi_battle_intro_movie`) sont stockés en **`220×160` @ 15 fps** et étirés `2×` horizontalement (`440×160`) dans `SoftwareCompositor`.
+  - Les films d'intro (codec `30`, `220×160` @ 15 fps, ex. `anim_podrace_intro_movie`, `anim_battle_droid_intro_battle`) sont affichés derrière le cadre métallique `anim_jedi_scene_intro_frame` (`z=202`) qui masque proprement leurs bords.
+  - Les cinématiques plein écran `320×240` (ex. `anim_darth_maul_game_over`, `anim_match_movie`, `anim_extra_ball_show`, `anim_multiball_start_movie`) sont étirées **`scale_x = 2`** en `640×240`.
   - Les sprites et décors (codecs `0, 1, 20..23, 42..45`) utilisent la couleur clé **`0x7C1F` (magenta)** convertie en canal alpha RGBA (`0` ou `255`).
 - **Mémoire (`LoadedAnim`)** : actuellement `compositor.rs` décode à la demande toutes les frames d'une animation et les conserve en RAM (`decoded_frames: Vec<RgbaImage>`).
 
