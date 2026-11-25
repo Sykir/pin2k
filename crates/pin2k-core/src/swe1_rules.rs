@@ -105,6 +105,24 @@ impl Swe1Scene {
         }
     }
 
+    /// Extracted Obi-Wan hologram selection animation (`anim_obiwan_holo_*`) for this scene.
+    pub const fn holo_anim_hint(self) -> &'static str {
+        match self {
+            Swe1Scene::BattleDroid => "anim_obiwan_holo_battle_droid",
+            Swe1Scene::DestroyerDroid => "anim_obiwan_holo_destroyer",
+            Swe1Scene::FederationFighter => "anim_obiwan_holo_federation_fighter",
+            Swe1Scene::GunganBattle => "anim_obiwan_holo_gungan_sub",
+            Swe1Scene::HangarEscape => "anim_obiwan_holo_naboo_fighter",
+            Swe1Scene::HoverTank => "anim_obiwan_holo_hovertank",
+            Swe1Scene::Podrace => "anim_obiwan_holo_anakin_pod",
+            Swe1Scene::ProbeDroid => "anim_obiwan_holo_r2d2",
+            Swe1Scene::QueenFashion => "anim_obiwan_holo_queens_logo",
+            Swe1Scene::JarJarJuggle => "anim_obiwan_holo_jarjar",
+            Swe1Scene::WattosChance => "anim_obiwan_holo_watto",
+            Swe1Scene::MosEspaCantina => "anim_obiwan_holo_yoda",
+        }
+    }
+
     /// Extracted gameplay animation played AFTER the intro finishes and ball is ejected.
     pub const fn gameplay_anim_hint(self) -> &'static str {
         match self {
@@ -166,7 +184,9 @@ impl Swe1Scene {
         match self {
             Swe1Scene::Podrace => sound::PODRACE_MUSIC_LOOP,
             Swe1Scene::HangarEscape | Swe1Scene::FederationFighter => sound::HANGAR_MUSIC_LOOP,
-            Swe1Scene::MosEspaCantina | Swe1Scene::JarJarJuggle => sound::CANTINA_MUSIC_LOOP,
+            Swe1Scene::MosEspaCantina => sound::CANTINA_MUSIC_LOOP,
+            Swe1Scene::JarJarJuggle => sound::JAR_JAR_MUSIC_LOOP,
+            Swe1Scene::WattosChance => sound::WATTO_MUSIC_LOOP,
             _ => sound::BATTLE_MUSIC_LOOP,
         }
     }

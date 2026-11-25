@@ -13,12 +13,18 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 use image::{ImageBuffer, ImageFormat, Rgba, RgbaImage};
-use pin2k_core::swe1_tables::{lamp, SWE1_DRIVES};
-use pin2k_hal::{AssetId, LampState, VideoBackend};
-use pin2k_rom_tool::asset_extractor::GfxManifest;
+use crate::raster::{blit_rgba_clipped, draw_string, fill_rect};
+use pin2k_hal::{AssetId, VideoBackend};
+use pin2k_rom_tool::asset_extractor::{FontGlyphEntry, FontManifestEntry, FontsManifest, GfxManifest};
 
 pub const SCREEN_W: u32 = 640;
 pub const SCREEN_H: u32 = 480;
+
+pub struct LoadedFont {
+    pub meta: FontManifestEntry,
+    pub atlas: RgbaImage,
+    pub glyphs: HashMap<u8, FontGlyphEntry>,
+}
 
 pub struct LoadedAnim {
     pub name: String,
@@ -48,8 +54,9 @@ pub struct SoftwareCompositor {
     pub frames_presented: u64,
     anims: Vec<LoadedAnim>,
     anim_lookup: HashMap<String, usize>,
+    fonts: HashMap<String, LoadedFont>,
     active_anim_idx: Option<usize>,
-    anim_elapsed_ms: u64,
+    pub(crate) anim_elapsed_ms: u64,
     anim_loop: bool,
     podrace_scene_ticks: usize,
     queued_texts: Vec<(String, i32, i32, [u8; 4], u8)>,
@@ -71,6 +78,7 @@ impl SoftwareCompositor {
             frames_presented: 0,
             anims: Vec::new(),
             anim_lookup: HashMap::new(),
+            fonts: HashMap::new(),
             active_anim_idx: None,
             anim_elapsed_ms: 0,
             anim_loop: true,
@@ -114,6 +122,34 @@ impl SoftwareCompositor {
         if !self.anims.is_empty() {
             self.active_anim_idx = Some(0);
         }
+
+        // Load all 19 extracted Pinball 2000 bitmap fonts from `<assets_dir>/fonts/fonts_manifest.json`
+        let fonts_dir = assets_dir.join("fonts");
+        let fonts_manifest_path = fonts_dir.join("fonts_manifest.json");
+        if fonts_manifest_path.exists() {
+            if let Ok(fraw) = fs::read_to_string(&fonts_manifest_path) {
+                if let Ok(fm) = serde_json::from_str::<FontsManifest>(&fraw) {
+                    for fentry in fm.fonts {
+                        let atlas_path = fonts_dir.join(&fentry.atlas_file);
+                        if let Ok(img) = image::open(&atlas_path) {
+                            let mut glyphs = HashMap::new();
+                            for g in &fentry.glyphs {
+                                glyphs.insert(g.code, g.clone());
+                            }
+                            self.fonts.insert(
+                                fentry.name.clone(),
+                                LoadedFont {
+                                    meta: fentry,
+                                    atlas: img.to_rgba8(),
+                                    glyphs,
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(self.anims.len())
     }
 
@@ -220,123 +256,11 @@ impl SoftwareCompositor {
     }
 
     /// Draws the live SWE1 playfield lamp & solenoid telemetry panel onto the lower half (`y=248..476`).
-    pub fn draw_playfield_telemetry(
-        &mut self,
-        lamps: &[LampState; 128],
-        drive_mask: u64,
-        pdb_present: bool,
-        coin_door_closed: bool,
-        credits: u8,
-        ball: u8,
-        jedi_rank: &str,
-        lasers: u8,
-        elapsed_ms: u64,
-    ) {
-        // Playfield frame box (`x: 20..360, y: 252..470`)
-        draw_rect_outline(&mut self.framebuffer, 20, 252, 340, 218, [45, 95, 160, 255]);
-        draw_string(&mut self.framebuffer, "SWE1 PLAYFIELD LAMPS & COILS", 28, 258, [130, 200, 255, 255], 1);
-
-        // Plot real SWE1 lamps using normalized coords
-        let lamp_coords: &[(u8, u8, u8, [u8; 4])] = &[
-            (lamp::JEDI_J, 46, 36, [80, 255, 120, 255]),
-            (lamp::JEDI_E, 46, 41, [80, 255, 120, 255]),
-            (lamp::JEDI_D, 46, 46, [80, 255, 120, 255]),
-            (lamp::JEDI_I, 46, 51, [80, 255, 120, 255]),
-            (lamp::JEDI_YOUTH, 33, 62, [100, 220, 255, 255]),
-            (lamp::JEDI_KNIGHT, 40, 62, [100, 220, 255, 255]),
-            (lamp::JEDI_MASTER, 53, 63, [100, 220, 255, 255]),
-            (lamp::JEDI_SPIRIT, 58, 61, [255, 240, 90, 255]),
-            (lamp::SHOOT_AGAIN, 46, 90, [255, 120, 60, 255]),
-            (lamp::EXTRA_BALL, 78, 44, [255, 180, 50, 255]),
-            (lamp::FIRE_LASERS_LEFT, 38, 56, [255, 70, 70, 255]),
-            (lamp::FIRE_LASERS_RIGHT, 56, 56, [255, 70, 70, 255]),
-        ];
-
-        // Shield bank lamps
-        for (i, &lid) in lamp::SHIELD_LAMPS.iter().enumerate() {
-            let lx = 38 + ((i % 4) as i32) * 6;
-            let ly = 22 + ((i / 4) as i32) * 4;
-            let lit = is_lamp_visible(lamps[lid as usize], elapsed_ms);
-            let col = if lit { [0, 230, 255, 255] } else { [25, 40, 55, 255] };
-            let px = 25 + (lx * 320 / 100);
-            let py = 270 + (ly * 190 / 100);
-            fill_rect(&mut self.framebuffer, px, py, 5, 5, col);
-        }
-
-        for &(lid, lx, ly, active_col) in lamp_coords {
-            let lit = is_lamp_visible(lamps[lid as usize], elapsed_ms);
-            let col = if lit { active_col } else { [30, 35, 50, 255] };
-            let px = 25 + ((lx as i32) * 320 / 100);
-            let py = 270 + ((ly as i32) * 190 / 100);
-            fill_rect(&mut self.framebuffer, px, py, 6, 6, col);
-        }
-
-        // Plot all 33 wired SWE1 Solenoid / Flasher / Flipper / Neon Drives!
-        for d in &SWE1_DRIVES {
-            let active = ((drive_mask >> d.id) & 1) != 0;
-            let px = 25 + ((d.x as i32) * 320 / 100);
-            let py = 270 + ((d.y as i32) * 190 / 100);
-            let col = if active {
-                if d.id == 40 {
-                    [50, 255, 90, 255] // Lightsaber Neon green!
-                } else if d.is_flasher {
-                    [255, 250, 140, 255]
-                } else {
-                    [255, 65, 65, 255]
-                }
-            } else {
-                [45, 25, 30, 255]
-            };
-            let sz = if active { 7 } else { 4 };
-            fill_rect(&mut self.framebuffer, px, py, sz, sz, col);
-        }
-
-        // Right-side PDB Hardware & Rules Telemetry Panel (`x: 375..625, y: 252..470`)
-        draw_rect_outline(&mut self.framebuffer, 375, 252, 250, 218, [70, 120, 90, 255]);
-        draw_string(&mut self.framebuffer, "PINBALL 2000 PDB STATUS", 385, 260, [120, 255, 160, 255], 1);
-
-        let lines = [
-            format!("PDB LPT BUS : {}", if pdb_present { "ONLINE (0x87)" } else { "OPEN BUS" }),
-            format!("COIN DOOR   : {}", if coin_door_closed { "CLOSED (HV ON)" } else { "OPEN (HV CUT)" }),
-            format!("BALL / CRED : BALL {}  CRED {}", ball, credits),
-            format!("JEDI RANK   : {}", jedi_rank),
-            format!("LASER AMMO  : {}", lasers),
-            format!("DRIVE MASK  : 0x{:012X}", drive_mask),
-        ];
-        for (i, line) in lines.iter().enumerate() {
-            draw_string(
-                &mut self.framebuffer,
-                line,
-                385,
-                284 + (i as i32) * 18,
-                [215, 230, 240, 255],
-                1,
-            );
-        }
-
-        draw_string(&mut self.framebuffer, "CONTROLS: [C]OIN [S]TART", 385, 408, [255, 215, 90, 255], 1);
-        draw_string(&mut self.framebuffer, "[Z/M] FLIP  [X/.] LASERS", 385, 424, [255, 215, 90, 255], 1);
-        draw_string(&mut self.framebuffer, "[L/R] RAMPS [P] POPPER", 385, 440, [255, 215, 90, 255], 1);
-    }
-
-    /// Encodes the current 640×480 RGBA frame as a PNG byte vector (used by screenshots & live web view).
     pub fn encode_png(&self) -> anyhow::Result<Vec<u8>> {
         let mut out = Vec::new();
         self.framebuffer
             .write_to(&mut Cursor::new(&mut out), ImageFormat::Png)?;
         Ok(out)
-    }
-}
-
-fn is_lamp_visible(state: LampState, elapsed_ms: u64) -> bool {
-    match state {
-        LampState::Off => false,
-        LampState::On => true,
-        LampState::Blinking { period_ms } => {
-            let p = period_ms.max(60) as u64;
-            (elapsed_ms % p) < (p / 2)
-        }
-        LampState::Pwm(v) => v >= 64,
     }
 }
 
@@ -372,11 +296,7 @@ impl VideoBackend for SoftwareCompositor {
             .map(|a| a.name.clone())
             .unwrap_or_default();
 
-        if active_name == "anim_podrace_1" {
-            self.render_podrace_scene(false);
-        } else if active_name == "anim_podrace_closeup" {
-            self.render_podrace_scene(true);
-        } else {
+        if !self.render_specialized_scene(&active_name) {
             self.podrace_scene_ticks = 0;
             if let Some(idx) = self.active_anim_idx {
                 let elapsed = self.anim_elapsed_ms;
@@ -403,9 +323,13 @@ impl VideoBackend for SoftwareCompositor {
             }
         }
 
-        // Draw queued centered HUD texts (auto-scaling down if > 624px wide)
+        // Draw queued centered HUD texts using extracted Pinball 2000 bitmap fonts (with 8x8 fallback)
         let texts = std::mem::take(&mut self.queued_texts);
         for (txt, cx, y, color, mut scale) in texts {
+            let font_name = Self::pick_bitmap_font(scale, &txt);
+            if self.draw_bitmap_text(font_name, &txt, cx, y, color) {
+                continue;
+            }
             while scale > 1 && (txt.len() as i32) * 8 * (scale as i32) > 624 {
                 scale -= 1;
             }
@@ -442,7 +366,7 @@ impl VideoBackend for SoftwareCompositor {
 }
 
 impl SoftwareCompositor {
-    fn blit_named(&mut self, name: &str, frame_idx: usize, ox: i32, oy: i32, scale_x: u32) -> bool {
+    pub(crate) fn blit_named(&mut self, name: &str, frame_idx: usize, ox: i32, oy: i32, scale_x: u32) -> bool {
         let Some(&idx) = self.anim_lookup.get(name) else {
             return false;
         };
@@ -463,7 +387,7 @@ impl SoftwareCompositor {
     /// - Race (`t >= 60`): Sky + scrolling Beggar's Canyon horizon + rushing desert floor +
     ///   rival podracer / explosion + 100-frame Anakin's Podracer + Checkpoint & Speedometer HUD
     /// - Victory (`victory == true`): Sky + Horizon + Ground + `anim_podrace_closeup` camera flyby
-    fn render_podrace_scene(&mut self, victory: bool) {
+    pub(crate) fn render_podrace_scene(&mut self, victory: bool) {
         let t = self.podrace_scene_ticks;
         self.podrace_scene_ticks = self.podrace_scene_ticks.saturating_add(1);
 
@@ -521,127 +445,131 @@ impl SoftwareCompositor {
             1,
         );
     }
-}
 
-fn blit_rgba_clipped(
-    dst: &mut RgbaImage,
-    src: &RgbaImage,
-    ox: i32,
-    oy: i32,
-    scale_x: u32,
-    max_y: i32,
-) {
-    for sy in 0..src.height() {
-        let dy = oy + sy as i32;
-        if !(0..max_y).contains(&dy) {
-            continue;
+    /// Selects the authentic Pinball 2000 bitmap font name for a given scale and text length.
+    fn pick_bitmap_font(scale: u8, text: &str) -> &'static str {
+        let len = text.len();
+        if scale >= 2 {
+            if len <= 18 {
+                "font_starwars_19_data"
+            } else if len <= 26 {
+                "font_shadow_15_narrow_data"
+            } else {
+                "font_shadow_11_narrow_data"
+            }
+        } else if len <= 28 {
+            "font_shadow_9_data"
+        } else {
+            "font_system_7_data"
         }
-        for sx in 0..src.width() {
-            let p = src.get_pixel(sx, sy);
-            if p.0[3] == 0 {
+    }
+
+    /// All 19 extracted Pinball 2000 font identifiers available in `fonts_manifest.json`.
+    #[allow(dead_code)]
+    pub const ALL_EXTRACTED_FONTS: [&'static str; 19] = [
+        "font_basic_19_data",
+        "font_kahuna_shadow_9_data",
+        "font_shadow_7_data",
+        "font_shadow_7_narrow_data",
+        "font_shadow_9_data",
+        "font_shadow_9_narrow_data",
+        "font_shadow_11_data",
+        "font_shadow_11_narrow_data",
+        "font_shadow_15_data",
+        "font_shadow_15_narrow_data",
+        "font_shadow_22_data",
+        "font_starwars_19_data",
+        "font_system_7_data",
+        "font_system_9_data",
+        "font_system_10_data",
+        "font_system_11_data",
+        "font_system_15_data",
+        "font_system_20_data",
+        "font_system_fxd6x7_data",
+    ];
+
+    /// Renders `text` centered at `cx` using an extracted Pinball 2000 bitmap font atlas.
+    pub fn draw_bitmap_text(
+        &mut self,
+        font_name: &str,
+        text: &str,
+        cx: i32,
+        y: i32,
+        color: [u8; 4],
+    ) -> bool {
+        let Some(font) = self.fonts.get(font_name) else {
+            return false;
+        };
+        let spacing = font.meta.default_spacing.max(1);
+        let mut total_w = 0i32;
+        for ch in text.bytes() {
+            if let Some(g) = font.glyphs.get(&ch) {
+                let adv = if g.advance_extra != 0 { g.advance_extra } else { spacing };
+                total_w += g.width as i32 + adv;
+            } else {
+                total_w += 6 + spacing;
+            }
+        }
+        let mut cur_x = (cx - total_w / 2).max(4);
+        if total_w > 632 {
+            // Fall back to a narrower font if available
+            if font_name != "font_system_7_data" {
+                return self.draw_bitmap_text("font_system_7_data", text, cx, y, color);
+            }
+        }
+        let ascent = font.meta.ascent as i32;
+        for ch in text.bytes() {
+            let Some(g) = font.glyphs.get(&ch) else {
+                cur_x += 6 + spacing;
                 continue;
-            }
-            for dx_rep in 0..scale_x {
-                let dx = ox + (sx * scale_x + dx_rep) as i32;
-                if (0..SCREEN_W as i32).contains(&dx) {
-                    dst.put_pixel(dx as u32, dy as u32, *p);
+            };
+            let gx = cur_x + g.x_offset;
+            let gy = y + ascent + g.y_offset - g.height as i32;
+            for py in 0..g.height {
+                let dy = gy + py as i32;
+                if !(0..240).contains(&dy) {
+                    continue;
+                }
+                for px in 0..g.width {
+                    let dx = gx + px as i32;
+                    if !(0..SCREEN_W as i32).contains(&dx) {
+                        continue;
+                    }
+                    let src = font.atlas.get_pixel(g.atlas_x + px, g.atlas_y + py);
+                    if src[3] == 0 {
+                        continue;
+                    }
+                    let out = if src[0] > 180 {
+                        Rgba(color)
+                    } else {
+                        Rgba([
+                            ((src[0] as u16 * color[0] as u16) / 255) as u8,
+                            ((src[1] as u16 * color[1] as u16) / 255) as u8,
+                            ((src[2] as u16 * color[2] as u16) / 255) as u8,
+                            255,
+                        ])
+                    };
+                    self.native_240.put_pixel(dx as u32, dy as u32, out);
                 }
             }
+            let adv = if g.advance_extra != 0 { g.advance_extra } else { spacing };
+            cur_x += g.width as i32 + adv;
         }
+        true
+    }
+
+    /// Renders the authentic SWE1 InGame Holoprojector Spinners (`anim_spinner_1` + `anim_spinner_2`
+    /// with brackets and `anim_naboo_fighter_tiny_rotate` center ship).
+    pub(crate) fn render_ingame_spinners(&mut self) {
+        let f60 = ((self.anim_elapsed_ms * 60) / 1000) as usize;
+        // Left Spinner + bracket
+        let _ = self.blit_named("anim_spinner_bracket_left", 0, 38, 72, 1);
+        let _ = self.blit_named("anim_spinner_1", f60, 38, 72, 1);
+        // Right Spinner + bracket
+        let _ = self.blit_named("anim_spinner_bracket_right", 0, 452, 72, 1);
+        let _ = self.blit_named("anim_spinner_2", f60, 452, 72, 1);
+        // Center rotating Naboo Starfighter
+        let _ = self.blit_named("anim_naboo_fighter_tiny_rotate", f60, 270, 26, 1);
     }
 }
 
-fn fill_rect(img: &mut RgbaImage, x: i32, y: i32, w: i32, h: i32, color: [u8; 4]) {
-    let x0 = x.max(0) as u32;
-    let y0 = y.max(0) as u32;
-    let x1 = (x + w).min(img.width() as i32).max(0) as u32;
-    let y1 = (y + h).min(img.height() as i32).max(0) as u32;
-    for py in y0..y1 {
-        for px in x0..x1 {
-            img.put_pixel(px, py, Rgba(color));
-        }
-    }
-}
-
-fn draw_rect_outline(img: &mut RgbaImage, x: i32, y: i32, w: i32, h: i32, color: [u8; 4]) {
-    fill_rect(img, x, y, w, 1, color);
-    fill_rect(img, x, y + h - 1, w, 1, color);
-    fill_rect(img, x, y, 1, h, color);
-    fill_rect(img, x + w - 1, y, 1, h, color);
-}
-
-fn draw_string(img: &mut RgbaImage, s: &str, x: i32, y: i32, color: [u8; 4], scale: u8) {
-    let sc = scale.max(1) as i32;
-    for (i, ch) in s.chars().enumerate() {
-        let glyph = glyph_8x8(ch);
-        let gx = x + (i as i32) * 8 * sc;
-        for (row, &bits) in glyph.iter().enumerate() {
-            for col in 0..8i32 {
-                if ((bits >> (7 - col)) & 1) != 0 {
-                    fill_rect(img, gx + col * sc, y + (row as i32) * sc, sc, sc, color);
-                }
-            }
-        }
-    }
-}
-
-/// Compact built-in 8×8 uppercase arcade bitmap font (`A-Z`, `0-9`, punctuation).
-const fn glyph_8x8(ch: char) -> [u8; 8] {
-    match ch.to_ascii_uppercase() {
-        '0' => [0x3C, 0x66, 0x6E, 0x76, 0x66, 0x66, 0x3C, 0x00],
-        '1' => [0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x7E, 0x00],
-        '2' => [0x3C, 0x66, 0x06, 0x1C, 0x30, 0x66, 0x7E, 0x00],
-        '3' => [0x3C, 0x66, 0x06, 0x1C, 0x06, 0x66, 0x3C, 0x00],
-        '4' => [0x0C, 0x1C, 0x3C, 0x6C, 0x7E, 0x0C, 0x0C, 0x00],
-        '5' => [0x7E, 0x60, 0x7C, 0x06, 0x06, 0x66, 0x3C, 0x00],
-        '6' => [0x3C, 0x60, 0x7C, 0x66, 0x66, 0x66, 0x3C, 0x00],
-        '7' => [0x7E, 0x66, 0x0C, 0x18, 0x18, 0x18, 0x18, 0x00],
-        '8' => [0x3C, 0x66, 0x66, 0x3C, 0x66, 0x66, 0x3C, 0x00],
-        '9' => [0x3C, 0x66, 0x66, 0x3E, 0x06, 0x0C, 0x38, 0x00],
-        'A' => [0x18, 0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x00],
-        'B' => [0x7C, 0x66, 0x66, 0x7C, 0x66, 0x66, 0x7C, 0x00],
-        'C' => [0x3C, 0x66, 0x60, 0x60, 0x60, 0x66, 0x3C, 0x00],
-        'D' => [0x78, 0x6C, 0x66, 0x66, 0x66, 0x6C, 0x78, 0x00],
-        'E' => [0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x7E, 0x00],
-        'F' => [0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x60, 0x00],
-        'G' => [0x3C, 0x66, 0x60, 0x6E, 0x66, 0x66, 0x3E, 0x00],
-        'H' => [0x66, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00],
-        'I' => [0x3C, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3C, 0x00],
-        'J' => [0x1E, 0x0C, 0x0C, 0x0C, 0x6C, 0x6C, 0x38, 0x00],
-        'K' => [0x66, 0x6C, 0x78, 0x70, 0x78, 0x6C, 0x66, 0x00],
-        'L' => [0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x7E, 0x00],
-        'M' => [0x63, 0x77, 0x7F, 0x6B, 0x63, 0x63, 0x63, 0x00],
-        'N' => [0x66, 0x76, 0x7E, 0x7E, 0x6E, 0x66, 0x66, 0x00],
-        'O' => [0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00],
-        'P' => [0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60, 0x60, 0x00],
-        'Q' => [0x3C, 0x66, 0x66, 0x66, 0x6A, 0x6C, 0x36, 0x00],
-        'R' => [0x7C, 0x66, 0x66, 0x7C, 0x6C, 0x66, 0x66, 0x00],
-        'S' => [0x3C, 0x66, 0x60, 0x3C, 0x06, 0x66, 0x3C, 0x00],
-        'T' => [0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00],
-        'U' => [0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00],
-        'V' => [0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x18, 0x00],
-        'W' => [0x63, 0x63, 0x63, 0x6B, 0x7F, 0x77, 0x63, 0x00],
-        'X' => [0x66, 0x66, 0x3C, 0x18, 0x3C, 0x66, 0x66, 0x00],
-        'Y' => [0x66, 0x66, 0x66, 0x3C, 0x18, 0x18, 0x18, 0x00],
-        'Z' => [0x7E, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x7E, 0x00],
-        ':' => [0x00, 0x18, 0x18, 0x00, 0x18, 0x18, 0x00, 0x00],
-        '-' => [0x00, 0x00, 0x00, 0x7E, 0x00, 0x00, 0x00, 0x00],
-        '+' => [0x00, 0x18, 0x18, 0x7E, 0x18, 0x18, 0x00, 0x00],
-        '!' => [0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x18, 0x00],
-        '/' => [0x06, 0x0C, 0x18, 0x30, 0x60, 0x40, 0x00, 0x00],
-        '[' => [0x3C, 0x30, 0x30, 0x30, 0x30, 0x30, 0x3C, 0x00],
-        ']' => [0x3C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x3C, 0x00],
-        '(' => [0x18, 0x30, 0x60, 0x60, 0x60, 0x30, 0x18, 0x00],
-        ')' => [0x18, 0x0C, 0x06, 0x06, 0x06, 0x0C, 0x18, 0x00],
-        '%' => [0x62, 0x64, 0x08, 0x10, 0x26, 0x46, 0x00, 0x00],
-        ',' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x30],
-        '.' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00],
-        '#' => [0x24, 0x7E, 0x24, 0x24, 0x7E, 0x24, 0x00, 0x00],
-        '&' => [0x38, 0x6C, 0x38, 0x76, 0xDC, 0xCC, 0x76, 0x00],
-        '_' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7E, 0x00],
-        '=' => [0x00, 0x00, 0x7E, 0x00, 0x7E, 0x00, 0x00, 0x00],
-        '*' => [0x00, 0x66, 0x3C, 0xFF, 0x3C, 0x66, 0x00, 0x00],
-        '\'' => [0x18, 0x18, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00],
-        _ => [0x00; 8],
-    }
-}

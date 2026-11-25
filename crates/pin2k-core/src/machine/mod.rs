@@ -41,7 +41,7 @@ pub enum MachineState {
 const HSTD_ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct HstdEntrySession {
+pub struct HstdEntrySession {
     pub queue: Vec<(usize, u64, JediRank)>,
     pub initials: [char; 3],
     pub cursor: usize,
@@ -469,7 +469,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         // Eject 1 ball to shooter lane
         self.pending_eject_balls = 1;
         self.eject_cooldown_ms = 0;
-        self.active_anim_hint = "anim_battle_droid_intro_badge".to_string();
+        self.active_anim_hint = if self.game_title == GameTitle::Swe1 {
+            "anim_spinner_1".to_string()
+        } else {
+            String::new()
+        };
         self.emit_event(GameEvent::BallStarted {
             player: self.current_player + 1,
             ball: self.current_ball,

@@ -121,6 +121,8 @@ cargo build --release --workspace --target x86_64-pc-windows-gnu
 
 - **[Guide d'Architecture, Compilation & CLI (`docs/ARCHITECTURE_GUIDE.md`)](docs/ARCHITECTURE_GUIDE.md)**
 - **[Référence du Format `game_script.json` & Extraction Gamecode (`docs/GAME_SCRIPT_REFERENCE.md`)](docs/GAME_SCRIPT_REFERENCE.md)**
+- **[Tableau Croisé Complet des Assets & Utilisation (`docs/ASSETS_MATRIX.md`)](docs/ASSETS_MATRIX.md)**
+- **[Étude Technique : Upscaling & Rendu HD (`docs/HD_UPSCALING_GUIDE.md`)](docs/HD_UPSCALING_GUIDE.md)**
 - **[Référence Matérielle, Formats ROM & Protocole PDB (`docs/HARDWARE_NOTES.md`)](docs/HARDWARE_NOTES.md)**
 
 ---

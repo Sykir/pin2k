@@ -579,9 +579,9 @@ fn build_swe1_script_logic() -> (
             id: "hangar_multiball".into(),
             name: "Hangar Multiball".into(),
             duration_secs: None,
-            anim_hint: Some("anim_hangar_escape_intro".into()),
-            sound_id: Some(0x00E1),
-            music_id: Some(0x0002),
+            anim_hint: Some("anim_hangar_escape_intro_movie".into()),
+            sound_id: Some(0x0259),
+            music_id: Some(0x002D),
             on_enter: vec![
                 ScriptAction::ShowBanner { text: "HANGAR MULTIBALL!".into() },
                 ScriptAction::StartMultiball { balls: 3 },
@@ -592,9 +592,9 @@ fn build_swe1_script_logic() -> (
             id: "darth_maul_duel".into(),
             name: "Duel Darth Maul".into(),
             duration_secs: Some(45),
-            anim_hint: Some("anim_maul_duel".into()),
-            sound_id: Some(0x00F0),
-            music_id: Some(0x0003),
+            anim_hint: Some("anim_jedi_battle_intro_movie".into()),
+            sound_id: Some(0x02C8),
+            music_id: Some(0x000E),
             on_enter: vec![
                 ScriptAction::ShowBanner { text: "DUEL DARTH MAUL!".into() },
                 ScriptAction::SetLamp { lamp_id: 95, on: true },
@@ -611,7 +611,7 @@ fn build_swe1_script_logic() -> (
             actions: vec![
                 ScriptAction::SetVar { var: "skill_shot_active".into(), value: 1 },
                 ScriptAction::StartMode { mode: "skill_shot".into() },
-                ScriptAction::PlayMusic { sound_id: 0x0001 },
+                ScriptAction::PlayMusic { sound_id: 0x0002 },
             ],
         },
         RuleScript {
@@ -642,7 +642,7 @@ fn build_swe1_script_logic() -> (
                 ScriptAction::AddScore { points: 25_000 },
                 ScriptAction::IncVar { var: "jet_hits".into(), delta: 1 },
                 ScriptAction::PulseDrive { drive_id: 11, ms: 32 },
-                ScriptAction::PlaySound { sound_id: 0x0030 },
+                ScriptAction::PlaySound { sound_id: 0x038A },
             ],
         },
         RuleScript {
@@ -653,7 +653,7 @@ fn build_swe1_script_logic() -> (
                 ScriptAction::AddScore { points: 25_000 },
                 ScriptAction::IncVar { var: "jet_hits".into(), delta: 1 },
                 ScriptAction::PulseDrive { drive_id: 12, ms: 32 },
-                ScriptAction::PlaySound { sound_id: 0x0031 },
+                ScriptAction::PlaySound { sound_id: 0x038A },
             ],
         },
         RuleScript {
@@ -664,7 +664,7 @@ fn build_swe1_script_logic() -> (
                 ScriptAction::AddScore { points: 25_000 },
                 ScriptAction::IncVar { var: "jet_hits".into(), delta: 1 },
                 ScriptAction::PulseDrive { drive_id: 13, ms: 32 },
-                ScriptAction::PlaySound { sound_id: 0x0032 },
+                ScriptAction::PlaySound { sound_id: 0x038A },
             ],
         },
         RuleScript {
@@ -674,7 +674,7 @@ fn build_swe1_script_logic() -> (
             actions: vec![
                 ScriptAction::AddScore { points: 250_000 },
                 ScriptAction::IncVar { var: "shield_hits".into(), delta: 1 },
-                ScriptAction::PlaySound { sound_id: 0x0050 },
+                ScriptAction::PlaySound { sound_id: 0x038B },
                 ScriptAction::ShowBanner { text: "SHIELD HIT!".into() },
             ],
         },

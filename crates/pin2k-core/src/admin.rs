@@ -123,11 +123,11 @@ impl Default for AdminScreen {
 pub const ADMIN_SOUND_PRESETS: &[(u16, &str)] = &[
     (0x003A, "BOOT BONG"),
     (0x0001, "MAIN THEME"),
-    (0x0002, "BATTLE MUSIC"),
-    (0x0006, "PODRACE LOOP"),
-    (0x0007, "DUEL OF THE FATES"),
-    (0x0009, "HANGAR MULTIBALL"),
-    (0x000D, "LASER FIRE"),
-    (0x0014, "SABER CLASH"),
-    (0x0015, "EXPLOSION"),
+    (0x0022, "BATTLE MUSIC"),
+    (0x0009, "PODRACE LOOP"),
+    (0x000E, "DUEL OF THE FATES"),
+    (0x002D, "HANGAR MULTIBALL"),
+    (0x02C1, "LASER FIRE"),
+    (0x02C9, "SABER CLASH"),
+    (0x0259, "EXPLOSION"),
 ];
