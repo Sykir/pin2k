@@ -152,6 +152,10 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub left_saber_color: usize,
     pub right_saber_color: usize,
     pub saber_flare_ms: u32,
+    /// Elapsed ms since shield depletion triggered the `DeffObiHolo` flatten → activate → glow loop sequence.
+    pub holo_transition_ms: u32,
+    /// Brief glow flash timer (ms) on `anim_obiwan_holo` when the deflector shield is hit.
+    pub shield_hit_glow_ms: u32,
     pub ard_seq: usize,
     pub special_screen: Option<SpecialScreen>,
     pub special_screen_ms: u32,
@@ -237,6 +241,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             left_saber_color: 2,  // Blue (Qui-Gon / Obi-Wan)
             right_saber_color: 0, // Green
             saber_flare_ms: 0,
+            holo_transition_ms: 0,
+            shield_hit_glow_ms: 0,
             ard_seq: 0,
             special_screen: None,
             special_screen_ms: 0,
@@ -557,6 +563,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.special_screen = None;
         self.special_screen_ms = 0;
         self.skill_shot_ready = true;
+        self.holo_transition_ms = 0;
+        self.shield_hit_glow_ms = 0;
         self.ball_save_ms = (self.adjustments.ball_save_secs as u32) * 1000;
         self.idle_ball_search_ms = 0;
         self.audits.total_balls_played = self.audits.total_balls_played.saturating_add(1);
@@ -828,6 +836,24 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         if self.saber_flare_ms > 0 {
             self.saber_flare_ms = self.saber_flare_ms.saturating_sub(dt_ms);
+        }
+        if self.shield_hit_glow_ms > 0 {
+            self.shield_hit_glow_ms = self.shield_hit_glow_ms.saturating_sub(dt_ms);
+        }
+        if self.game_title == GameTitle::Swe1
+            && self.state == MachineState::InGame
+            && self.active_scene.is_none()
+            && self.multiball == ActiveMultiball::None
+            && self
+                .players
+                .get(self.current_player)
+                .is_some_and(|p| p.scene_select_ready)
+        {
+            let prev = self.holo_transition_ms;
+            self.holo_transition_ms = prev.saturating_add(dt_ms);
+            if prev < 900 && self.holo_transition_ms >= 900 {
+                self.emit_ard("ard_scene_holo_burst");
+            }
         }
         if self.special_screen.is_some() || self.multiball != ActiveMultiball::None {
             self.special_screen_ms = self.special_screen_ms.saturating_add(dt_ms);

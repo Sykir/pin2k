@@ -383,35 +383,63 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             ActiveMultiball::None => {}
         }
 
-        // Obi-Wan Hologram Scene Select (`DeffObiHolo`)
-        let p = &self.players[self.current_player];
-        if self.shield_raised && p.scene_select_ready && self.special_screen.is_none() {
+        // Authentic `DeffObiHolo` nominal background & shield-defeat hologram sequence:
+        // 1. Shield up (`!scene_select_ready`): `anim_obiwan_holo` (flashes `anim_obiwan_holo_glow` on hit)
+        // 2. Shield defeated (`scene_select_ready`):
+        //    - `0..900ms` (30 fr @ 33fps): `anim_obiwan_holo_flatten`
+        //    - `900..1500ms` (18 fr @ 30fps): `anim_obiwan_holo_activate` + `anim_holo_burst`
+        //    - `>= 1500ms`: `anim_obiwan_holo_glow_loop` with the selectable mini-game hologram above it
+        if self.special_screen.is_none() {
+            let p = &self.players[self.current_player];
+            let ready = p.scene_select_ready;
             let sc = Swe1Scene::ALL[p.next_scene_idx % Swe1Scene::ALL.len()];
-            self.scene_sprite("anim_obiwan_holo_glow", f60, 160, 44, 2);
-            self.scene_sprite("anim_obiwan_holo", f60, 160, 44, 3);
-            self.scene_sprite("anim_obiwan_holo_glow_loop", f60, 209, 84, 4);
-            self.scene_sprite(sc.holo_anim_hint(), f60, 190, 64, 5);
-            self.scene_text(
-                "font_system_7_data",
-                format!("SELECT SCENE: {}", sc.title()),
-                320,
-                206,
-                7,
-                0x7FE0,
-                Some(0x0000),
-                TextAlign::Center,
-            );
-            self.scene_text(
-                "font_system_7_data",
-                "FLIPPERS CHANGE - CENTER STARTS",
-                320,
-                222,
-                7,
-                0x03FF,
-                Some(0x0000),
-                TextAlign::Center,
-            );
-            return;
+
+            if !ready {
+                let holo_anim = if self.shield_hit_glow_ms > 0 {
+                    "anim_obiwan_holo_glow"
+                } else {
+                    "anim_obiwan_holo"
+                };
+                let holo_frame = ((self.elapsed_ms / 30) as usize) % 60;
+                // Ghidra `DeffObiHolo::Run`: x = 0x11d - 320/2 = 125, y = 0xf0 - 160 = 80
+                self.scene_sprite(holo_anim, holo_frame, 125, 80, 3);
+            } else if self.holo_transition_ms < 900 {
+                let flatten_f = ((self.holo_transition_ms / 30) as usize).min(29);
+                self.scene_sprite("anim_obiwan_holo_flatten", flatten_f, 125, 80, 3);
+            } else if self.holo_transition_ms < 1_500 {
+                let act_f = (((self.holo_transition_ms - 900) / 33) as usize).min(17);
+                // Ghidra: activate x = 0x122 - 255/2 = 162, y = 0xf0 - 81 = 159
+                // burst x = 0x11d - 450/2 = 60, y = 0x78 - 225/2 = 8
+                self.scene_sprite("anim_obiwan_holo_activate", act_f, 162, 159, 4);
+                self.scene_sprite("anim_holo_burst", act_f, 60, 8, 5);
+            } else {
+                let loop_f = ((self.elapsed_ms / 33) as usize) % 15;
+                // Ghidra: glow_loop x = 0x122 - 222/2 = 179, y = 0xeb - 78 = 157
+                self.scene_sprite("anim_obiwan_holo_glow_loop", loop_f, 179, 157, 4);
+                // Selectable mini-game hologram floating above the glowing projector base
+                self.scene_sprite(sc.holo_anim_hint(), f60, 190, 44, 5);
+                self.scene_text(
+                    "font_system_7_data",
+                    format!("SELECT SCENE: {}", sc.title()),
+                    320,
+                    206,
+                    7,
+                    0x7FE0,
+                    Some(0x0000),
+                    TextAlign::Center,
+                );
+                self.scene_text(
+                    "font_system_7_data",
+                    "FLIPPERS CHANGE - CENTER STARTS",
+                    320,
+                    222,
+                    7,
+                    0x03FF,
+                    Some(0x0000),
+                    TextAlign::Center,
+                );
+                return;
+            }
         }
 
         // Skill Shot (`anim_super_skill_shot_icon`)

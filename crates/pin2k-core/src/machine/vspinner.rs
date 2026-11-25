@@ -9,6 +9,7 @@ use pin2k_hal::{AudioBackend, PinballHardware, SpriteDrawCmd, TextAlign, TextDra
 use serde::{Deserialize, Serialize};
 
 use super::Pin2kMachine;
+use crate::swe1_rules::ActiveMultiball;
 use crate::swe1_tables::sound;
 
 pub const LEFT_SPINNER_X: i32 = 43;
@@ -100,14 +101,19 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
     }
 
-    /// Renders active left/right virtual spinners (`z = 22`) and rising score popups (`z = 23`).
-    /// Does NOTHING when neither spinner has been triggered by a ramp shot!
+    /// Renders left/right virtual spinners (`z = 22`) and rising score popups (`z = 23`).
+    /// In nominal gameplay (no active scene, multiball, or special screen), both spinners
+    /// are visible resting statically at frame `0` and only animate when triggered by a ramp pass.
     pub fn render_virtual_spinners(&mut self) {
+        let is_nominal = self.active_scene.is_none()
+            && self.multiball == ActiveMultiball::None
+            && self.special_screen.is_none();
+
         for (side, sp, x) in [
             (0usize, self.left_spinner.clone(), LEFT_SPINNER_X),
             (1usize, self.right_spinner.clone(), RIGHT_SPINNER_X),
         ] {
-            if !sp.active {
+            if !sp.active && !is_nominal {
                 continue;
             }
             let bracket = if side == 0 {
@@ -120,16 +126,17 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             } else {
                 "anim_spinner_2"
             };
-            let raw_f = ((sp.frame_accum_q8 >> 8) % SPINNER_ANIM_FRAMES) as usize;
-            let frame = if sp.forward {
-                raw_f
-            } else {
-                (SPINNER_ANIM_FRAMES as usize - 1) - raw_f
-            };
 
             self.video
                 .draw_named_sprite(SpriteDrawCmd::new(bracket, 0, x, SPINNER_Y, 22));
-            if sp.velocity_q8 > 0 {
+
+            if sp.active && sp.velocity_q8 > 0 {
+                let raw_f = ((sp.frame_accum_q8 >> 8) % SPINNER_ANIM_FRAMES) as usize;
+                let frame = if sp.forward {
+                    raw_f
+                } else {
+                    (SPINNER_ANIM_FRAMES as usize - 1) - raw_f
+                };
                 self.video
                     .draw_named_sprite(SpriteDrawCmd::new(wheel, frame, x, SPINNER_Y, 22));
                 if sp.high_speed {
@@ -141,9 +148,13 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                         22,
                     ));
                 }
+            } else {
+                // Resting static spinner wheel at frame 0 until a ramp pass triggers it
+                self.video
+                    .draw_named_sprite(SpriteDrawCmd::new(wheel, 0, x, SPINNER_Y, 22));
             }
 
-            if sp.popup_ms > 0 && sp.last_award > 0 {
+            if sp.active && sp.popup_ms > 0 && sp.last_award > 0 {
                 let lift = ((900 - sp.popup_ms.min(900)) / 30) as i32;
                 self.video.draw_font_text(TextDrawCmd {
                     font_name: "font_system_7_data".into(),

@@ -243,6 +243,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     // show score display, laser HUD, spinners, and banners during active gameplay.
                     if !is_scene_intro && !is_fullscreen_special {
                         self.render_jarjar_saucer();
+                        self.render_gungan_nominal_hud();
                         self.render_fx();
                         self.render_score_display(true);
                         self.render_laser_status_hud();

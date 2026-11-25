@@ -192,6 +192,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     /// `DeffObiHolo` opening (`anim_obiwan_holo_activate` + `anim_holo_burst`).
+    #[allow(dead_code)]
     pub(crate) fn holo_open_fx(&mut self) {
         self.spawn_fx_centered(HOLO_BURST, 320, 120, 6);
         self.spawn_fx_centered(OBIWAN_HOLO_ACTIVATE, 320, 100, 7);

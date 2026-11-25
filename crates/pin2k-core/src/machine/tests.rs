@@ -409,13 +409,26 @@
         }
         assert!(!machine.left_spinner.active);
         assert!(!machine.right_spinner.active);
+        // Nominal mode displays both spinners statically at frame 0 without playing turnstile sound
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_spinner_bracket_left" && s.x == 43 && s.y == 174 && s.z == 22
+        }));
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_spinner_1" && s.frame == 0 && s.x == 43 && s.y == 174 && s.z == 22
+        }));
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_spinner_bracket_right" && s.x == 421 && s.y == 174 && s.z == 22
+        }));
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_spinner_2" && s.frame == 0 && s.x == 421 && s.y == 174 && s.z == 22
+        }));
         assert!(!machine
-            .video
-            .last_sprite_cmds
+            .audio
+            .played
             .iter()
-            .any(|s| s.anim_name.starts_with("anim_spinner_")));
+            .any(|(sid, _)| crate::swe1_tables::sound::SPINNER_TICKS.contains(sid)));
 
-        // Left ramp pass triggers left virtual spinner + turnstile sound
+        // Left ramp pass triggers left virtual spinner animation + turnstile sound
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
         machine.tick(16);
         assert!(machine.left_spinner.active);
@@ -423,7 +436,7 @@
             s.anim_name == "anim_spinner_bracket_left" && s.x == 43 && s.y == 174 && s.z == 22
         }));
         assert!(machine.video.last_sprite_cmds.iter().any(|s| {
-            s.anim_name == "anim_spinner_1" && s.x == 43 && s.y == 174 && s.z == 22
+            s.anim_name == "anim_spinner_1" && s.frame > 0 && s.x == 43 && s.y == 174 && s.z == 22
         }));
         assert!(machine
             .audio
@@ -431,7 +444,7 @@
             .iter()
             .any(|(sid, _)| *sid == crate::swe1_tables::sound::SPINNER_TICKS[0]));
 
-        // Right ramp pass triggers right virtual spinner
+        // Right ramp pass triggers right virtual spinner animation
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_RAMP_ENTER);
         machine.tick(16);
         assert!(machine.right_spinner.active);
@@ -439,8 +452,82 @@
             s.anim_name == "anim_spinner_bracket_right" && s.x == 421 && s.y == 174 && s.z == 22
         }));
         assert!(machine.video.last_sprite_cmds.iter().any(|s| {
-            s.anim_name == "anim_spinner_2" && s.x == 421 && s.y == 174 && s.z == 22
+            s.anim_name == "anim_spinner_2" && s.frame > 0 && s.x == 421 && s.y == 174 && s.z == 22
         }));
+    }
+
+    #[test]
+    fn nominal_obiwan_holo_sequence_and_gungan_animations() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
+        machine.tick(16);
+
+        // 1. Nominal gameplay with shield up: `anim_obiwan_holo` + right-side Gungan seaweed/bubbles/letters
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_obiwan_holo" && s.x == 125 && s.y == 80
+        }));
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_gungan_seaweed" && s.x == 496 && s.y == 135 && s.z == 15
+        }));
+        let bubble_count = machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .filter(|s| s.anim_name == "anim_gungan_bubbles" && s.z == 10)
+            .count();
+        assert_eq!(bubble_count, 5);
+        assert!(machine
+            .video
+            .last_font_text_cmds
+            .iter()
+            .any(|t| t.text == "G" && t.x >= 500 && t.z == 15));
+
+        // 2. First shield hit flashes `anim_obiwan_holo_glow`
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+        machine.tick(16);
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_obiwan_holo_glow" && s.x == 125 && s.y == 80
+        }));
+
+        // 3. Remaining 5 shield hits deplete shield -> `anim_obiwan_holo_flatten`
+        for _ in 0..5 {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+        }
+        machine.tick(16);
+        assert!(machine.players[0].scene_select_ready);
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_obiwan_holo_flatten" && s.x == 125 && s.y == 80
+        }));
+
+        // 4. After 900ms -> chains into `anim_obiwan_holo_activate` + `anim_holo_burst`
+        machine.tick(900);
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_obiwan_holo_activate" && s.x == 162 && s.y == 159
+        }));
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_holo_burst"
+        }));
+
+        // 5. After 1500ms total -> `anim_obiwan_holo_glow_loop` with mini-game holo above it
+        machine.tick(650);
+        let glow_loop = machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .find(|s| s.anim_name == "anim_obiwan_holo_glow_loop")
+            .expect("expected anim_obiwan_holo_glow_loop");
+        let sc = Swe1Scene::ALL[machine.players[0].next_scene_idx % Swe1Scene::ALL.len()];
+        let mini_holo = machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .find(|s| s.anim_name == sc.holo_anim_hint())
+            .expect("expected selectable mini-game hologram");
+        assert!(mini_holo.y < glow_loop.y);
     }
 
     #[test]

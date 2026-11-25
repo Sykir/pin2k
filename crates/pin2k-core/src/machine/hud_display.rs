@@ -7,7 +7,7 @@
 use pin2k_hal::{AudioBackend, PinballHardware, SpriteDrawCmd, TextAlign, TextDrawCmd, VideoBackend};
 
 use super::Pin2kMachine;
-use crate::swe1_rules::Swe1Scene;
+use crate::swe1_rules::{ActiveMultiball, Swe1Scene};
 
 impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A> {
     /// Renders `DeffLaserStatusBackground` in the top-right corner (`x=535, y=10, z=20/21`)
@@ -85,6 +85,75 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 y: 186,
                 z: 24,
                 color_rgb555: 0x7FE0,
+                shadow_rgb555: Some(0x0000),
+                align: TextAlign::Center,
+            });
+        }
+    }
+
+    /// Renders authentic `DeffGunganSeaweed` + `DeffGunganLetters` on the right side
+    /// above the jet bumpers during nominal gameplay (no active scene, multiball, or special screen).
+    /// - `anim_gungan_seaweed` (`139×90`, 40 fr @ 40fps) at `(496, 135)`, `z = 15`.
+    /// - 5 rising `anim_gungan_bubbles` (`17×9`, 3 fr) at `z = 10` (`y = 195 -> 125`).
+    /// - `"GUNGAN"` letter progress (`font_shadow_9_narrow_data`, `z = 15`) above the bumpers.
+    pub fn render_gungan_nominal_hud(&mut self) {
+        if self.active_scene.is_some()
+            || self.multiball != ActiveMultiball::None
+            || self.special_screen.is_some()
+        {
+            return;
+        }
+
+        // `DeffGunganSeaweed`: x = 0x27b - 139 = 496, y = 0xe1 - 90 = 135, z = 15
+        let seaweed_frame = ((self.elapsed_ms * 40) / 1000) as usize % 40;
+        self.video.draw_named_sprite(SpriteDrawCmd::new(
+            "anim_gungan_seaweed",
+            seaweed_frame,
+            496,
+            135,
+            15,
+        ));
+
+        // 5 rising `anim_gungan_bubbles` columns behind seaweed (`z = 10`, y: 195 -> 125)
+        const BUBBLE_SPEEDS: [u64; 5] = [28, 36, 24, 42, 32];
+        const BUBBLE_PHASES: [u64; 5] = [0, 19, 43, 11, 57];
+        for i in 0..5usize {
+            let travel = ((self.elapsed_ms * BUBBLE_SPEEDS[i]) / 1000 + BUBBLE_PHASES[i]) % 70;
+            let bx = 501 + (i as i32) * 22;
+            let by = 195 - (travel as i32);
+            self.video.draw_named_sprite(SpriteDrawCmd::new(
+                "anim_gungan_bubbles",
+                i % 3,
+                bx,
+                by,
+                10,
+            ));
+        }
+
+        // `DeffGunganLetters`: G-U-N-G-A-N progress on the right above the bumpers (`z = 15`)
+        let (letters_lit, super_jets) = self
+            .players
+            .get(self.current_player)
+            .map(|p| (p.gungan_letters as usize, p.super_jets_ms > 0))
+            .unwrap_or((0, false));
+        let blink_on = (self.elapsed_ms / 180) % 2 == 0;
+        const GUNGAN: [&str; 6] = ["G", "U", "N", "G", "A", "N"];
+        for (i, ch) in GUNGAN.iter().enumerate() {
+            let lit = super_jets || i < letters_lit;
+            let color = if super_jets {
+                if blink_on { 0x7FE0 } else { 0x03FF }
+            } else if lit {
+                0x7FE0
+            } else {
+                0x218C
+            };
+            self.video.draw_font_text(TextDrawCmd {
+                font_name: "font_shadow_9_narrow_data".into(),
+                text: (*ch).to_string(),
+                x: 508 + (i as i32) * 21,
+                y: 112,
+                z: 15,
+                color_rgb555: color,
                 shadow_rgb555: Some(0x0000),
                 align: TextAlign::Center,
             });

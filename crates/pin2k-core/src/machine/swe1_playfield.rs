@@ -11,7 +11,6 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.hw.fire_coil(drive::SHIELD_POWER, 64);
             self.hw.set_drive_hold(drive::SHIELD_HOLD, true);
             self.shield_fx(true);
-            self.holo_open_fx();
         } else if !raised && self.shield_raised {
             self.hw.set_drive_hold(drive::SHIELD_HOLD, false);
             self.shield_fx(false);
@@ -207,11 +206,16 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     };
                     self.add_score(50_000);
                     if rem == 0 {
-                        let selected = {
+                        let (was_ready, selected) = {
                             let p = &mut self.players[self.current_player];
+                            let was = p.scene_select_ready;
                             p.scene_select_ready = true;
-                            Swe1Scene::ALL[p.next_scene_idx % Swe1Scene::ALL.len()]
+                            (was, Swe1Scene::ALL[p.next_scene_idx % Swe1Scene::ALL.len()])
                         };
+                        if !was_ready {
+                            self.holo_transition_ms = 0;
+                            self.emit_ard("ard_obi_holo_watch_descends");
+                        }
                         self.set_shield_raised(true);
                         self.emit_sound(sound::SHIELD_GONE_CALLOUT, false);
                         self.active_anim_hint = selected.holo_anim_hint().to_string();
@@ -220,6 +224,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                             4_000,
                         );
                     } else {
+                        self.shield_hit_glow_ms = 350;
                         self.active_anim_hint = "anim_shield".to_string();
                         self.set_banner(format!("DEFLECTOR SHIELD: {}%", (rem as u32) * 100 / 12), 1_500);
                     }
