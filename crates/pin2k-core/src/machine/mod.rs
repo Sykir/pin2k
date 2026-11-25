@@ -2,6 +2,7 @@
 
 mod admin_nav;
 mod attract_render;
+mod fx;
 mod hud_display;
 mod leff;
 mod render;
@@ -15,6 +16,7 @@ mod system_screens;
 mod tests;
 mod vspinner;
 
+pub use fx::{anims as fx_anims, ActiveFx, ActiveOverlay, FxAnim, OverlayKind};
 pub use leff::{ActiveLeff, LeffKind};
 pub use vspinner::VirtualSpinnerState;
 
@@ -139,6 +141,10 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub active_scene: Option<ActiveSceneState>,
     pub multiball: ActiveMultiball,
     pub active_leff: Option<ActiveLeff>,
+    /// One-shot ROM sprite effects (explosions, booms, sparks) queued on top of the scene.
+    pub fx_queue: Vec<ActiveFx>,
+    /// Timed full-screen overlay Deff (`DeffWattoJunkShop`, `DeffMarketplace`, ...).
+    pub overlay: Option<ActiveOverlay>,
     pub rfm: RfmState,
     pub attract: AttractController,
     pub left_spinner: VirtualSpinnerState,
@@ -222,6 +228,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             active_scene: None,
             multiball: ActiveMultiball::None,
             active_leff: None,
+            fx_queue: Vec::new(),
+            overlay: None,
             rfm: RfmState::default(),
             attract: AttractController::default(),
             left_spinner: VirtualSpinnerState::default(),
@@ -608,6 +616,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         if self.balls_in_play >= 1 {
             // Dropped from Multiball down to single-ball play
             if self.balls_in_play == 1 && !matches!(self.multiball, ActiveMultiball::None) {
+                if matches!(self.multiball, ActiveMultiball::DarthMaulDuel { .. }) {
+                    self.duel_lost_fx();
+                }
                 self.multiball = ActiveMultiball::None;
                 self.hw.set_drive_hold(drive::LIGHTSABER_NEON, false);
                 self.audio.play_sound(sound::MAIN_THEME_LOOP, true);
@@ -808,6 +819,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         self.update_virtual_spinners(dt_ms);
         self.tick_leff(dt_ms);
+        self.tick_fx(dt_ms);
         if self.game_title == GameTitle::Swe1 && self.state == MachineState::InGame {
             if let Some(p) = self.players.get_mut(self.current_player) {
                 p.super_jets_ms = p.super_jets_ms.saturating_sub(dt_ms);
@@ -852,6 +864,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
         // Scene intro -> eject ball -> gameplay timer
         let mut switch_to_gameplay_anim = None;
+        let mut timed_out_scene = None;
         if let Some(ref mut sc) = self.active_scene {
             if sc.intro_remaining_ms > 0 {
                 sc.intro_remaining_ms = sc.intro_remaining_ms.saturating_sub(dt_ms);
@@ -862,15 +875,20 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     ));
                 }
             } else {
+                sc.active_ms = sc.active_ms.saturating_add(dt_ms);
                 sc.timer_ms = sc.timer_ms.saturating_sub(dt_ms);
                 if sc.timer_ms == 0 {
                     let title = sc.scene.title();
+                    timed_out_scene = Some(sc.scene);
                     self.active_scene = None;
                     self.active_anim_hint.clear();
                     self.audio.play_sound(sound::MAIN_THEME_LOOP, true);
                     self.set_banner(format!("{title} TIME EXPIRED"), 2_500);
                 }
             }
+        }
+        if let Some(scene) = timed_out_scene {
+            self.scene_timeout_fx(scene);
         }
         if let Some((anim, banner)) = switch_to_gameplay_anim {
             self.active_anim_hint = anim;

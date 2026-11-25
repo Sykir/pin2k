@@ -191,7 +191,7 @@ impl Swe1Scene {
             Swe1Scene::HangarEscape => "anim_obiwan_holo_naboo_fighter",
             Swe1Scene::HoverTank => "anim_obiwan_holo_hovertank",
             Swe1Scene::Podrace => "anim_obiwan_holo_anakin_pod",
-            Swe1Scene::ProbeDroid => "anim_obiwan_holo_r2d2",
+            Swe1Scene::ProbeDroid => "anim_obiwan_holo_queens_gun",
             Swe1Scene::QueenFashion => "anim_obiwan_holo_queens_logo",
             Swe1Scene::JarJarJuggle => "anim_obiwan_holo_jarjar",
             Swe1Scene::WattosChance => "anim_obiwan_holo_watto",
@@ -435,6 +435,9 @@ pub struct ActiveSceneState {
     pub timer_ms: u32,
     #[serde(default)]
     pub intro_remaining_ms: u32,
+    /// Milliseconds elapsed in the active (post-intro) gameplay phase.
+    #[serde(default)]
+    pub active_ms: u32,
 }
 
 /// Active multiball mode (`MainMultiball` or `JediMultiball` Darth Maul Saber Duel).

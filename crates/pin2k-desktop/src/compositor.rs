@@ -564,7 +564,9 @@ impl SoftwareCompositor {
         let _ = self.blit_named("anim_podrace_sky", 0, 0, 0, 1);
         let scroll_x = -(((race_t * 3) % 160) as i32);
         let _ = self.blit_named("anim_podrace_horizon", 0, scroll_x, 4, 1);
-        let _ = self.blit_named("anim_podrace_ground", race_t, 0, 112, 1);
+        // Victory lap decelerates onto the slow ground strip (`anim_podrace_ground_slow`).
+        let ground = if victory { "anim_podrace_ground_slow" } else { "anim_podrace_ground" };
+        let _ = self.blit_named(ground, race_t, 0, 112, 1);
 
         if victory {
             let _ = self.blit_named("anim_podrace_closeup", race_t, 0, 0, 1);

@@ -743,6 +743,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                             hits_remaining: scene.required_hits(),
                             timer_ms: scene.duration_ms(),
                             intro_remaining_ms: scene.intro_duration_ms(),
+            active_ms: 0,
                         });
                         self.active_anim_hint = scene.anim_hint().to_string();
                         self.set_banner(format!("SCENE: {}", scene.title()), 3_000);

@@ -9,7 +9,7 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 | 1. Outil ROM & Extraction (`pin2k-rom-tool`) | **96 %** | Layouts UI + Gamecode + Assets complets + pipeline Ghidra 12.2 (`1 867` fonctions / `248` classes) |
 | 2. Abstraction Matérielle & PDB (`pin2k-hal`) | **98 %** | Prêt cabinet, série & compositeur Z-trié |
 | 3. Moteur de Jeu & Écrans Natifs (`pin2k-core`) | **86 %** | 100 % des écrans/scènes SWE1 + banque audio `ARD`/`ACD` + moteur `Leff` + règles portées depuis Ghidra |
-| 4. Couverture des Assets SWE1 (`gfx` / `fonts` / `audio`) | **82 %** | Polices **100 % (`19/19`)**, Audio **100 % (`689/689`)**, Anims **47 % (`186/392`)** |
+| 4. Couverture des Assets SWE1 (`gfx` / `fonts` / `audio`) | **97 %** | Polices **100 % (`19/19`)**, Audio **100 % (`689/689`)**, Anims **90 % (`354/392`)** |
 | 5. Runtime Desktop, Console Debug & HD (`pin2k-desktop`) | **78 %** | Web Console 5 onglets & PNG OK ; audio natif/Web et fenêtre native `--window`/`--fullscreen` à finaliser |
 | 6. Modding d'Assets & Scènes Custom (`mod.json`) | **30 %** | Remplacement `gfx/` & audio natif OK ; WebAudio mods, polices, règles à états et scènes custom à faire |
 | 7. Documentation & Qualité | **100 %** | **42/42 tests OK**, 0 avertissement, documentation complète à jour |
@@ -64,10 +64,10 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 
 ---
 
-## 4. Couverture des Assets SWE1 (`docs/ASSETS_MATRIX.md`) — **82 %**
+## 4. Couverture des Assets SWE1 (`docs/ASSETS_MATRIX.md`) — **97 %**
 - [x] **Polices Bitmap (`fonts/`)** : **19 / 19 (100 %)** chargées et utilisées avec ombres & alignement dans `SoftwareCompositor`
 - [x] **Pistes Audio DCS-2 (`audio/`)** : **689 / 689 (100 %)** indexées dans `swe1_audio.rs` (`382` pools `ARD` / `695` `ACD`) et déclenchables via `Pin2kMachine::emit_ard()`
-- [x] **Animations & Sprites (`gfx/`)** : **186 / 392 (47 %)** utilisées (toutes les 14 scènes intros+fonds, Attract complet, sabres, Naboo HUD, spinners, Bonus personnages/rangs, Match, Game Over, Extra Ball, Multiballs, Holo Obi-Wan, mire alignement)
+- [x] **Animations & Sprites (`gfx/`)** : **354 / 392 (90,3 %)** utilisées (toutes les 14 scènes intros+fonds+explosions+victoires, `DeffWattoJunkShop`, `DeffMarketplace`, `DeffJarJar`, `DeffBumperSparks`, `DeffJediMultiballIntro`, `JediSpirit`, Attract complet, sabres, Naboo HUD, spinners, Bonus, Match, Game Over, Extra Ball, Multiballs, Holo Obi-Wan, mire alignement)
 
 ---
 

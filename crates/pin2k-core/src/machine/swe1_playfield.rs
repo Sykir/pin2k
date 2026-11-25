@@ -10,8 +10,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         if raised && !self.shield_raised {
             self.hw.fire_coil(drive::SHIELD_POWER, 64);
             self.hw.set_drive_hold(drive::SHIELD_HOLD, true);
+            self.shield_fx(true);
+            self.holo_open_fx();
         } else if !raised && self.shield_raised {
             self.hw.set_drive_hold(drive::SHIELD_HOLD, false);
+            self.shield_fx(false);
         }
         self.shield_raised = raised;
     }
@@ -128,6 +131,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     }
                 };
                 self.add_score(pts);
+                let jet_idx = id.saturating_sub(sw::UPPER_JET);
+                self.bumper_sparks_fx(jet_idx);
+                self.jarjar_saucer_event(false, jet_idx);
                 if started_super_jets {
                     self.emit_ard("ard_gungan_letters_done");
                     self.trigger_leff(LeffKind::SuperJetsStart);
@@ -159,6 +165,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 p.laser_shots = (p.laser_shots + 1).min(9);
                 let ls = p.laser_shots;
                 self.add_score(35_000);
+                if ls == 1 {
+                    self.laser_instruction_fx();
+                }
                 self.set_banner(format!("LASERS CHARGED: {ls}"), 1_500);
             }
             // Drop Targets (`Drop::hook_drop_target_hit`) & Saucers
@@ -229,6 +238,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             sw::RIGHT_RAMP_ENTER => {
                 self.skill_shot_ready = false;
                 self.trigger_virtual_spinner(true, true);
+                self.jarjar_saucer_event(true, 0);
                 self.add_score(25_000);
             }
             sw::RAMP_MADE_LEFT | sw::RAMP_MADE_RIGHT | sw::LEFT_LOOP_UPPER | sw::LEFT_LOOP_ROLLOVER => {
@@ -350,6 +360,15 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             let locks = self.players[self.current_player].saucer_locks;
             self.add_score(150_000);
             self.emit_ard("ard_watto_flyup_speech");
+            if locks == 1 {
+                self.start_overlay(super::OverlayKind::WattoJunkShop {
+                    award: (self.elapsed_ms / 16) as u8,
+                });
+            } else {
+                self.start_overlay(super::OverlayKind::Marketplace {
+                    award: (self.elapsed_ms / 16) as u8,
+                });
+            }
             self.set_banner(format!("BALL {locks} LOCKED FOR MULTIBALL!"), 2_500);
         }
     }
@@ -369,6 +388,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.emit_sound(sound::EXPLOSION, false);
                 self.emit_ard("ard_multiball_jackpot_cleared_speech");
                 self.trigger_leff(LeffKind::MainMultiballStart);
+                self.jackpot_fx(0, true);
                 self.add_score(scoring::MULTIBALL_SUPER_JACKPOT);
                 self.emit_event(GameEvent::JackpotAwarded {
                     super_jackpot: true,
@@ -412,6 +432,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             p.scenes_started = p.scenes_started.saturating_add(1);
         }
         self.set_shield_raised(false);
+        self.holo_close_fx();
         self.popper_hold_ms = intro_ms;
         self.special_screen = None;
         self.special_screen_ms = 0;
@@ -420,6 +441,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             hits_remaining: scene.required_hits(),
             timer_ms: scene.duration_ms(),
             intro_remaining_ms: intro_ms,
+            active_ms: 0,
         });
         self.active_anim_hint = scene.intro_anim_hint().to_string();
         self.audits.scenes_started = self.audits.scenes_started.saturating_add(1);
@@ -456,6 +478,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.emit_sound(sound::DUEL_OF_THE_FATES_LOOP, true);
         self.emit_sound(sound::SITH_LIGHTSABRE_ON, false);
         self.trigger_leff(LeffKind::JediMultiballClash);
+        self.start_overlay(super::OverlayKind::JediMultiballIntro);
         self.add_score(scoring::JEDI_MB_START);
         self.active_anim_hint = "anim_jedi_battle_intro_movie".to_string();
         self.emit_event(GameEvent::MultiballStarted {
@@ -491,6 +514,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.emit_sound(sound::EXPLOSION, false);
                     self.emit_ard("ard_multiball_jackpot_speech");
                     self.trigger_leff(LeffKind::MainMultiballJackpot);
+                    self.jackpot_fx(next_jp, false);
                     self.emit_event(GameEvent::JackpotAwarded {
                         super_jackpot: false,
                         points: award,
@@ -551,6 +575,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 let combo_pts = 250_000 * (combo as u64);
                 self.add_score(combo_pts);
                 self.emit_ard("ard_ramp_combo_naboo_flyby");
+                self.spinner_combo_fx(sw_id == sw::RAMP_MADE_RIGHT);
             } else {
                 self.emit_ard("ard_ramp_made");
             }
@@ -601,6 +626,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         if let Some((scene, hits_remaining)) = progressed_info {
             self.emit_ard(scene.hit_ard());
             self.trigger_leff(LeffKind::SceneHit);
+            self.scene_hit_fx(scene, hits_remaining, label.contains("LASER"));
             self.emit_event(GameEvent::SceneProgressed {
                 scene,
                 hits_remaining,
@@ -622,6 +648,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.emit_sound(sound::MAIN_THEME_LOOP, true);
             self.emit_ard(scene.complete_ard());
             self.trigger_leff(LeffKind::SceneComplete);
+            self.scene_complete_fx(scene);
             self.emit_event(GameEvent::SceneCompleted {
                 scene,
                 points: comp_pts,
@@ -658,6 +685,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.emit_sound(sound::DARTH_MAUL_DEATH_YELL, false);
                 self.emit_ard("ard_jedi_battle_multiball_ending_speech");
                 self.trigger_leff(LeffKind::JediMultiballFinish);
+                self.duel_won_fx(combo);
+                self.rank_promotion_overlay(new_rank);
                 self.emit_event(GameEvent::JediRankPromoted { rank: new_rank });
                 self.active_anim_hint = "anim_jedi_battle_maul_death_1".to_string();
                 self.set_banner(

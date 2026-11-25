@@ -224,6 +224,16 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                                 | super::SpecialScreen::SlamTilt
                         )
                     );
+                    if self.render_overlay() {
+                        // Full-screen timed overlay (`DeffWattoJunkShop`, `DeffMarketplace`,
+                        // `DeffJediMultiballIntro`, `RankPromotion`, `JediSpirit`).
+                        self.render_fx();
+                        if self.state == MachineState::Tilt {
+                            self.render_tilt_overlay();
+                        }
+                        self.video.present();
+                        return;
+                    }
                     if let Some(screen) = self.special_screen {
                         self.render_special_screen(screen);
                     } else if self.debug_anim_override.is_none() {
@@ -232,6 +242,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     // Keep scene intros & fullscreen cutscenes clean without HUD overlap;
                     // show score display, laser HUD, spinners, and banners during active gameplay.
                     if !is_scene_intro && !is_fullscreen_special {
+                        self.render_jarjar_saucer();
+                        self.render_fx();
                         self.render_score_display(true);
                         self.render_laser_status_hud();
                         self.render_virtual_spinners();

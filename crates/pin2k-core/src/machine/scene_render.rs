@@ -285,6 +285,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     );
                 }
             }
+            self.render_scene_extras(sc.scene, sc.active_ms, hits);
             return;
         }
 
