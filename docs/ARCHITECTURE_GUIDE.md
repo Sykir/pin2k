@@ -1,151 +1,146 @@
-# Guide Complet d'Architecture, Fonctionnement et Utilisation (`pin2k`)
+# Architecture, Build & CLI Guide (`pin2k`)
 
-Ce document détaille la conception technique, l'extraction des assets et du gamecode, le moteur de scripts et la compilation native **Linux et Windows** du portage Rust de **Williams Pinball 2000** (*Star Wars Episode I* [`#50069`] et *Revenge From Mars* [`#50070`]).
+Technical overview of the crate architecture, ROM/asset/gamecode extraction pipeline, script runtime, and native **Linux & Windows** builds for the **Williams Pinball 2000** Rust port (*Star Wars Episode I* [`#50069`] and *Revenge From Mars* [`#50070`]).
 
 ---
 
-## 1. Principe Général & Objectif du Projet
+## 1. Design Philosophy & Pipeline
 
-En 1999, la plateforme **Pinball 2000** reposait sur un PC embarqué Cyrix MediaGX (x86 32-bit sous XINA RTOS), une carte PCI propriétaire **PRISM** (8 Mask ROMs + 4 Mio de Flash + DSP audio ADSP-2105 DCS-2) et une carte de puissance **Power Driver Board (PDB)** pilotée via le port parallèle IEEE-1284.
+The original 1999 **Pinball 2000** platform ran on an embedded Cyrix MediaGX PC (32-bit x86 running XINA RTOS), a proprietary PCI **PRISM** card (8 Mask ROMs + 4 MiB Flash + ADSP-2105 DCS-2 audio DSP), and a **Power Driver Board (PDB)** controlled over IEEE-1284 parallel port.
 
-Le projet `pin2k` remplace intégralement cette pile matérielle et logicielle par une architecture **Rust native 64-bit** en 3 étapes :
-1. **Extraction complète des assets (`pin2k-rom-tool extract-assets`)** : toutes les animations (`.png`), toutes les polices bitmap (`fonts/*.png` + métriques), et toutes les pistes audio (`.ogg`).
-2. **Extraction du gamecode & des layouts UI (`pin2k-rom-tool extract-gamecode` / `extract-layout`)** : extraction des tables matérielles (`SwitchTable`, `DriveTable`, `LampTable`), des appels x86 (`score`, `AudioRequest`, etc.) vers `game_script.json`, ainsi que des `138` classes `Deff*`, `14` scènes, `20` slides Attract, `9` personnages, positions et priorités Z vers `rom_layout_db.json`.
-3. **Runtime natif multiplateforme (`pin2k-desktop` + `pin2k-core`)** : exécute les assets, layouts et `game_script.json` à 60 Hz sans aucune dépendance C externe, compilable nativement sous **Linux** et **Windows** (`x86_64-pc-windows-msvc` / `x86_64-pc-windows-gnu`).
+`pin2k` replaces this stack with a clean-room **64-bit native Rust** architecture in 3 stages:
+1. **Asset extraction (`pin2k-rom-tool extract-assets` / `upscale-assets`)**: decodes all animations (`.png`), bitmap fonts (`fonts/*.png` + metrics), DCS-2 audio (`.ogg`), and optional edge-padded HD packs (`gfx_hd/`).
+2. **Gamecode & UI layout extraction (`pin2k-rom-tool extract-gamecode` / `extract-layout`)**: lifts hardware tables (`SwitchTable`, `DriveTable`, `LampTable`), x86 calls (`score`, `AudioRequest`, etc.) into `game_script.json`, and all `138` `Deff*` classes, `14` scenes, `20` Attract slides, `9` characters, coordinates, and Z-orders into `rom_layout_db.json`.
+3. **Cross-platform native runtime (`pin2k-desktop` + `pin2k-core`)**: executes at 60 Hz with zero external C dependencies on **Linux** and **Windows** (`x86_64-pc-windows-msvc` / `x86_64-pc-windows-gnu`).
 
 ```mermaid
 flowchart LR
-    ROM["ROMs & Mises à jour (.exe / .zip / U100..U110 / ELF)"] -->|"extract-assets"| ASSETS["Assets (.png + fonts + .ogg)"]
+    ROM["ROMs & Updates (.exe / .zip / U100..U110 / ELF)"] -->|"extract-assets"| ASSETS["Assets (.png + fonts + .ogg + gfx_hd)"]
     ROM -->|"extract-gamecode"| SCRIPT["scripts/game_script.json"]
     ROM -->|"extract-layout"| LAYOUT["scripts/rom_layout_db.json"]
-    ASSETS --> DESKTOP["pin2k-desktop (Runtime 60 Hz Win/Linux)"]
+    ASSETS --> DESKTOP["pin2k-desktop (60 Hz Runtime Win/Linux)"]
     LAYOUT --> CORE
-    SCRIPT -->|"ScriptRuntime"| CORE["pin2k-core (VM Scripts, Règles, Compositing HUD/Scènes, Admin)"]
+    SCRIPT -->|"ScriptRuntime"| CORE["pin2k-core (VM, Rules, HUD/Scenes, Leff, FX, Admin)"]
     CORE <--> DESKTOP
-    DESKTOP <--> HAL["pin2k-hal (PdbDriver + VideoBackend Z-trié)"]
-    HAL <-->|"/dev/parportN (Linux)"| PDB["Power Driver Board (Cabinet réel)"]
-    HAL <-->|"COMx / /dev/ttyUSB0 (Win/Linux)"| UART["Pont Série UART ↔ PDB"]
-    HAL <-->|"Simulation filaire"| VPDB["VirtualPdbPort"]
-    DESKTOP -->|"HTTP + WebAudio + Debug Console"| WEB["Navigateur Web (:8080)"]
+    DESKTOP <--> HAL["pin2k-hal (PdbDriver + Z-sorted VideoBackend)"]
+    HAL <-->|"/dev/parportN (Linux)"| PDB["Power Driver Board (Physical Cabinet)"]
+    HAL <-->|"COMx / /dev/ttyUSB0 (Win/Linux)"| UART["Serial UART <-> PDB Bridge"]
+    HAL <-->|"Wire-exact simulation"| VPDB["VirtualPdbPort"]
+    DESKTOP -->|"Native window (winit+softbuffer)"| WIN["--window / --fullscreen (4:3)"]
+    DESKTOP -->|"HTTP + WebAudio + Debug Console"| WEB["Web Browser (:8080)"]
 ```
 
 ---
 
-## 2. Organisation des Crates
+## 2. Workspace Crates
 
-### `crates/pin2k-rom-tool` — Outil Offline ROM, Assets & Gamecode
-- **`interleave.rs`** : réassemble les paires de puces 16-bit (`U100/U101` .. `U106/U107`) en une image plate 32-bit little-endian de **64 Mio** (`prism_flat.bin`), et `U109/U110` en **8 Mio** (`dcs_flat.bin`). Supporte répertoires et archives MAME `.zip`.
-- **`prism.rs`** : parse l'Option ROM PCI (`146E:0001`), les en-têtes `BootData`, vérifie les **12 checksums matériels**, et charge les mises à jour depuis dossier, `.exe` ou `.zip` (`load_update_bundle`).
-- **`symbols.rs` & `elf_writer.rs`** : parse `*_symbols.rom` (`SYMBOL TABLE`) et génère un binaire ELF32 x86 standard (`0x00100000`) pour Ghidra, `objdump` ou `readelf`.
-- **`gfx_decoder.rs` & `asset_extractor.rs`** :
-  - **`extract_named_animations`** : décode tous les formats graphiques Pinball 2000 (`0, 1, 20, 21, 22, 23, 30, 42, 43, 44, 45`) avec transparence `0x7C1F` vers `.png` RGBA8888 + `gfx_manifest.json`. Sans `--max-frames`, extrait **100 % des frames** de chaque animation.
-  - **`extract_fonts`** : lit les structures `FontData` (24 octets) et `Character` (28 octets) pointées par les symboles `font_*_data_ptr`, génère un atlas PNG RGBA8888 par police et écrit `fonts/fonts_manifest.json`.
-  - **`extract_pb2kslib_sounds`** : extrait les pistes Vorbis du conteneur `pb2kslib` (`{jeu}_sound.bin`, XOR `0x3A`) vers `.ogg` + `sound_manifest.json`.
-- **`gamecode_extractor.rs`** :
-  - Lit `DriveTable` (48 × 24 o), `LampTable` (128 × 36 o) et `SwitchTable` (96 × 48 o) depuis la mémoire virtuelle `game.rom` / `prism_flat.bin`.
-  - `lift_x86_calls` décode les instructions x86-32 (`PUSH imm8/imm32`, `CALL rel32`, `ADD ESP`, `RET`) dans chaque handler `swd_*` pour extraire les appels `score`, `generic_score`, `AudioRequest`, `traverse_and_call`.
-  - Écrit `game_script.json` (voir [GAME_SCRIPT_REFERENCE.md](GAME_SCRIPT_REFERENCE.md)).
-- **`layout_extractor.rs`** :
-  - Parseur ELF32 i386 pur-Rust (zéro `unsafe`) qui désassemble les méthodes des `138` classes `Deff*` (`Run`, `Startup`, `Shutdown`), résout les références symboliques vers les animations/polices/sons, et extrait les coordonnées `SetPos`, priorités Z `Display`, couleurs RGB555, délais `sleep`, ainsi que les `9` personnages joueurs, `14` scènes (`SceneDataInfo`), `20` écrans Attract (`AttractProcInfo`), `702` `ACD` et `383` `ARD` dans `rom_layout_db.json`.
+### `crates/pin2k-rom-tool` — Offline ROM, Asset & Gamecode Tool
+- **`interleave.rs`**: reassembles 16-bit chip pairs (`U100/U101`..`U106/U107`) into a flat 32-bit little-endian **64 MiB** image (`prism_flat.bin`), and `U109/U110` into **8 MiB** (`dcs_flat.bin`). Supports folders and MAME `.zip` archives.
+- **`prism.rs`**: parses PCI Option ROM (`146E:0001`), `BootData` headers, verifies all **12 hardware checksums**, and loads updates from directories, `.exe`, or `.zip` (`load_update_bundle`).
+- **`symbols.rs` & `elf_writer.rs`**: parses `*_symbols.rom` (`SYMBOL TABLE`) and emits a standard x86 ELF32 binary (`0x00100000`) for Ghidra, `objdump`, or `readelf`.
+- **`gfx_decoder.rs` & `asset_extractor.rs`**: decodes all Pinball 2000 graphic codecs (`0, 1, 20..23, 30, 42..45`, transparency `0x7C1F`), extracts all **19 bitmap fonts** (`FontData`/`Character`), and decrypts `pb2kslib` (`{game}_sound.bin`, XOR `0x3A`) Vorbis audio.
+- **`upscaler.rs`**: pure-Rust HD sprite upscaler (`upscale-assets`) with transparent RGB edge-padding (`Lanczos3`/`CatmullRom`/`Nearest`, `2×`–`4×`) outputting `gfx_hd/gfx_manifest.json`.
+- **`gamecode_extractor.rs`**: reads `DriveTable` (48×24 B), `LampTable` (128×36 B), and `SwitchTable` (96×48 B), lifts x86 calls (`lift_x86_calls`), and writes `game_script.json` ([GAME_SCRIPT_REFERENCE.md](GAME_SCRIPT_REFERENCE.md)).
+- **`layout_extractor.rs`**: pure-Rust ELF32 i386 parser (zero `unsafe`) disassembling all `138` `Deff*` classes and exporting `rom_layout_db.json`.
 
-### `crates/pin2k-hal` — Abstraction Matérielle & Communication PDB
-- **Traits découplés (`lib.rs`)** : `PinballHardware`, `VideoBackend` (avec file Z-ordonnée `begin_frame`, `draw_named_sprite` / `SpriteDrawCmd`, `draw_font_text` / `TextDrawCmd`, `draw_rect` / `RectDrawCmd`, `TextAlign`), `AudioBackend`, et `HeadlessVideo` / `HeadlessAudio`.
-- **Protocole Parallèle exact (`pdb_driver.rs`, `lpt.rs`)** : implémente `PinIOWrite` / `PinIORead`, détection de présence `(STATUS & 0xF8) != 0x78`, fusibles, signature plateau (`Swe1` vs `Rfm`), optos actifs-bas (`SWE1_OPTO_NC_MASK`), verrou porte monnayeur (`Sw 81`), 48 sorties bobines/flashers/néon et 128 lampes.
-- **Port Série Multiplateforme (`serial.rs`)** : `NativeSerialPort` sans dépendance externe (`CreateFileW`/Win32 sous Windows `COMx`, `termios` sous Linux `/dev/ttyUSB0`) + protocole `SerialPdbPort`.
+### `crates/pin2k-hal` — Hardware Abstraction & PDB Communication
+- **Decoupled traits (`lib.rs`)**: `PinballHardware`, Z-sorted `VideoBackend` (`SpriteDrawCmd`, `TextDrawCmd`, `RectDrawCmd`, `TextAlign`), `AudioBackend`, and `HeadlessVideo` / `HeadlessAudio`.
+- **Exact Parallel-Port Protocol (`pdb_driver.rs`, `lpt.rs`)**: `PinIOWrite` / `PinIORead`, presence check `(STATUS & 0xF8) != 0x78`, fuses, playfield signature (`Swe1`/`Rfm`), active-low optos (`SWE1_OPTO_NC_MASK`), coin door interlock (`Sw 81`), 48 drives, and 128 lamps.
+- **Cross-platform Serial Bridge (`serial.rs`)**: zero-C `NativeSerialPort` (Win32 `CreateFileW` on `COMx`, Linux `termios` on `/dev/ttyUSB0`) + `SerialPdbPort`.
 
-### `crates/pin2k-core` — Moteur de Jeu, Compositing Natif & Script VM
-- **`machine/`** (architecture modulaire 60 Hz autour de `Pin2kMachine` dans `machine/mod.rs`, avec `hw.sync(0)` au démarrage avant amorçage de `switch_matrix.rs`) :
-  - `leff.rs` : moteur de chorégraphies lumineuses (`LeffKind` / `ActiveLeff`, 14 séquences `Leff*` pilotant la matrice de lampes en partie via `apply_leff_lamps()`).
-  - `score_display.rs` (`DeffScoreDisplay`), `hud_display.rs` (`DeffLaserStatusBackground`), `vspinner.rs` (`VirtualSpinners` uniquement sur passage rampe).
-  - `attract_render.rs` (20 écrans `AttractDeff` + flare Kahuna 9 couleurs), `scene_render.rs` (14 scènes `Swe1Scene` intros + fonds, `DeffObiHolo`, Multiballs, Skill Shot), `system_screens.rs` (`PowerupTestingDeff`, 12 `SpecialScreen`, `DeffTilt`, `DeffHSTDinitials`, et `DiagPage` / menus Opérateur).
-  - `render.rs`, `script_exec.rs` (`debug_launch_mode` / `debug_apply_player_cmd`), `swe1_playfield.rs`, `rfm_playfield.rs`, `admin_nav.rs`, `tests.rs`.
-- **`swe1_audio.rs`** : banque audio complète SWE1 générée par décompilation Ghidra 12.2 (`382` pools `ARD` / `407` IDs DCS-2 uniques, `695` entrées `ACD`), exposant `resolve_ard()`, `resolve_acd()` et `Pin2kMachine::emit_ard()`.
-- **`script_engine.rs`** : `GameScript` & `ScriptRuntime` exécutant `game_script.json`.
-- **Règles & tables** : `swe1_rules.rs` (14 scènes avec `start_ard`/`hit_ard`/`complete_ard`/`hit_score`/`completion_score` + `PlayerState` étendu), `swe1_tables.rs`, `attract.rs`, `rfm_rules.rs`, `rfm_tables.rs`, `mods.rs`, `events.rs`, `admin.rs`, `storage.rs`.
+### `crates/pin2k-core` — Game Engine, Native Compositing & Script VM
+- **`machine/`** (modular 60 Hz architecture around `Pin2kMachine`):
+  - `leff.rs`: 14 `Leff*` lamp/flasher choreographies (`apply_leff_lamps()`).
+  - `fx/{mod,anims,overlays,scene_extras,triggers}.rs`: one-shot ROM sprite FX (scene hits, explosions, victories, jackpots, bumper sparks, holo burst), timed fullscreen overlays (`DeffWattoJunkShop`, `DeffMarketplace`, `DeffJediMultiballIntro`, `RankPromotion`, `JediSpirit`), and unified Podrace layers.
+  - `score_display.rs` (`DeffScoreDisplay`), `hud_display.rs` (`DeffLaserStatusBackground`), `vspinner.rs` (`VirtualSpinners`).
+  - `attract_render.rs` (20 `AttractDeff` screens + 9-color Kahuna flare), `scene_render.rs` (all 14 scenes, `DeffObiHolo`, Multiballs, Skill Shot), `system_screens.rs` (`PowerupTestingDeff`, 12 `SpecialScreen`, `DeffTilt`, `DeffHSTDinitials`, `DiagPage` & Operator menus).
+  - `render.rs`, `script_exec.rs`, `swe1_playfield.rs`, `rfm_playfield.rs`, `admin_nav.rs`, `tests.rs`.
+- **`swe1_audio.rs`**: complete Ghidra-extracted SWE1 audio bank (`382` `ARD` pools / `407` unique DCS-2 IDs, `695` `ACD` entries) with `resolve_ard()`, `resolve_acd()`, and `emit_ard()`.
+- **`script_engine/{mod,schema}.rs`**: `GameScript` & `ScriptRuntime` with per-player `player_vars` (1–4P), timers, and mode expiration.
+- **Rules & tables**: `swe1_rules.rs`, `swe1_tables.rs`, `attract.rs`, `rfm_rules.rs`, `rfm_tables.rs`, `mods.rs`, `events.rs`, `admin.rs`, `storage.rs`.
 
-### `crates/pin2k-desktop` — Application Native Windows & Linux
-- **`compositor.rs`, `raster.rs`, `scenes_compositor.rs`** : compositeur logiciel `BaseViewManager` `640×240` → `640×480` trié par Z (avec `flip_x`, échelle, teinte RGB555, ombres bitmap sur les 19 polices ROM, export JSON des calques live et compositeur multi-couches *Boonta Eve Podrace*).
-- **`runner.rs` & `cli.rs`** : boucle 60 Hz, scénarios auto (`--script`), lancements directs (`--debug-mode`), capture PNG (`--screenshot-out`, `--frames-out-dir`), télémétrie.
-- **`audio.rs`** : décodeur OGG Vorbis pur-Rust (`lewton`), lecture native via `winmm.dll` (`waveOutOpen`) sous Windows ou `aplay` sous Linux + WebAudio.
-- **`web_ui.rs` & `web_ui.html`** : serveur HTTP pur-Rust servant la Console Debug Web à 5 onglets (`/`), `/frame.png`, `/api/state`, `/api/assets`, `/api/events`, `/api/db`, `/audio/...`, `POST /api/switch/{id}` et `POST /api/debug/*` (avec décodage URL `percent_decode`).
+### `crates/pin2k-desktop` — Native Windows & Linux Runtime
+- **`compositor.rs` & `raster.rs`**: Z-sorted `BaseViewManager` software compositor `640×240` → `640×480` with `flip_x`, scaling, RGB555 tint, 19 ROM bitmap fonts, `--hd` (`gfx_hd/`), and live layer inspection.
+- **`window.rs`**: native 60 Hz desktop window & fullscreen (`--window`/`--fullscreen`, `winit` + `softbuffer`, `4:3` letterboxing, `F11`/`Alt+Enter`).
+- **`audio/{mod,platform}.rs`**: pure-Rust OGG Vorbis decoder (`lewton`), native OS playback (`winmm.dll` / `aplay`) with atomic `StopAll`, `Stop`, and `looping` + WebAudio bridge.
+- **`web_ui/{mod,state}.rs` & `web_ui.html`**: zero-dependency HTTP server for the 5-tab Web Debug Console, `/frame.png`, `/api/*`, and `/audio/` (including mod overrides).
+- **`runner.rs` & `cli.rs`**: 60 Hz main loop, automated scenarios (`--script`), direct debug launch (`--debug-mode`), PNG/video frame export (`--screenshot-out`, `--frames-out-dir`).
 
 ---
 
-## 3. Référence Complète des Commandes
+## 3. CLI Reference
 
 ### `pin2k-rom-tool`
 
-| Sous-commande | Usage |
+| Subcommand | Purpose |
 |---|---|
-| `reconstruct` | Interleave `U100..U107` (et `U109/U110` via `--dcs-output`) depuis `--input-dir` ou `--input-zip` |
-| `list-updates` | Liste les paquets de mise à jour (`.exe`, `.zip`, dossiers) dans `--dir` avec version jeu et XINA |
-| `assemble-update` | Assemble une image Flash `BAR3` (4 Mio) depuis `--bundle-dir` (dossier, `.exe` ou `.zip`) |
-| `verify` | Vérifie l'Option ROM, `BootData` et les 12 checksums PRISM / `BAR3` |
-| `wrap-elf` | Génère un `ELF32` x86 symbolisé (`game.rom` + `symbols.rom`) |
-| `extract-assets` | Exporte **toutes** les animations (`gfx/*.png`), les polices (`fonts/*.png`) et l'audio (`audio/*.ogg`) |
-| `extract-gamecode` | Extrait les tables matérielles, handlers x86, attract, modes et règles vers `game_script.json` |
-| `extract-layout` | Analyse l'ELF32 x86 et extrait `rom_layout_db.json` (138 `Deff*`, positions, Z, polices, couleurs, `ACD`/`ARD`) |
-| `scan` / `preview` / `symbols` | Inspection ASCII/en-têtes, aperçu brut RGB555/RGB565/Indexed8 et résolution de symboles |
+| `reconstruct` | Interleave `U100..U107` (and `U109/U110` via `--dcs-output`) from `--input-dir` or `--input-zip` |
+| `list-updates` | List update bundles (`.exe`, `.zip`, folders) in `--dir` with game & XINA versions |
+| `assemble-update` | Assemble a 4 MiB `BAR3` Flash image from `--bundle-dir` |
+| `verify` | Verify Option ROM, `BootData`, and all 12 PRISM / `BAR3` checksums |
+| `wrap-elf` | Emit a symbolized x86 `ELF32` (`game.rom` + `symbols.rom`) |
+| `extract-assets` | Export **all** animations (`gfx/*.png`), fonts (`fonts/*.png`), and audio (`audio/*.ogg`) |
+| `upscale-assets` | Upscale `gfx/` sprites into `gfx_hd/` (`2×`–`4×`, edge-padded `lanczos3`/`catmull-rom`/`nearest`) |
+| `extract-gamecode` | Extract hardware tables, x86 handlers, attract, modes, and rules into `game_script.json` |
+| `extract-layout` | Disassemble ELF32 and export `rom_layout_db.json` (138 `Deff*`, coordinates, Z, fonts, colors, `ACD`/`ARD`) |
+| `scan` / `preview` / `symbols` | ASCII/header scanning, raw RGB555/RGB565/Indexed8 preview, and symbol resolution |
 
 ### `pin2k-desktop`
 
-| Option CLI | Description | Défaut |
+| CLI Option | Description | Default |
 |---|---|---|
 | `--lpt-device <SPEC>` | `auto`, `emulated`, `/dev/parportN` (Linux), `ioport:0x378` (Linux), `serial:<DEV>` | `auto` |
-| `--serial-device <DEV>` | Port série direct (`COM3` sous Windows, `/dev/ttyUSB0` sous Linux) | — |
-| `--serial-baud <BAUD>` | Vitesse UART (9600 à 921600) | `115200` |
-| `--assets-dir <DIR>` | Dossier contenant `gfx/`, `fonts/`, `audio/` et optionnellement `scripts/game_script.json` | — |
-| `--game-script <PATH>` | Chemin explicite vers `game_script.json` (prioritaire sur l'auto-détection) | — |
-| `--db-path <PATH>` | Chemin vers la base JSON locale (`pin2k_db.json` : HSTD, Audits, Adjustments) | `<assets-dir>/pin2k_db.json` |
-| `--debug-mode <MODE>` | Lance directement un écran/mode (`attract:0..19`, `ingame`, `scene:0..13`, `spinner_left`, `bonus`, `diag:colorbar`, …) | — |
-| `--strict-script` | Active l'exécution stricte par `game_script.json` sans fallback Rust | `false` |
-| `--telemetry-overlay` | Affiche la télémétrie lampes/bobines sous l'écran au lieu du plein écran 640×480 | `false` |
-| `--game <TITLE>` | `auto`, `swe1`, `rfm`, ou `homebrew` | `auto` |
-| `--mod <DIR>` | Charge un ou plusieurs dossiers Mod / Homebrew (`mod.json`) | — |
-| `--rom-update <PATH>` | Charge et vérifie une mise à jour ROM (dossier, `.exe` ou `.zip`) | — |
-| `--web-port <PORT>` | Démarre l'interface Web + Debug Console + WebAudio sur `http://<web-bind>:<PORT>` | — |
-| `--web-bind <ADDR>` | Adresse d'écoute HTTP | `0.0.0.0` |
-| `--no-native-audio` | Désactive la lecture audio native OS (utile en CI/headless) | `false` |
-| `--lpt-trace <FILE>` | Enregistre chaque lecture/écriture octet sur le bus parallèle | — |
-| `--events-log <FILE>` | Enregistre chaque `TimestampedEvent` (`GameEvent`) en JSON Lines | — |
-| `--script <NAME>` | Scénario automatique : `none`, `demo`, `rfm-demo`, `podrace`, `admin`, `diagnostics`, `all-sequences` | `none` |
-| `--frames <N>` | Nombre de frames à exécuter (`0` = boucle infinie temps réel) | `60` |
-| `--realtime` | Cadence à 60 Hz (`16 ms`/frame), activé automatiquement avec `--web-port` | `false` |
-| `--screenshot-out <PNG>` | Sauvegarde la dernière image `640×480` en PNG | — |
-| `--frames-out-dir <DIR>` | Exporte chaque frame `frame_0000.png`.. pour encodage vidéo | — |
+| `--serial-device <DEV>` | Direct serial port (`COM3` on Windows, `/dev/ttyUSB0` on Linux) | — |
+| `--serial-baud <BAUD>` | UART baud rate (9600–921600) | `115200` |
+| `--assets-dir <DIR>` | Directory containing `gfx/`, `fonts/`, `audio/`, optional `gfx_hd/` & `scripts/game_script.json` | — |
+| `--hd` | Prefer upscaled HD sprites from `<assets-dir>/gfx_hd/` | `false` |
+| `--window` / `--fullscreen` | Open native 60 Hz `4:3` desktop window or borderless fullscreen (`F11` / `Alt+Enter`) | `false` |
+| `--game-script <PATH>` | Explicit `game_script.json` path | — |
+| `--db-path <PATH>` | Local JSON database path (`pin2k_db.json`: HSTD, Audits, Adjustments) | `<assets-dir>/pin2k_db.json` |
+| `--debug-mode <MODE>` | Launch directly into a screen/mode (`attract:0..19`, `ingame`, `scene:0..13`, `spinner_left`, `bonus`, `diag:colorbar`, …) | — |
+| `--strict-script` | Enforce strict `game_script.json` execution without native Rust rule fallback | `false` |
+| `--telemetry-overlay` | Display playfield lamp/coil telemetry below the display instead of full `640×480` | `false` |
+| `--game <TITLE>` | `auto`, `swe1`, `rfm`, or `homebrew` | `auto` |
+| `--mod <DIR>` | Load one or more Mod / Homebrew directories (`mod.json`) | — |
+| `--rom-update <PATH>` | Load and verify a ROM update package (folder, `.exe`, or `.zip`) | — |
+| `--web-port <PORT>` | Start Web UI + Debug Console + WebAudio on `http://<web-bind>:<PORT>` | — |
+| `--web-bind <ADDR>` | HTTP bind address | `0.0.0.0` |
+| `--no-native-audio` | Disable native OS audio playback (useful in CI/headless) | `false` |
+| `--lpt-trace <FILE>` | Record every parallel-port byte read/write | — |
+| `--events-log <FILE>` | Record every `TimestampedEvent` (`GameEvent`) as JSON Lines | — |
+| `--script <NAME>` | Automated scenario: `none`, `demo`, `rfm-demo`, `podrace`, `admin`, `diagnostics`, `all-sequences` | `none` |
+| `--frames <N>` | Number of frames to run (`0` = run indefinitely) | `60` |
+| `--realtime` | 60 Hz pacing (`16 ms`/frame), auto-enabled with `--web-port` / `--window` / `--fullscreen` | `false` |
+| `--screenshot-out <PNG>` | Save final `640×480` composite frame as PNG | — |
+| `--frames-out-dir <DIR>` | Export every frame `frame_0000.png`.. for video encoding | — |
 
 ---
 
-## 4. Compilation Multiplateforme (Linux & Windows)
+## 4. Cross-Platform Builds (Linux & Windows)
 
-Le workspace ne dépend d'aucune bibliothèque C externe (`openssl`, `sdl2`, etc.) :
-- **Linux (`x86_64-unknown-linux-gnu`)** :
-  ```bash
-  cargo build --release --workspace
-  ```
-- **Windows depuis Windows (`x86_64-pc-windows-msvc`)** :
-  ```powershell
-  cargo build --release --workspace
-  ```
-- **Windows depuis Linux (`x86_64-pc-windows-gnu` avec MinGW-w64)** :
+Zero external C library dependencies (`openssl`, `sdl2`, etc.):
+- **Linux (`x86_64-unknown-linux-gnu`)**: `cargo build --release --workspace`
+- **Windows on Windows (`x86_64-pc-windows-msvc`)**: `cargo build --release --workspace`
+- **Windows from Linux (`x86_64-pc-windows-gnu` via MinGW-w64)**:
   ```bash
   cargo build --release --workspace --target x86_64-pc-windows-gnu
-  # Binaire produit : target/x86_64-pc-windows-gnu/release/pin2k-desktop.exe
+  # Output: target/x86_64-pc-windows-gnu/release/pin2k-desktop.exe
   ```
 
 ---
 
-## 5. Raccourcis Clavier de l'Interface Web (`--web-port`)
+## 5. Keyboard Shortcuts (Native Window & Web UI)
 
-| Touche | Switch logique | Action |
+| Key | Logical Switch | Action |
 |---|---|---|
-| `C` | `64` (`Left Coin`) | Insérer un crédit |
-| `S` | `2` (`Start Button`) | Démarrer une partie / Ajouter un joueur (1–4) |
-| `Z` / `M` | `85` / `84` | Batteur Gauche / Batteur Droit (et rotation `J-E-D-I`) |
-| `X` / `.` | `87` / `86` | Bouton Laser Gauche / Bouton Laser Droit |
-| `L` / `R` | `36` / `37` | Rampe Gauche / Rampe Droite |
-| `H` | `34` | Cible Bouclier Déflecteur |
-| `P` | `32` | Scoop Central (`Shield Popper` → Scènes & Super Jackpot) |
-| `K` | `22` | Soucoupe Gauche (Blocage Multiball Hangar) |
-| `J` | `45` | Couloir Jets (`Skill Shot` / Multiplicateur Bonus) |
-| `1` / `2` / `3` / `4` | `72` / `73` / `74` / `75` | Boutons porte monnayeur : `Escape` / `Down` / `Up` / `Enter` (**Menu Admin**) |
+| `C` | `64` (`Left Coin`) | Insert credit |
+| `S` | `2` (`Start Button`) | Start game / Add player (1–4) |
+| `Z` / `M` | `85` / `84` | Left / Right Flipper (and `J-E-D-I` lane rotation) |
+| `X` / `.` | `87` / `86` | Left / Right Laser Action Button |
+| `L` / `R` | `36` / `37` | Left / Right Ramp Made |
+| `H` | `34` | Deflector Shield Target |
+| `P` | `32` | Center Scoop (`Shield Popper` → Scenes & Super Jackpot) |
+| `K` | `22` | Left Saucer (Hangar Multiball Lock) |
+| `J` | `45` | Jets Rollover (Skill Shot / Bonus Multiplier) |
+| `1` / `2` / `3` / `4` | `72` / `73` / `74` / `75` | Coin door service buttons: `Escape` / `Down` / `Up` / `Enter` (**Admin Menu**) |
+| `F11` / `Alt+Enter` | — | Toggle fullscreen (native window mode) |

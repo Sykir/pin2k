@@ -1,30 +1,30 @@
-# *Star Wars Episode I* (`SWE1 v1.66 / v2.00`) — Inventaire d'extraction ROM
+# *Star Wars Episode I* (`SWE1 v1.66 / v2.00`) — ROM Extraction Inventory
 
-Ce document recense tout ce qui est extrait des ROMs **Star Wars Episode I (`#50069`)** : `swe1_0166.elf` (`v1.66`, XINA `1.13`) et `swe1_0200.elf` (`v2.00`, `14 841` symboles C++).
+Complete inventory of everything extracted from the **Star Wars Episode I (`#50069`)** ROMs: `swe1_0166.elf` (`v1.66`, XINA `1.13`) and `swe1_0200.elf` (`v2.00`, `14,841` C++ symbols, `1,867` Ghidra-decompiled functions across `248` classes).
 
 ---
 
-## 1. Tableau général d'extraction (`SWE1 v1.66 / v2.00`)
+## 1. General Extraction Summary (`SWE1 v1.66 / v2.00`)
 
-| Catégorie | Source dans la ROM | Outil / Méthode | Quantité extraite | Format / Destination |
+| Category | ROM Source | Tool / Method | Extracted Count | Format / Destination |
 |---|---|---|---|---|
-| **Code natif x86 & symboles C++** | Image PRISM décompressée (`B_10000000`) | `pin2k-rom-tool wrap-elf` | `14 841` symboles (`v2.00`) / `15 019` (`v1.66`) | `ELF32 i386` (`swe1_0200.elf`, `swe1_0166.elf`) |
-| **Layouts UI, `Deff*` & coordonnées** | Sections `.text`/`.rodata`/`.data` | `pin2k-rom-tool extract-layout` | `138` classes `Deff*`, `702` `ACD`, `383` `ARD`, `9` persos | `rom_layout_db.json` + [SCREEN_LAYOUT_REFERENCE.md](SCREEN_LAYOUT_REFERENCE.md) |
-| **Table des switches** | `SwitchTable` (`0x002e4580`) | Lecture ELF | `96` switchs logiques (matrice + optos + directs) | `crates/pin2k-core/src/swe1_tables.rs` |
-| **Table des bobines / solénoïdes** | `DriveTable` (`0x002e2f00`) | Lecture ELF | `48` sorties (bobines + flashers + néon) | `crates/pin2k-core/src/swe1_tables.rs` |
-| **Table des lampes** | `LampTable` (`0x002e3380`) | Lecture ELF | Matrices duales `8×8` A & B (`128` lampes) | `crates/pin2k-core/src/swe1_tables.rs` |
-| **Animations & Sprites** | Descripteurs `Animation` + frames RLE | `pin2k-rom-tool extract-assets` | `392` animations (`186` utilisées en Rust) | `gfx/` (PNG) + `gfx_manifest.json` |
-| **Polices bitmap** | Descripteurs `FontData` | `pin2k-rom-tool extract-assets` | `19` polices (`19/19` utilisées) | `fonts/` (PNG) + `fonts_manifest.json` |
-| **Audio (voix, SFX, musiques)** | Banques audio DCS / `pb2kslib` | `pin2k-rom-tool extract-assets` | `689` pistes (`47` utilisées + tourniquets) | `audio/*.ogg` + `sound_manifest.json` |
-| **Attract Mode** | `AttractProcInfo` (`0x002d94d0`) | `extract-layout` + désassemblage | `20` séquences implémentées | `attract.rs` + `attract_render.rs` |
-| **Scènes holoprojecteur** | `Table<scene_info>` (`0x002dc95c` / `0x2e179c`) | `extract-layout` + désassemblage | `14` scènes (intros + fonds) + `SubEscape` | `swe1_rules.rs` + `scene_render.rs` |
-| **Multiballs, HUD & Système** | `DeffScoreDisplay`, `DeffLaserStatusBackground`, `DeffVSpinner`, `Bonus`, `Match`, `HSTD`, `Diagnostic*Deff` | Désassemblage ELF `swe1_0200` | Intégralité des coordonnées, Z et formules | `SWE1_GAME_RULES.md`, `SCREEN_LAYOUT_REFERENCE.md` |
+| **x86 Native Code & C++ Symbols** | Decompressed PRISM image (`B_10000000`) | `pin2k-rom-tool wrap-elf` + Ghidra 12.2 | `14,841` symbols (`v2.00`) / `15,019` (`v1.66`), `1,867` decompiled functions | `ELF32 i386` (`swe1_0200.elf`, `swe1_0166.elf`) |
+| **UI Layouts, `Deff*` & Coordinates** | `.text`/`.rodata`/`.data` | `pin2k-rom-tool extract-layout` | `138` `Deff*` classes, `702` `ACD`, `383` `ARD`, `9` characters | `rom_layout_db.json` + [SCREEN_LAYOUT_REFERENCE.md](SCREEN_LAYOUT_REFERENCE.md) |
+| **Switch Table** | `SwitchTable` (`0x002e4580`) | ELF parser | `96` logical switches (matrix + optos + directs) | `crates/pin2k-core/src/swe1_tables.rs` |
+| **Drive / Solenoid Table** | `DriveTable` (`0x002e2f00`) | ELF parser | `48` outputs (coils + flashers + neon) | `crates/pin2k-core/src/swe1_tables.rs` |
+| **Lamp Table** | `LampTable` (`0x002e3380`) | ELF parser | Dual `8×8` matrices A & B (`128` lamps) | `crates/pin2k-core/src/swe1_tables.rs` |
+| **Animations & Sprites** | `Animation` descriptors + RLE frames | `pin2k-rom-tool extract-assets` | `392` animations (`354 / 392` = **90.3%** wired in Rust) | `gfx/` (PNG) + `gfx_manifest.json` |
+| **Bitmap Fonts** | `FontData` descriptors | `pin2k-rom-tool extract-assets` | `19` fonts (**19 / 19 = 100%** wired) | `fonts/` (PNG) + `fonts_manifest.json` |
+| **DCS-2 Audio (Voices, SFX, Music)** | DCS / `pb2kslib` banks | `pin2k-rom-tool extract-assets` | `689` tracks (**689 / 689 = 100%** indexed in `swe1_audio.rs`) | `audio/*.ogg` + `sound_manifest.json` |
+| **Attract Mode** | `AttractProcInfo` (`0x002d94d0`) | `extract-layout` + disassembly | `20` implemented sequences | `attract.rs` + `attract_render.rs` |
+| **Holoprojector Scenes** | `Table<scene_info>` (`0x002dc95c` / `0x2e179c`) | `extract-layout` + Ghidra | `14` scenes (intros + backgrounds + FX) + `SubEscape` | `swe1_rules.rs` + `scene_render.rs` + `fx/` |
+| **Multiballs, HUD & System** | `DeffScoreDisplay`, `DeffLaserStatusBackground`, `DeffVSpinner`, `Bonus`, `Match`, `HSTD`, `Diagnostic*Deff` | ELF disassembly & Ghidra | All coordinates, Z-orders, and scoring formulas | `SWE1_GAME_RULES.md`, `SCREEN_LAYOUT_REFERENCE.md` |
 
 ---
 
-## 2. Toutes les scènes extraites (`Table<scene_info>` à `0x2e179c`)
+## 2. All Extracted Scenes (`Table<scene_info>` @ `0x2e179c`)
 
-| # | Bitmask | Symbole C++ dans la ROM | Nom affiché | `min_scenes_started` | Classe C++ principale | Classe `Deff` d'arrière-plan |
+| # | Bitmask | ROM C++ Symbol | Display Title | `min_scenes_started` | Main C++ Class | Background `Deff` Class |
 |---|---|---|---|---|---|---|
 | 1 | `0x0001` | `jedi_scene_battle_droids` | Battle Droid Invasion | `0` | `BattleDroidScene` | `DeffBattleDroidSceneBackground` |
 | 2 | `0x0002` | `jedi_scene_musical_chairs` | Mos Espa Cantina (Musical Chairs) | `1` | `MusicalChairsScene` | `MusicalChairsScene` |
@@ -43,25 +43,24 @@ Ce document recense tout ce qui est extrait des ROMs **Star Wars Episode I (`#50
 
 ---
 
-## 3. Modes spéciaux, Multiballs et séquences système (`SWE1 v1.66`)
+## 3. Special Modes, Multiballs & System Sequences
 
-| Type | Classe(s) C++ extraites | Description |
+| Type | Extracted C++ Classes | Description |
 |---|---|---|
-| **Sous-scène Gungan** | `DeffSubEscapeSceneIntro`, `DeffSubEscapeSceneBackground`, `ClassSubEscapeLeffHit` | Poursuite sous-marine sur Naboo (*Sub Escape*) |
-| **Multiball principal** | `Multiball`, `DeffMainMultiballStart`, `DeffMultiballBackground`, `DeffMainMultiballSuperJackpot` | Hangar / Naboo Starfighter Multiball (Jackpot + Super Jackpot) |
-| **Jedi Multiball** | `JediMultiball`, `DeffJediMultiballIntro`, `DeffJediMultiballBackground`, `DeffJediMultiballWin` | Duel au sabre laser contre Darth Maul (complétion J-E-D-I) |
-| **Attract Mode** | `AttractProcInfo` (`20` entrées), `DeffAttractModeBackground`, `DeffAttractModeKahunaLogo`, `DeffAttractModeP2KLogo` | Cycle complet d'attente, logos Williams/Pin2k/Kahuna, HSTD, Jedi Table, Ramp Combo Champion |
-| **Bonus / Fin de bille** | `Bonus`, `DeffBonus`, `LeffBonus`, `BallStartBallSaver` | Calcul des vaisseaux (`build_bonus`) × multiplicateur (`build_bonus_x`) + Ball Saver |
-| **Système & Diagnostics** | `Game`, `GameHooks`, `DeffTilt`, `DeffTiltWarning`, `DeffSlamTilt`, `Diagnostic*Deff` | Gestion des 4 joueurs, Tilt, Slam Tilt, menus opérateur / mires vidéo |
+| **Gungan Sub-Scene** | `DeffSubEscapeSceneIntro`, `DeffSubEscapeSceneBackground`, `ClassSubEscapeLeffHit` | Naboo underwater chase (*Sub Escape*) |
+| **Main Multiball** | `Multiball`, `DeffMainMultiballStart`, `DeffMultiballBackground`, `DeffMainMultiballSuperJackpot` | Hangar / Naboo Starfighter Multiball (Jackpot + Super Jackpot) |
+| **Jedi Multiball** | `JediMultiball`, `DeffJediMultiballIntro`, `DeffJediMultiballBackground`, `DeffJediMultiballWin` | Darth Maul lightsaber duel (triggered on J-E-D-I completion) |
+| **Attract Mode** | `AttractProcInfo` (`20` entries), `DeffAttractModeBackground`, `DeffAttractModeKahunaLogo`, `DeffAttractModeP2KLogo` | Full attract loop, logos, HSTD, Jedi tables, Ramp Combo Champion |
+| **Bonus / End of Ball** | `Bonus`, `DeffBonus`, `LeffBonus`, `BallStartBallSaver` | `build_bonus` × `build_bonus_x` + Ball Saver |
+| **System & Diagnostics** | `Game`, `GameHooks`, `DeffTilt`, `DeffTiltWarning`, `DeffSlamTilt`, `Diagnostic*Deff` | 4-player management, Tilt, Slam Tilt, Operator menus & video test patterns |
 
 ---
 
-## 4. Layouts UI & Écrans Extraits (`swe1_0200.elf` → Rust pur)
+## 4. Extracted UI Layouts (`swe1_0200.elf` → Pure Rust)
 
-L'ensemble des écrans suivants a été reconstruit avec ses coordonnées exactes `640×240` et priorités Z (voir [SCREEN_LAYOUT_REFERENCE.md](SCREEN_LAYOUT_REFERENCE.md)) :
-
-- **HUD permanent en partie** : `DeffScoreDisplay` (`score_display.rs`) + `DeffLaserStatusBackground` (`hud_display.rs`).
-- **Spinners virtuels sur rampe** : `DeffVSpinner` (`vspinner.rs`) avec déclenchement exclusif sur rampe + sons tourniquet `0x03C3`, `0x03C9`, `0x03CA`, `0x03CB`.
-- **Attract Mode complet (20 écrans)** : `AttractProcInfo` (`attract_render.rs`), incluant `DeffAttractModeKahunaLogo` et le cycle 9 couleurs RGB555 du flare (`0x100fc0`).
-- **14 Scènes complètes + Multiballs + Holo Select** : `Deff*SceneIntro` (cadre `anim_jedi_scene_intro_frame` `z=202`) + 14 fonds actifs (`scene_render.rs`).
-- **Écrans Spéciaux & Diagnostics** : `PowerupTestingDeff`, `DeffBonus`, `DeffMatch`, `DeffGameOver`, `DeffGameIntro`, `DeffExtraBallCollected`, `DeffBSBallSaved`, `DeffBuildC3P0Status`, `DeffRampCombo`, `DeffJediMultiballReadyBackground`, `DeffHSTDinitials`, et `Diagnostic{ColorBar,Grid,RGB,Fuse,Switch,Coil,SingleLamp}Deff` (`system_screens.rs`).
+All screens below were reconstructed with exact `640×240` coordinates and Z-priorities (see [SCREEN_LAYOUT_REFERENCE.md](SCREEN_LAYOUT_REFERENCE.md)):
+- **In-game HUD**: `DeffScoreDisplay` (`score_display.rs`) + `DeffLaserStatusBackground` (`hud_display.rs`).
+- **Ramp-only virtual spinners**: `DeffVSpinner` (`vspinner.rs`) with turnstile cues `0x03C3`, `0x03C9`, `0x03CA`, `0x03CB`.
+- **20 Attract Mode screens**: `AttractProcInfo` (`attract_render.rs`), including `DeffAttractModeKahunaLogo` and its 9-color RGB555 flare cycle (`0x100fc0`).
+- **All 14 scenes + Multiballs + Holo Select + FX/Overlays**: isolated 2× `Deff*SceneIntro` bezel intros + 14 active gameplay backgrounds (`scene_render.rs` + `fx/`).
+- **Special screens & Diagnostics**: `PowerupTestingDeff`, `DeffBonus`, `DeffMatch`, `DeffGameOver`, `DeffGameIntro`, `DeffExtraBallCollected`, `DeffBSBallSaved`, `DeffBuildC3P0Status`, `DeffRampCombo`, `DeffJediMultiballReadyBackground`, `DeffHSTDinitials`, and `Diagnostic{ColorBar,Grid,RGB,Fuse,Switch,Coil,SingleLamp}Deff` (`system_screens.rs`).

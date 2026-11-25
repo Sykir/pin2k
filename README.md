@@ -1,110 +1,114 @@
-# Pinball 2000 → Portage Natif Rust (`pin2k`)
+# Pinball 2000 → Native Rust Port (`pin2k`)
 
-Réécriture native **clean-room** en Rust 64-bit de la plateforme **Williams Pinball 2000** (*Star Wars Episode I* [`#50069`, 1999] et *Revenge From Mars* [`#50070`, 1999]), conçue pour fonctionner sous **Linux et Windows** sans dépendance C externe.
+Clean-room native 64-bit Rust rewrite of the **Williams Pinball 2000** platform (*Star Wars Episode I* [`#50069`, 1999] and *Revenge From Mars* [`#50070`, 1999]), designed to run on **Linux and Windows** with zero external C library dependencies.
 
-> **Frontière légale / Clean-Room :** Ce dépôt ne contient aucune ROM propriétaire, image, police, animation ou piste audio. Toutes les ressources et scripts de gamecode sont extraits localement par l'utilisateur à partir de ses propres dumps légitimes (`swe1`, `rfm`, paquets de mise à jour `.exe`/`.zip` et `{jeu}_sound.bin`).
-
----
-
-## Fonctionnalités principales
-
-- **Reconstruction, Vérification & Extraction Complète des Assets (`pin2k-rom-tool`)** :
-  - Entrelacement 16-bit des 8 Mask ROMs PRISM (`U100..U107` → 64 Mio) et des ROMs audio DCS-2 (`U109/U110` → 8 Mio).
-  - Prise en charge native des **mises à jour officielles et communautaires** (dossiers décompressés, installeurs `.exe` auto-extractibles, archives `.zip`) : `list-updates`, `assemble-update`, `verify`, `wrap-elf` (ELF32 x86 symbolisé).
-  - **Extraction complète des assets (`extract-assets`)** :
-    - **Animations & vidéos** : décode **toutes** les frames par défaut (codecs `0, 1, 20, 21, 22, 23, 30, 42, 43, 44, 45` avec transparence RGB555 `0x7C1F`) → `gfx/*.png` + `gfx/gfx_manifest.json`.
-    - **Polices bitmap (`FontData` / `Character`)** : extrait toutes les polices `font_*_data_ptr` en atlas PNG RGBA8888 + métriques par glyphe → `fonts/*.png` + `fonts/fonts_manifest.json`.
-    - **Audio DCS-2 (`pb2kslib`)** : déchiffrement XOR `0x3A` et extraction des pistes Vorbis → `audio/*.ogg` + `audio/sound_manifest.json`.
-- **Extraction du Gamecode & des Layouts UI (`pin2k-rom-tool`)** :
-  - `extract-gamecode` : lit `SwitchTable` (96 switchs), `DriveTable` (48 bobines/flashers/néon) et `LampTable` (128 lampes) depuis `.data`, désassemble les handlers x86-32 (`lift_x86_calls`) et génère **`game_script.json`**.
-  - `extract-layout` : parse l'ELF32 x86 (`game.rom` + symboles) en Rust pur (zéro `unsafe`) et extrait **`rom_layout_db.json`** (`14 841` symboles, `138` classes `Deff*`, `9` personnages joueurs, `14` scènes, `20` écrans Attract, `702` `ACD`, `383` `ARD` : positions, priorités Z, polices et couleurs RGB555).
-  - Décompilation **Ghidra 12.2** (`work/swe1_0200.elf`, `1 867` fonctions / `248` classes) portée nativement en Rust pur dans `swe1_audio.rs` (`382` pools `ARD` / `695` `ACD`, **100 % des `689` pistes DCS-2 indexées**), `machine/leff.rs` (14 chorégraphies lampes `LeffKind`) et `machine/swe1_playfield.rs`.
-- **Moteur de Jeu & Rendu Fidèle au Matériel (`pin2k-core` + `pin2k-desktop`)** :
-  - Compositeur logiciel **`640×240` → `640×480`** trié par priorité Z (`BaseViewManager`), avec miroir `flip_x`, mise à l'échelle, teinte monochrome RGB555 et ombres sur les **19 polices bitmap ROM**.
-  - Écrans authentiques en Rust pur pour *Star Wars Episode I* (`#50069`) : barre joueurs & sabres laser (`DeffScoreDisplay`), compteur de lasers Naboo (`DeffLaserStatusBackground`), spinners virtuels déclenchés uniquement sur rampe avec son de tourniquet (`DeffVSpinner`), **20 écrans Attract Mode** (logo Star Wars + rayons lumineux colorés `DeffAttractModeKahunaLogo`), **14 scènes complètes** (intros + décors actifs), Multiballs, `DeffBonus`, `DeffMatch`, `DeffGameOver`, `DeffHSTDinitials`, `DeffTilt`, et tous les écrans **Diagnostics / Admin** (`align`, `colorbar`, `grid`, `rgb`, `fuse`, `switch`, `coil`, `lamp`).
-  - Règles *Revenge From Mars* (`#50070`), `ScriptRuntime`, Mods/Homebrew (`mod.json`), bus d'événements JSONL (`--events-log`, `/api/events`), audio pur-Rust (`lewton` → `winmm.dll` / `aplay`), et **Console Web Debug à 5 onglets** (`--web-port`).
-- **Communication Matérielle Power Driver Board (`pin2k-hal`)** :
-  - Protocole filaire exact PDB sur port parallèle Linux (`/dev/parportN` `ppdev`, `/dev/port` `0x378`), pont Série Windows/Linux (`COMx`, `/dev/ttyUSB0`), et émulateur filaire `VirtualPdbPort` + `--lpt-trace`.
+> **Legal / Clean-Room Boundary:** This repository contains no proprietary ROMs, images, fonts, animations, or audio tracks. All assets and gamecode scripts are extracted locally by the user from their own legitimate dumps (`swe1`, `rfm`, official/community `.exe`/`.zip` update packages, and `{game}_sound.bin`).
 
 ---
 
-## Architecture du Workspace
+## Key Features
 
-| Crate | Rôle | Documentation |
+- **ROM Reconstruction, Verification & Full Asset Extraction (`pin2k-rom-tool`)**:
+  - 16-bit word interleaving of the 8 PRISM Mask ROMs (`U100..U107` → 64 MiB) and DCS-2 audio ROMs (`U109/U110` → 8 MiB).
+  - Native support for **official and community update bundles** (extracted directories, self-extracting `.exe` installers, `.zip` archives): `list-updates`, `assemble-update`, `verify`, `wrap-elf` (symbolized x86 ELF32).
+  - **Complete asset extraction (`extract-assets`)**:
+    - **Animations & video clips**: decodes **all** frames by default (codecs `0, 1, 20, 21, 22, 23, 30, 42, 43, 44, 45` with RGB555 `0x7C1F` transparency) → `gfx/*.png` + `gfx/gfx_manifest.json`.
+    - **Bitmap fonts (`FontData` / `Character`)**: extracts all `font_*_data_ptr` bitmap fonts into RGBA8888 PNG atlases + per-glyph metrics → `fonts/*.png` + `fonts/fonts_manifest.json`.
+    - **DCS-2 audio (`pb2kslib`)**: XOR `0x3A` decryption and Vorbis track extraction → `audio/*.ogg` + `audio/sound_manifest.json`.
+  - **HD Sprite Upscaler (`upscale-assets`)**: pure-Rust edge-padded `Lanczos3` / `CatmullRom` / `Nearest` upscaling (`2×`–`4×`) into `gfx_hd/gfx_manifest.json` without dark/magenta fringes.
+- **Gamecode & UI Layout Extraction (`pin2k-rom-tool` + Ghidra 12.2)**:
+  - `extract-gamecode`: reads `SwitchTable` (96 switches), `DriveTable` (48 coils/flashers/neon), and `LampTable` (128 lamps) from `.data`, disassembles x86-32 handlers (`lift_x86_calls`), and generates **`game_script.json`**.
+  - `extract-layout`: parses the symbolized x86 ELF32 in pure Rust (zero `unsafe`) and exports **`rom_layout_db.json`** (`14,841` symbols, `138` `Deff*` classes, `9` player characters, `14` scenes, `20` Attract screens, `702` `ACD`, `383` `ARD`: coordinates, Z-orders, fonts, and RGB555 colors).
+  - **Ghidra 12.2** headless decompilation (`work/swe1_0200.elf`, `1,867` functions across `248` classes) ported natively to pure Rust in `swe1_audio.rs` (`382` `ARD` pools / `695` `ACD`, **100% of `689` DCS-2 tracks indexed**), `machine/leff.rs` (`14` lamp choreographies), `machine/fx/` (explosions, victories & overlays — **90.3% `gfx/` coverage**), and `machine/swe1_playfield.rs`.
+- **Hardware-Faithful Game Engine & Desktop Runtime (`pin2k-core` + `pin2k-desktop`)**:
+  - Z-sorted **`640×240` → `640×480`** software compositor (`BaseViewManager`), supporting `flip_x`, scaling, RGB555 monochrome tint, HD sprites (`--hd`), and drop shadows across all **19 ROM bitmap fonts**.
+  - Native 60 Hz desktop window & fullscreen (`--window` / `--fullscreen`, `winit` + `softbuffer`, `4:3` letterboxing, `F11` / `Alt+Enter`) alongside a **5-tab Web Debug Console** (`--web-port`).
+  - Authentic pure-Rust *Star Wars Episode I* (`#50069`) screens: player bar & lightsabers (`DeffScoreDisplay`), Naboo laser HUD (`DeffLaserStatusBackground`), ramp-only virtual spinners with turnstile sound (`DeffVSpinner`), **20 Attract Mode screens** (Star Wars logo + 9-color light rays `DeffAttractModeKahunaLogo`), **all 14 scenes** (isolated 2× bezel intros + active gameplay + unified 3D *Boonta Eve Podrace*), Multiballs, `DeffBonus`, `DeffMatch`, `DeffGameOver`, `DeffHSTDinitials`, `DeffTilt`, and full **Diagnostics / Admin** screens (`align`, `colorbar`, `grid`, `rgb`, `fuse`, `switch`, `coil`, `lamp`).
+  - *Revenge From Mars* (`#50070`) rules, complete `ScriptRuntime` (per-player `player_vars` 1–4P, timers, modes), Mods/Homebrew (`mod.json`), JSONL event bus (`--events-log`, `/api/events`), and pure-Rust OGG/PCM audio (`lewton` → `winmm.dll` / `aplay` + WebAudio).
+- **Power Driver Board Hardware Abstraction (`pin2k-hal`)**:
+  - Wire-exact PDB protocol over Linux parallel port (`/dev/parportN` `ppdev`, `/dev/port` `0x378`), cross-platform Windows/Linux Serial UART bridge (`COMx`, `/dev/ttyUSB0`), and `VirtualPdbPort` + `--lpt-trace`.
+
+---
+
+## Workspace Architecture
+
+| Crate | Role | Documentation |
 |---|---|---|
-| `crates/pin2k-rom-tool` | Reconstruction PRISM/DCS, mises à jour `.exe`/`.zip`, ELF32, extraction `.png`/polices/`.ogg`, `extract-gamecode` | [ARCHITECTURE_GUIDE.md](docs/ARCHITECTURE_GUIDE.md) |
-| `crates/pin2k-hal` | Traits matériel/vidéo/audio, `PdbDriver`, `LinuxPpdevPort`, `SerialPdbPort` (Win/Linux), `VirtualPdbPort` | [HARDWARE_NOTES.md](docs/HARDWARE_NOTES.md) |
-| `crates/pin2k-core` | Machine 60 Hz, `ScriptRuntime` (`game_script.json`), tables/règles SWE1 & RFM, Mods, `GameEvent`, Admin | [GAME_SCRIPT_REFERENCE.md](docs/GAME_SCRIPT_REFERENCE.md) |
-| `crates/pin2k-desktop` | Exécutable natif Windows/Linux, compositeur `640×480`, audio natif, serveur Web/WebAudio | [ARCHITECTURE_GUIDE.md](docs/ARCHITECTURE_GUIDE.md) |
+| `crates/pin2k-rom-tool` | PRISM/DCS reconstruction, `.exe`/`.zip` updates, ELF32, `.png`/fonts/`.ogg` extraction, `extract-gamecode`, `extract-layout`, `upscale-assets` | [ARCHITECTURE_GUIDE.md](docs/ARCHITECTURE_GUIDE.md) |
+| `crates/pin2k-hal` | Hardware/video/audio traits, `PdbDriver`, `LinuxPpdevPort`, `SerialPdbPort` (Win/Linux), `VirtualPdbPort` | [HARDWARE_NOTES.md](docs/HARDWARE_NOTES.md) |
+| `crates/pin2k-core` | 60 Hz machine, `ScriptRuntime`, SWE1 & RFM rules/tables, `Leff` & `FX` engines, Mods, `GameEvent`, Admin | [GAME_SCRIPT_REFERENCE.md](docs/GAME_SCRIPT_REFERENCE.md) |
+| `crates/pin2k-desktop` | Native Windows/Linux runtime, `640×480` compositor, native window (`--window`/`--fullscreen`), native audio, Web Debug Console | [ARCHITECTURE_GUIDE.md](docs/ARCHITECTURE_GUIDE.md) |
 
 ---
 
-## Démarrage Rapide (Pas à Pas)
+## Quick Start (Step by Step)
 
-### 1. Compiler le projet (Linux & Windows)
+### 1. Build the Project (Linux & Windows)
 
 ```bash
-# Compilation native release (Linux ou Windows)
+# Native release build (Linux or Windows)
 cargo build --release --workspace
 
-# Lancer tous les tests unitaires
+# Run all unit tests
 cargo test --workspace
 
-# Compilation croisée Windows depuis Linux
+# Cross-compile for Windows from Linux
 cargo build --release --workspace --target x86_64-pc-windows-gnu
-# (ou vérification MSVC : cargo check --workspace --target x86_64-pc-windows-msvc)
+# (or MSVC check: cargo check --workspace --target x86_64-pc-windows-msvc)
 ```
 
-### 2. Reconstruire les ROMs, Extraire Tous les Assets & le Gamecode
+### 2. Reconstruct ROMs, Extract All Assets & Gamecode
 
 ```bash
-# A. Reconstruire la ROM PRISM plate (64 Mio) et la ROM DCS (8 Mio)
+# A. Reconstruct the flat PRISM ROM (64 MiB) and DCS ROM (8 MiB)
 ./target/release/pin2k-rom-tool reconstruct \
-  --input-dir /chemin/vers/roms --prefix swe1_ \
+  --input-dir /path/to/roms --prefix swe1_ \
   --output ./work/swe1_prism_flat.bin \
   --dcs-output ./work/swe1_dcs_flat.bin
 
-# B. Extraire TOUTES les animations (.png), polices (fonts/*.png) et pistes audio (.ogg)
+# B. Extract ALL animations (.png), bitmap fonts (fonts/*.png), and audio tracks (.ogg)
 ./target/release/pin2k-rom-tool extract-assets \
   --prism-flat ./work/swe1_prism_flat.bin \
-  --update /chemin/vers/updates/pin2000_50069_0200_02262016_B_10000000 \
-  --sound-bin /chemin/vers/roms/swe1_sound.bin \
+  --update /path/to/updates/pin2000_50069_0200_02262016_B_10000000 \
+  --sound-bin /path/to/roms/swe1_sound.bin \
   --output-dir ./work/swe1_assets
 
-# C. Extraire le gamecode (tables, handlers x86, attract, modes, règles) en script JSON
+# C. Extract gamecode (hardware tables, x86 handlers, attract, modes, rules) to JSON
 ./target/release/pin2k-rom-tool extract-gamecode \
-  --update /chemin/vers/updates/pin2000_50069_0200_02262016_B_10000000 \
+  --update /path/to/updates/pin2000_50069_0200_02262016_B_10000000 \
   --prism-flat ./work/swe1_prism_flat.bin \
   --output-dir ./work/swe1_assets/scripts
 
-# D. Extraire tous les layouts UI, coordonnées, polices et priorités Z depuis l'ELF
+# D. Extract all UI layouts, coordinates, fonts, and Z-orders from ELF32
 ./target/release/pin2k-rom-tool extract-layout \
   --elf ./work/swe1_0200.elf \
   --output-dir ./work/swe1_assets/scripts
+
+# E. (Optional) Generate edge-padded 2x HD sprites in gfx_hd/
+./target/release/pin2k-rom-tool upscale-assets \
+  --assets-dir ./work/swe1_assets --scale 2
 ```
 
-### 3. Lancer le Jeu (`pin2k-desktop`)
+### 3. Run the Game (`pin2k-desktop`)
 
 ```bash
-# Mode bureau interactif avec assets + scripts auto-détectés (navigateur http://127.0.0.1:8080)
+# Native 60 Hz desktop window (or --fullscreen, optionally with --hd)
 ./target/release/pin2k-desktop \
   --assets-dir ./work/swe1_assets \
-  --web-port 8080 \
-  --frames 0
+  --window --frames 0
 
-# Ou avec un fichier de script explicite
+# Interactive Web Cabinet + 5-tab Debug Console (browser http://127.0.0.1:8080)
 ./target/release/pin2k-desktop \
   --assets-dir ./work/swe1_assets \
-  --game-script ./work/swe1_assets/scripts/game_script.json \
   --web-port 8080 --frames 0
 
-# Mode flipper réel Linux via port parallèle (/dev/parport0)
+# Real Linux cabinet via parallel port (/dev/parport0)
 ./target/release/pin2k-desktop \
   --lpt-device /dev/parport0 \
   --assets-dir ./work/swe1_assets \
-  --frames 0 --realtime
+  --fullscreen --frames 0
 
-# Mode pont Série (Windows COM3 ou Linux /dev/ttyUSB0)
+# Serial UART bridge mode (Windows COM3 or Linux /dev/ttyUSB0)
 ./target/release/pin2k-desktop \
   --serial-device COM3 --serial-baud 115200 \
   --assets-dir ./work/swe1_assets \
@@ -112,14 +116,14 @@ cargo build --release --workspace --target x86_64-pc-windows-gnu
   --web-port 8080 --frames 0
 ```
 
-### 4. Scénarios de Démonstration, Mode Debug & Captures Automatisées
+### 4. Demo Scenarios, Debug Modes & Automated Captures
 
 ```bash
 ./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --script demo --frames 280 --screenshot-out ./work/demo.png
 ./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --script podrace --frames 285 --frames-out-dir ./work/podrace_frames
 ./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --script admin --frames 48 --screenshot-out ./work/admin.png
 
-# Lancement direct d'écrans / scènes / diagnostics via `--debug-mode`
+# Direct launch of screens / scenes / diagnostics via `--debug-mode`
 ./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode attract:0 --frames 90 --screenshot-out ./work/kahuna.png
 ./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode spinner_left --frames 25 --screenshot-out ./work/spinner.png
 ./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode scene:12 --frames 250 --screenshot-out ./work/r2d2.png
@@ -129,21 +133,21 @@ cargo build --release --workspace --target x86_64-pc-windows-gnu
 
 ---
 
-## Documentation Complète
+## Complete Documentation
 
-- **[Référence des Écrans, Layouts & Console Debug (`docs/SCREEN_LAYOUT_REFERENCE.md`)](docs/SCREEN_LAYOUT_REFERENCE.md)**
-- **[Guide d'Architecture, Compilation & CLI (`docs/ARCHITECTURE_GUIDE.md`)](docs/ARCHITECTURE_GUIDE.md)**
-- **[Référence du Format `game_script.json` & Extraction Gamecode (`docs/GAME_SCRIPT_REFERENCE.md`)](docs/GAME_SCRIPT_REFERENCE.md)**
-- **[Tableau Croisé Complet des Assets & Utilisation (`docs/ASSETS_MATRIX.md`)](docs/ASSETS_MATRIX.md)**
-- **[Inventaire d'Extraction ROM SWE1 (`docs/SWE1_EXTRACTION_INVENTORY.md`)](docs/SWE1_EXTRACTION_INVENTORY.md)** & **[Règles SWE1 (`docs/SWE1_GAME_RULES.md`)](docs/SWE1_GAME_RULES.md)**
-- **[Inventaire d'Extraction ROM RFM (`docs/RFM_EXTRACTION_INVENTORY.md`)](docs/RFM_EXTRACTION_INVENTORY.md)** & **[Règles RFM (`docs/RFM_GAME_RULES.md`)](docs/RFM_GAME_RULES.md)**
-- **[Étude Technique : Upscaling & Rendu HD (`docs/HD_UPSCALING_GUIDE.md`)](docs/HD_UPSCALING_GUIDE.md)**
-- **[Roadmap & TODO avec pourcentages (`docs/TODO.md`)](docs/TODO.md)**
-- **[Référence Matérielle, Formats ROM & Protocole PDB (`docs/HARDWARE_NOTES.md`)](docs/HARDWARE_NOTES.md)**
+- **[Screen Layouts, Coordinates & Debug Console Reference (`docs/SCREEN_LAYOUT_REFERENCE.md`)](docs/SCREEN_LAYOUT_REFERENCE.md)**
+- **[Architecture, Build & CLI Guide (`docs/ARCHITECTURE_GUIDE.md`)](docs/ARCHITECTURE_GUIDE.md)**
+- **[`game_script.json` Format & Gamecode Extraction Reference (`docs/GAME_SCRIPT_REFERENCE.md`)](docs/GAME_SCRIPT_REFERENCE.md)**
+- **[Complete Asset Cross-Reference & Code Coverage Matrix (`docs/ASSETS_MATRIX.md`)](docs/ASSETS_MATRIX.md)**
+- **[SWE1 ROM Extraction Inventory (`docs/SWE1_EXTRACTION_INVENTORY.md`)](docs/SWE1_EXTRACTION_INVENTORY.md)** & **[SWE1 Game Rules (`docs/SWE1_GAME_RULES.md`)](docs/SWE1_GAME_RULES.md)**
+- **[RFM ROM Extraction Inventory (`docs/RFM_EXTRACTION_INVENTORY.md`)](docs/RFM_EXTRACTION_INVENTORY.md)** & **[RFM Game Rules (`docs/RFM_GAME_RULES.md`)](docs/RFM_GAME_RULES.md)**
+- **[Technical Study: HD Upscaling & Rendering (`docs/HD_UPSCALING_GUIDE.md`)](docs/HD_UPSCALING_GUIDE.md)**
+- **[Roadmap, Playability Score & TODO (`docs/TODO.md`)](docs/TODO.md)**
+- **[Hardware Reference, ROM Formats & PDB Protocol (`docs/HARDWARE_NOTES.md`)](docs/HARDWARE_NOTES.md)**
 
 ---
 
-## Licence & Mentions Légales
+## License & Legal Notice
 
-- **Licence du code source** : double licence **[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)**.
-- **Non-affiliation** : ce projet communautaire est indépendant et n'est ni affilié, ni approuvé, ni sponsorisé par **Williams Electronics**, **Planetary Pinball**, **Lucasfilm Ltd.** ou **The Walt Disney Company**. *Pinball 2000*, *Star Wars* et *Revenge From Mars* sont des marques déposées de leurs propriétaires respectifs, citées uniquement à des fins d'interopérabilité et de préservation matérielle.
+- **Source code license**: dual-licensed under **[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)**.
+- **Non-affiliation**: this independent community project is not affiliated with, endorsed by, or sponsored by **Williams Electronics**, **Planetary Pinball**, **Lucasfilm Ltd.**, or **The Walt Disney Company**. *Pinball 2000*, *Star Wars*, and *Revenge From Mars* are registered trademarks of their respective owners, cited solely for interoperability and hardware preservation.

@@ -1,71 +1,58 @@
-# Étude Technique : Upscaling & Rendu « HD » dans `pin2k`
+# Technical Study: HD Upscaling & Rendering in `pin2k`
 
-Ce document analyse les options techniques, contraintes (transparence RGB555, mémoire, horloge FPS) et recommandations pour passer du rendu natif **`640×240` → `640×480`** à un rendu **HD (`1280×960`, `1920×1080` ou `4K`)** dans `pin2k`.
-
----
-
-## 1. Contraintes du Pipeline Actuel
-
-- **Résolution native ROM & Compositeur Z-trié** : la carte PRISM / MediaGX génère une image **`640×240` RGB555 (15 bits)** doublée verticalement en **`640×480`** (scan-doubler pour la vitre Pepper's Ghost du flipper). `SoftwareCompositor` implémente le tri Z complet (`BaseViewManager`) avec miroir `flip_x`, teinte monochrome RGB555 et rendu des **19 polices bitmap ROM** avec ombres.
-- **Films vs Sprites** :
-  - Les films d'intro (codec `30`, `220×160` @ 15 fps, ex. `anim_podrace_intro_movie`, `anim_battle_droid_intro_battle`) sont affichés derrière le cadre métallique `anim_jedi_scene_intro_frame` (`z=202`) qui masque proprement leurs bords.
-  - Les cinématiques plein écran `320×240` (ex. `anim_darth_maul_game_over`, `anim_match_movie`, `anim_extra_ball_show`, `anim_multiball_start_movie`) sont étirées **`scale_x = 2`** en `640×240`.
-  - Les sprites et décors (codecs `0, 1, 20..23, 42..45`) utilisent la couleur clé **`0x7C1F` (magenta)** convertie en canal alpha RGBA (`0` ou `255`).
-- **Mémoire (`LoadedAnim`)** : actuellement `compositor.rs` décode à la demande toutes les frames d'une animation et les conserve en RAM (`decoded_frames: Vec<RgbaImage>`).
+This document analyzes the technical options, constraints (RGB555 transparency, RAM budget, FPS timing), and implementation plan for upgrading `pin2k` from native **`640×240` → `640×480`** to **HD (`1280×960`, `1920×1080`, or `4K`)**.
 
 ---
 
-## 2. Les Deux Approches d'Upscaling
+## 1. Current Pipeline Constraints
 
-### Approche A — Upscaling Offline des Assets (`gfx_hd/` + Packs HD)
+- **Native ROM resolution & Z-sorted compositor**: PRISM / MediaGX renders **`640×240` RGB555 (15-bit)**, vertically scan-doubled to **`640×480`** for the cabinet Pepper's Ghost reflection. `SoftwareCompositor` implements full Z-sorting (`BaseViewManager`) with `flip_x`, RGB555 monochrome tint, and all **19 ROM bitmap fonts** with drop shadows.
+- **Movies vs Sprites**:
+  - Scene intro movies (codec `30`, `220×160` @ 15 fps) are horizontally doubled (`scale_x = 2` → `440×160`) inside `anim_jedi_scene_intro_frame` (`z = 202`).
+  - Fullscreen `320×240` cinematics (`anim_darth_maul_game_over`, `anim_match_movie`, `anim_extra_ball_show`, `anim_multiball_start_movie`) are stretched **`scale_x = 2`** to `640×240`.
+  - Sprites and backgrounds (codecs `0, 1, 20..23, 42..45`) use transparent key **`0x7C1F` (magenta)** mapped to RGBA alpha (`0` or `255`).
+- **Memory (`LoadedAnim`)**: `compositor.rs` lazily decodes and caches frames in RAM (`decoded_frames: Vec<RgbaImage>`).
 
-Consiste à pré-calculer des versions HD (`2×` = `1280×480`, `3×` = `1920×720`) des `.png` extraits :
+---
 
-| Type d'asset | Algorithme recommandé | Pourquoi |
+## 2. Two Complementary Upscaling Approaches
+
+### Approach A — Offline Asset Upscaling (`pin2k-rom-tool upscale-assets` → `gfx_hd/`)
+
+Pre-computes HD versions (`2×`–`4×`) of extracted `.png` assets:
+
+| Asset Type | Recommended Algorithm | Rationale |
 |---|---|---|
-| **Sprites 2D / UI / Icônes** (`comp 0, 1, 20..23`) | **xBRZ** / **Scale2x** / **HQx** | Lisse les escaliers pixel-art en préservant les contours nets, sans flou. |
-| **Films 3D pré-rendus** (`comp 30` @ 15 fps, `220×160`) | **Real-ESRGAN / Waifu2x** ou **Lanczos + Deband** | Reconstruit les textures 3D et réduit le banding 15-bit RGB555. |
-| **Polices Bitmap (`fonts/`)** | **xBRZ 2×/3×** ou remplacement TTF/OTF | Garde des textes parfaitement lisibles à haute résolution. |
+| **2D Sprites / UI / Icons** (`comp 0, 1, 20..23`) | **Edge-padded Lanczos3 / xBRZ** | Smooths pixel stair-stepping while keeping crisp silhouettes. |
+| **Pre-rendered 3D Movies** (`comp 30` @ 15 fps, `220×160`) | **Lanczos3 / CatmullRom** or AI (**Real-ESRGAN**) | Reconstructs 3D detail and reduces 15-bit RGB555 banding. |
+| **Bitmap Fonts (`fonts/`)** | **2×/3× upscaling** or TTF/OTF override | Maintains sharp readability at high resolution. |
 
-#### Piège critique : Franges Alpha (`0x7C1F` / halos colorés)
-Un rescale classique (bilinéaire, bicubique, Lanczos, IA) appliqué directement sur un PNG RGBA mélange les pixels opaques avec le noir/magenta des pixels transparents (`alpha = 0`), créant un halo sale autour des sprites.
+#### Critical Pitfall: Alpha Fringes (`0x7C1F` dark/magenta halos)
+Naive multi-tap resizing on RGBA PNGs blends opaque silhouette colors with black/magenta transparent pixels (`alpha = 0`), creating dark or colored fringes.
 
-**Solution obligatoire** pour tout upscaling offline :
-1. **Edge-padding (dilatation RGB)** : propager la couleur des pixels opaques sur les pixels transparents voisins avant de redimensionner.
-2. **Séparation RGB / Alpha** : upscaler la couche RGB (avec l'algorithme choisi) et le canal Alpha séparément (ou en alpha pré-multiplié).
-3. **Recomposition** : réassembler RGBA et, pour les sprites nets, appliquer un léger seuillage alpha si nécessaire.
+**Implemented solution (`crates/pin2k-rom-tool/src/upscaler.rs`)**:
+1. **Transparent RGB edge-padding (`edge_pad_transparent_rgb`)**: dilates RGB values from opaque 8-neighbors into adjacent `alpha == 0` pixels for 2 passes before resizing.
+2. **High-quality kernel resize**: `Lanczos3`, `CatmullRom`, or `Nearest` (`2×`–`4×`).
+3. **Crisp silhouette alpha thresholding**: optional binary alpha restoration (`--soft-alpha` to preserve smooth alpha) so 1-bit Pinball 2000 silhouettes remain halo-free.
 
-#### Contrainte Mémoire (RAM)
-- En `640×240`, 1 frame RGBA = `614 Ko`.
-- En `3×` (`1920×720`), 1 frame RGBA = **`5,5 Mo`** (`9×` plus lourd). Une animation de 100 frames (ex. `anim_podrace_1`) passerait à **550 Mo** en RAM si toutes les frames restaient en cache.
-- **Prérequis** : ajouter un **cache LRU borné** (ex. max 128 Mo ou 64 frames en mémoire) dans `LoadedAnim` avant d'activer des packs `3×`/`4×`.
+#### Memory Budget (RAM)
+- At `640×240`, 1 RGBA frame = `614 KiB`.
+- At `3×` (`1920×720`), 1 RGBA frame = **`5.5 MiB`** (`9×` larger). Adding a **bounded LRU frame cache** (e.g., max 128 MiB) in `LoadedAnim` is recommended before enabling full-set `3×`/`4×` packs.
 
 ---
 
-### Approche B — Upscaling Temps Réel dans `pin2k-desktop`
+### Approach B — Real-Time Upscaling in `pin2k-desktop`
 
-| Variante | Où | Avantages | Limites |
+| Variant | Location | Pros | Limits |
 |---|---|---|---|
-| **WebGL2 Shader dans le navigateur (`web_ui.rs`)** | Côté client HTTP | **0 coût CPU serveur**, flux `/frame.png` reste en `640×240` léger, shaders **xBRZ / Bicubic / Scanlines CRT** instantanés à 60 Hz. | Uniquement pour le mode Web (`--web-port`). |
-| **Compositor CPU HD (`compositor.rs`)** | CPU Rust | Fonctionne sans GPU ni fenêtre OS (`--screenshot-out`, `--frames-out-dir`). | Coût CPU `4×` à `9×` plus élevé sur l'encodage PNG et le blitting logiciel. |
-| **Post-traitement GPU natif (`wgpu`)** | GPU Rust (Win/Linux) | Rendu natif `1080p`/`4K` à 60 fps avec shaders xBRZ + CRT. | Ajoute une dépendance GPU (`wgpu`/`winit`) au runtime headless actuel. |
+| **WebGL2 Shaders (`web_ui.html`)** | Browser client | **Zero server CPU cost**, lightweight `/frame.png` stream, instant **xBRZ / Bicubic / CRT Scanlines** at 60 Hz. | Web mode (`--web-port`) only. |
+| **Native Window (`window.rs`)** | `winit` + `softbuffer` | Zero C deps, `4:3` letterboxing, `--hd` (`gfx_hd/`) supersampling. | Software scaling on CPU. |
+| **Native GPU Post-Processing (`wgpu`)** | Rust GPU (Win/Linux) | Native `1080p`/`4K` at 60 fps with xBRZ + CRT shaders. | Adds GPU pipeline dependency. |
 
 ---
 
-## 3. Recommandation pour `pin2k` (Plan d'évolution)
+## 3. Implementation Status
 
-1. **Étape 1 — Gain immédiat sans surcoût CPU : Shaders WebGL2 dans `web_ui.rs`**
-   - Conserver le flux interne `640×240` côté serveur et proposer un sélecteur de rendu dans la page Web : `Native Pixel`, `HD Smooth (Bicubic)`, `HD Pixel (xBRZ)`, `CRT Scanlines`.
-2. **Étape 2 — Support des Packs HD (`gfx_hd/` + cache LRU)**
-   - Permettre à `SoftwareCompositor` de charger un dossier optionnel `gfx_hd/` (prioritaire sur `gfx/`, avec facteur d'échelle détecté automatiquement via `width / native_width`) et borner `decoded_frames` avec un cache LRU.
-3. **Étape 3 — Outil d'upscaling intégré (`pin2k-rom-tool upscale-assets`)**
-   - Ajouter une sous-commande pur-Rust (ex. `xBRZ` + `Lanczos3` avec *edge-padding* alpha automatique) générant `gfx_hd/` et `gfx_manifest.json` directement depuis les assets extraits.
-
----
-
-## Conclusion
-
-**Oui, un rendu HD est tout à fait réalisable** sans casser l'architecture clean-room ni les performances :
-- Pour les **sprites** : **xBRZ + edge-padding alpha** (offline ou shader).
-- Pour les **films `220×160` 15 fps** : **Lanczos / IA (Real-ESRGAN)** en pack `gfx_hd/` optionnel + **cache LRU** dans `compositor.rs`.
-- Pour l'**affichage Web** : un **shader WebGL2** côté client permet déjà d'obtenir un rendu HD lissé ou CRT immédiatement sans alourdir `pin2k-desktop`.
+1. **[Done] Built-in Offline Upscaler (`pin2k-rom-tool upscale-assets`)**: pure-Rust edge-padded `Lanczos3`/`CatmullRom`/`Nearest` generator writing `gfx_hd/gfx_manifest.json`.
+2. **[Done] `--hd` Flag in `pin2k-desktop`**: `SoftwareCompositor::load_hd_assets()` loads `gfx_hd/` overrides cleanly.
+3. **[Next] WebGL2 Client Shaders & LRU Cache**: add selectable `Native / Bicubic / xBRZ / CRT` shaders in `web_ui.html` and cap decoded frame memory with an LRU cache.
