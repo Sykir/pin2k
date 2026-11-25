@@ -3,6 +3,7 @@
 mod admin_nav;
 mod attract_render;
 mod hud_display;
+mod leff;
 mod render;
 mod rfm_playfield;
 mod scene_render;
@@ -14,6 +15,7 @@ mod system_screens;
 mod tests;
 mod vspinner;
 
+pub use leff::{ActiveLeff, LeffKind};
 pub use vspinner::VirtualSpinnerState;
 
 use pin2k_hal::{
@@ -136,6 +138,7 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     // Active scene / multiball / HUD banner
     pub active_scene: Option<ActiveSceneState>,
     pub multiball: ActiveMultiball,
+    pub active_leff: Option<ActiveLeff>,
     pub rfm: RfmState,
     pub attract: AttractController,
     pub left_spinner: VirtualSpinnerState,
@@ -218,6 +221,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             tilt_warnings: 0,
             active_scene: None,
             multiball: ActiveMultiball::None,
+            active_leff: None,
             rfm: RfmState::default(),
             attract: AttractController::default(),
             left_spinner: VirtualSpinnerState::default(),
@@ -801,6 +805,18 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.special_screen_ms = self.special_screen_ms.saturating_add(dt_ms);
         }
         self.update_virtual_spinners(dt_ms);
+        self.tick_leff(dt_ms);
+        if self.game_title == GameTitle::Swe1 && self.state == MachineState::InGame {
+            if let Some(p) = self.players.get_mut(self.current_player) {
+                p.super_jets_ms = p.super_jets_ms.saturating_sub(dt_ms);
+                if p.ramp_combo_window_ms > 0 {
+                    p.ramp_combo_window_ms = p.ramp_combo_window_ms.saturating_sub(dt_ms);
+                    if p.ramp_combo_window_ms == 0 {
+                        p.ramp_combo_count = 0;
+                    }
+                }
+            }
+        }
         if self.ball_save_ms > 0 {
             self.ball_save_ms = self.ball_save_ms.saturating_sub(dt_ms);
         }

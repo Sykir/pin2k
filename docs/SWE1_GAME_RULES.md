@@ -1,6 +1,6 @@
 # *Star Wars Episode I* (`SWE1 v1.66 / v2.00`) — Règles de jeu extraites
 
-L'intégralité des règles, machines à états, conditions de qualification, formules de score et interfaces HUD ci-dessous provient de la rétro-ingénierie directe de `swe1_0166.elf` (`15 019` symboles) et `swe1_0200.elf` (`14 841` symboles).
+L'intégralité des règles, machines à états, conditions de qualification, formules de score, pools audio `ARD`/`ACD` et chorégraphies lumineuses `Leff*` ci-dessous provient de la rétro-ingénierie et de la décompilation headless **Ghidra 12.2** de `swe1_0166.elf` (`15 019` symboles) et `swe1_0200.elf` (`14 841` symboles, `1 867` fonctions décompilées sur `248` classes).
 
 ---
 
@@ -60,10 +60,13 @@ L'intégralité des règles, machines à états, conditions de qualification, fo
 - **Drop Targets (`Drop::switch_hit`)** : **`2 310` pts** par cible.
 - **Jet Bumpers (`JetBumpers::jet_bumper_hit`, `0x10dc84`)** :
   - **Normal** : **`10 310` pts** (`0x2846`).
-  - **Super Jets** : **`51 550` pts** (`0xc95e`).
+  - **Super Jets** : **`51 550` pts** (`0xc95e`), actif pendant `20 s` (`super_jets_ms = 20_000`) avec `LeffKind::SuperJetsStart` et `ard_super_jets_activated`.
   - Chaque coup allume une lettre de `G-U-N-G-A-N` (`0..=5`) ; le 6e coup remet le compteur à `0` et déclenche **Super Jets**.
 - **Rampes & Combos (`Ramps`, `RampBlocker`)** :
-  - Les rampes gauche/droite déclenchent `leff_ramp_made_left` / `leff_ramp_made_right` et enchaînent les `next_combo_shot()` tant que le `RampBlocker` est en dessous de `adj_ramp_blocker_max`. Le meilleur combo est sauvegardé dans `nv_ramp_champ_data`.
+  - Les rampes gauche/droite déclenchent `LeffKind::RampMade`, tourniquet virtuel (`DeffVSpinner`), fenêtre combo (`ramp_combo_window_ms`) et enchaînent les `next_combo_shot()` (`ramp_combo_count` / `ramp_combo_best`).
+- **Build C-3PO & R2-D2 Hurry-Up (`BuildC3P0`, `R2D2Scene`)** :
+  - `BuildC3P0` : assemblage séquentiel de `6` pièces (`c3p0_parts`), déclenchant `LeffKind::C3P0Complete` et `ard_c3p0_complete` à complétion.
+  - `R2-D2` : score *Hurry-Up* progressif couplé aux appels `start_ard` / `hit_ard` / `complete_ard` et `LeffKind::SceneHit` / `SceneComplete`.
 
 ## 6. Lettres J-E-D-I, Jedi Multiball & Main Multiball
 - **Lettres J-E-D-I (`JediLetters::add_letter`, `0x13bc64`)** :

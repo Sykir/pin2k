@@ -155,6 +155,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                         self.hw.set_lamp(lid, LampState::On);
                     }
                 }
+                self.apply_leff_lamps();
             }
         }
     }

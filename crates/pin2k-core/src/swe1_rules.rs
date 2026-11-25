@@ -271,6 +271,99 @@ impl Swe1Scene {
     pub const fn shield_hits_to_qualify(scenes_started: u32) -> u8 {
         if scenes_started == 0 { 1 } else { 3 }
     }
+
+    /// Authentic `ard_*` pool played when entering this scene.
+    pub const fn start_ard(self) -> &'static str {
+        match self {
+            Swe1Scene::BattleDroid => "ard_battle_droid_scene_start",
+            Swe1Scene::DestroyerDroid => "ard_destroyer_droid_scene_intro_queen_speech",
+            Swe1Scene::FederationFighter => "ard_fed_fight_scene_ship_swoosh",
+            Swe1Scene::GunganBattle => "ard_sub_escape_intro_speech",
+            Swe1Scene::HangarEscape => "ard_hangar_escape_scene_initial_boom",
+            Swe1Scene::HoverTank => "ard_begin_hover_tank_speech",
+            Swe1Scene::Podrace => "ard_pod_race_intro_speech_a1",
+            Swe1Scene::ProbeDroid => "ard_probe_droid_intro_scene_speech",
+            Swe1Scene::QueenFashion => "ard_queen_ship_scene_start",
+            Swe1Scene::JarJarJuggle => "ard_jarjar_juggle_scene_start",
+            Swe1Scene::WattosChance => "ard_wattos_chance_scene_intro_watto_speech_1",
+            Swe1Scene::MosEspaCantina => "ard_musical_chairs_bounce",
+            Swe1Scene::R2D2 => "ard_r2d2_scene_intro_c3p0",
+            Swe1Scene::QuestionMark => "ard_question_mark_scene_tune",
+        }
+    }
+
+    /// Authentic `ard_*` pool played on each qualified shot in this scene.
+    pub const fn hit_ard(self) -> &'static str {
+        match self {
+            Swe1Scene::BattleDroid => "ard_battle_droid_scene_droid_boom",
+            Swe1Scene::DestroyerDroid => "ard_destroyer_droid_scene_destroyer_boom",
+            Swe1Scene::FederationFighter => "ard_fed_fight_scene_fighter_boom",
+            Swe1Scene::GunganBattle => "ard_hit_gungan_sub_speech",
+            Swe1Scene::HangarEscape => "ard_hangar_escape_scene_droid_boom",
+            Swe1Scene::HoverTank => "ard_hover_tank_scene_tank_boom",
+            Swe1Scene::Podrace => "ard_pod_race_random_speech",
+            Swe1Scene::ProbeDroid => "ard_probe_droid_scene_probe_boom",
+            Swe1Scene::QueenFashion => "ard_fashion_expose",
+            Swe1Scene::JarJarJuggle => "ard_jarjar_juggle_scene_jarjar_hit_speech",
+            Swe1Scene::WattosChance => "ard_wattos_chance_scene_cube_hit_c",
+            Swe1Scene::MosEspaCantina => "ard_musical_chairs_land",
+            Swe1Scene::R2D2 => "ard_r2d2_scene_hit_1",
+            Swe1Scene::QuestionMark => "ard_question_mark_scene_tune",
+        }
+    }
+
+    /// Authentic `ard_*` pool played upon completing this scene.
+    pub const fn complete_ard(self) -> &'static str {
+        match self {
+            Swe1Scene::BattleDroid => "ard_battle_droid_scene_complete",
+            Swe1Scene::DestroyerDroid => "ard_destroyer_droid_scene_complete",
+            Swe1Scene::FederationFighter => "ard_fed_fight_scene_complete",
+            Swe1Scene::GunganBattle => "ard_sub_escape_opee_win",
+            Swe1Scene::HangarEscape => "ard_hangar_escape_scene_complete",
+            Swe1Scene::HoverTank => "ard_hover_tank_scene_complete",
+            Swe1Scene::Podrace => "ard_pod_race_exit_speech",
+            Swe1Scene::ProbeDroid => "ard_probe_droid_scene_complete",
+            Swe1Scene::QueenFashion => "ard_queen_ship_scene_start_followup",
+            Swe1Scene::JarJarJuggle => "ard_jarjar_spinner_complete_speech",
+            Swe1Scene::WattosChance => "ard_wattos_chance_speech_haggle_4A",
+            Swe1Scene::MosEspaCantina => "ard_musical_chairs_award",
+            Swe1Scene::R2D2 => "ard_hit_r2d2_speech",
+            Swe1Scene::QuestionMark => "ard_question_mark_scene_tune",
+        }
+    }
+
+    /// Authentic shot award from Ghidra decompilation (`BattleDroidScene`, `PodraceScene`, etc.).
+    pub const fn hit_score(self) -> u64 {
+        match self {
+            Swe1Scene::BattleDroid => scoring::BATTLE_DROID_SHIELD_HIT,
+            Swe1Scene::DestroyerDroid => scoring::DESTROYER_DROID_DESTROY,
+            Swe1Scene::FederationFighter => 250_000,
+            Swe1Scene::GunganBattle => scoring::GUNGAN_SHOT,
+            Swe1Scene::HangarEscape => scoring::HANGAR_ESCAPE_HIT * 5,
+            Swe1Scene::HoverTank => scoring::HOVER_TANK_DESTROY,
+            Swe1Scene::Podrace => 75_000,
+            Swe1Scene::ProbeDroid => scoring::PROBE_DROID_DESTROY,
+            Swe1Scene::QueenFashion => scoring::QUEEN_FASHION_MATCH,
+            Swe1Scene::JarJarJuggle => 150_000,
+            Swe1Scene::WattosChance => scoring::WATTOS_CHANCE_WIN,
+            Swe1Scene::MosEspaCantina => scoring::MUSICAL_CHAIRS_CENTER,
+            Swe1Scene::R2D2 => 250_000,
+            Swe1Scene::QuestionMark => 500_000,
+        }
+    }
+
+    /// Authentic completion award from Ghidra decompilation (`BattleDroidScene` = `2,250,000`, etc.).
+    pub const fn completion_score(self) -> u64 {
+        match self {
+            Swe1Scene::BattleDroid => scoring::BATTLE_DROID_COMPLETE,
+            Swe1Scene::Podrace
+            | Swe1Scene::HangarEscape
+            | Swe1Scene::DestroyerDroid
+            | Swe1Scene::HoverTank
+            | Swe1Scene::ProbeDroid => 1_750_000,
+            _ => 1_500_000,
+        }
+    }
 }
 
 /// Exact scoring and rule constants extracted from `swe1_0166.elf` (SWE1 v1.66).
@@ -356,6 +449,24 @@ pub struct PlayerState {
     pub saucer_locks: u8, // 0..=2 -> 3rd lock starts Hangar Multiball
     pub extra_balls: u8,
     pub jet_hits: u16,
+    #[serde(default)]
+    pub skill_shots_made: u8,
+    #[serde(default)]
+    pub gungan_letters: u8,
+    #[serde(default)]
+    pub super_jets_ms: u32,
+    #[serde(default)]
+    pub ramp_combo_count: u8,
+    #[serde(default)]
+    pub ramp_combo_window_ms: u32,
+    #[serde(default)]
+    pub ramp_combo_best: u8,
+    #[serde(default)]
+    pub c3p0_parts: u8,
+    #[serde(default)]
+    pub jedi_letters_total: u16,
+    #[serde(default)]
+    pub scenes_started: u32,
 }
 
 impl Default for PlayerState {
@@ -375,6 +486,15 @@ impl Default for PlayerState {
             saucer_locks: 0,
             extra_balls: 0,
             jet_hits: 0,
+            skill_shots_made: 0,
+            gungan_letters: 0,
+            super_jets_ms: 0,
+            ramp_combo_count: 0,
+            ramp_combo_window_ms: 0,
+            ramp_combo_best: 0,
+            c3p0_parts: 0,
+            jedi_letters_total: 0,
+            scenes_started: 0,
         }
     }
 }

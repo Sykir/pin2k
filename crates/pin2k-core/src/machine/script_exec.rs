@@ -245,6 +245,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.special_screen = Some(super::SpecialScreen::Bonus);
                 self.active_anim_hint = "anim_bonus_background".to_string();
                 self.emit_ard("ard_bonus_tune");
+                self.trigger_leff(super::LeffKind::BonusShow);
                 let p = &self.players[self.current_player];
                 let total = p.bonus_points.saturating_mul(p.bonus_multiplier as u64);
                 self.set_banner(format!("BONUS: {} X {} = {}", p.bonus_points, p.bonus_multiplier, total), 4_000);
@@ -734,7 +735,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 }
                 ScriptAction::AdvanceScene => {
                     if self.active_scene.is_some() {
-                        self.advance_active_scene("SCENE ADVANCE!", 250_000);
+                        self.advance_active_scene("SCENE ADVANCE!");
                     } else if let Some(p) = self.players.get_mut(self.current_player) {
                         let scene = p.choose_next_scene();
                         self.active_scene = Some(ActiveSceneState {

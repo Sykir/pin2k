@@ -1,6 +1,6 @@
 # Référence Complète des Écrans, Layouts & Console de Debug (`pin2k`)
 
-Ce document recense l'intégralité des écrans, coordonnées `640×240`, priorités Z, polices bitmap, couleurs RGB555 et requêtes audio extraits de `work/swe1_0200.elf` et implémentés nativement en Rust pur dans `pin2k-core` + `pin2k-desktop`.
+Ce document recense l'intégralité des écrans, coordonnées `640×240`, priorités Z, polices bitmap, couleurs RGB555, chorégraphies lampes (`machine/leff.rs`) et requêtes audio (`swe1_audio.rs`, `382` pools `ARD` / `695` `ACD`) extraits par rétro-ingénierie et décompilation Ghidra 12.2 de `work/swe1_0200.elf` et implémentés nativement en Rust pur dans `pin2k-core` + `pin2k-desktop`.
 
 ---
 

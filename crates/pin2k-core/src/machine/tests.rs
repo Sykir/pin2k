@@ -699,3 +699,125 @@
             );
         }
     }
+
+    #[test]
+    fn all_14_scenes_have_valid_ard_callouts_and_authentic_scoring() {
+        for &scene in &Swe1Scene::ALL {
+            assert!(
+                crate::swe1_audio::resolve_ard(scene.start_ard(), 0).is_some(),
+                "invalid start_ard for {scene:?}: {}",
+                scene.start_ard()
+            );
+            assert!(
+                crate::swe1_audio::resolve_ard(scene.hit_ard(), 0).is_some(),
+                "invalid hit_ard for {scene:?}: {}",
+                scene.hit_ard()
+            );
+            assert!(
+                crate::swe1_audio::resolve_ard(scene.complete_ard(), 0).is_some(),
+                "invalid complete_ard for {scene:?}: {}",
+                scene.complete_ard()
+            );
+        }
+
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+        assert!(machine.debug_launch_mode("scene:0")); // BattleDroid
+        let start_score = machine.score;
+        machine.audio.played.clear();
+
+        // 5 required hits for BattleDroid -> 4 * 400_000 + 2_250_000 completion
+        for _ in 0..5 {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_RIGHT);
+        }
+        assert!(machine.active_scene.is_none());
+        assert!(machine.score >= start_score + crate::swe1_rules::scoring::BATTLE_DROID_COMPLETE);
+        let comp_sid = crate::swe1_audio::resolve_ard("ard_battle_droid_scene_complete", 0).unwrap();
+        assert!(machine.audio.played.iter().any(|(sid, _)| *sid == comp_sid));
+    }
+
+    #[test]
+    fn ghidra_lifted_skill_shot_super_jets_ramp_combo_c3p0_and_leffs() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("ingame"));
+        assert!(machine.skill_shot_ready);
+
+        // 1. Progressive Skill Shot on SNEAKY_LANE -> 500_000 + LeffKind::SkillShotAward + ard_skill_shot_award
+        let base_score = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SNEAKY_LANE);
+        assert_eq!(machine.players[0].skill_shots_made, 1);
+        assert!(machine.score >= base_score + 500_000);
+        assert_eq!(
+            machine.active_leff.map(|l| l.kind),
+            Some(LeffKind::SkillShotAward)
+        );
+        let ss_sid = crate::swe1_audio::resolve_ard("ard_skill_shot_award", 0).unwrap();
+        assert!(machine.audio.played.iter().any(|(sid, _)| *sid == ss_sid));
+
+        // 2. Second Skill Shot (caps cleanly up to 3_000_000)
+        machine.players[0].skill_shots_made = 5;
+        machine.skill_shot_ready = true;
+        let pre_cap = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SNEAKY_LANE);
+        assert_eq!(machine.players[0].skill_shots_made, 6);
+        assert!(machine.score >= pre_cap + crate::swe1_rules::scoring::SKILL_SHOT_CAP);
+
+        // 3. 6 Jet Bumper hits spell G-U-N-G-A-N -> 7th hit scores JET_SUPER (51_550)
+        for _ in 0..6 {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::UPPER_JET);
+        }
+        assert_eq!(machine.players[0].gungan_letters, 0);
+        assert!(machine.players[0].super_jets_ms > 0);
+        assert_eq!(
+            machine.active_leff.map(|l| l.kind),
+            Some(LeffKind::SuperJetsStart)
+        );
+        let sj_pre = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::MIDDLE_JET);
+        assert_eq!(machine.score, sj_pre + crate::swe1_rules::scoring::JET_SUPER);
+
+        // 4. Ramp Combo (Left -> Right within 6s window)
+        machine.audio.played.clear();
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_RIGHT);
+        assert_eq!(machine.players[0].ramp_combo_count, 2);
+        assert_eq!(machine.players[0].ramp_combo_best, 2);
+        assert_eq!(
+            machine.active_leff.map(|l| l.kind),
+            Some(LeffKind::RampMade { right: true })
+        );
+        let rc_sid = crate::swe1_audio::resolve_ard("ard_ramp_combo_naboo_flyby", 0).unwrap();
+        assert!(machine.audio.played.iter().any(|(sid, _)| *sid == rc_sid));
+
+        // 5. Build C-3PO (6 Captive Ball hits -> +1_000_000 + Extra Ball + C3P0Complete Leff)
+        let prev_eb = machine.players[0].extra_balls;
+        for _ in 0..6 {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::CAPTIVE_BALL);
+        }
+        assert_eq!(machine.players[0].c3p0_parts, 0);
+        assert_eq!(machine.players[0].extra_balls, prev_eb + 1);
+        assert_eq!(
+            machine.active_leff.map(|l| l.kind),
+            Some(LeffKind::C3P0Complete)
+        );
+
+        // 6. Empty Laser -> ard_generic_laser_empty
+        machine.players[0].laser_shots = 0;
+        machine.audio.played.clear();
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_ACTION_BUTTON);
+        let empty_sid = crate::swe1_audio::resolve_ard("ard_generic_laser_empty", 0).unwrap();
+        assert!(machine.audio.played.iter().any(|(sid, _)| *sid == empty_sid));
+
+        // 7. Verify Leff clears cleanly after its duration elapses
+        assert!(machine.active_leff.is_some());
+        for _ in 0..120 {
+            machine.tick(16);
+        }
+        assert!(machine.active_leff.is_none());
+    }

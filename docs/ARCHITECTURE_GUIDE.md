@@ -55,11 +55,13 @@ flowchart LR
 
 ### `crates/pin2k-core` — Moteur de Jeu, Compositing Natif & Script VM
 - **`machine/`** (architecture modulaire 60 Hz autour de `Pin2kMachine` dans `machine/mod.rs`, avec `hw.sync(0)` au démarrage avant amorçage de `switch_matrix.rs`) :
+  - `leff.rs` : moteur de chorégraphies lumineuses (`LeffKind` / `ActiveLeff`, 14 séquences `Leff*` pilotant la matrice de lampes en partie via `apply_leff_lamps()`).
   - `score_display.rs` (`DeffScoreDisplay`), `hud_display.rs` (`DeffLaserStatusBackground`), `vspinner.rs` (`VirtualSpinners` uniquement sur passage rampe).
   - `attract_render.rs` (20 écrans `AttractDeff` + flare Kahuna 9 couleurs), `scene_render.rs` (14 scènes `Swe1Scene` intros + fonds, `DeffObiHolo`, Multiballs, Skill Shot), `system_screens.rs` (`PowerupTestingDeff`, 12 `SpecialScreen`, `DeffTilt`, `DeffHSTDinitials`, et `DiagPage` / menus Opérateur).
   - `render.rs`, `script_exec.rs` (`debug_launch_mode` / `debug_apply_player_cmd`), `swe1_playfield.rs`, `rfm_playfield.rs`, `admin_nav.rs`, `tests.rs`.
+- **`swe1_audio.rs`** : banque audio complète SWE1 générée par décompilation Ghidra 12.2 (`382` pools `ARD` / `407` IDs DCS-2 uniques, `695` entrées `ACD`), exposant `resolve_ard()`, `resolve_acd()` et `Pin2kMachine::emit_ard()`.
 - **`script_engine.rs`** : `GameScript` & `ScriptRuntime` exécutant `game_script.json`.
-- **Règles & tables** : `swe1_rules.rs`, `swe1_tables.rs`, `attract.rs`, `rfm_rules.rs`, `rfm_tables.rs`, `mods.rs`, `events.rs`, `admin.rs`, `storage.rs`.
+- **Règles & tables** : `swe1_rules.rs` (14 scènes avec `start_ard`/`hit_ard`/`complete_ard`/`hit_score`/`completion_score` + `PlayerState` étendu), `swe1_tables.rs`, `attract.rs`, `rfm_rules.rs`, `rfm_tables.rs`, `mods.rs`, `events.rs`, `admin.rs`, `storage.rs`.
 
 ### `crates/pin2k-desktop` — Application Native Windows & Linux
 - **`compositor.rs`, `raster.rs`, `scenes_compositor.rs`** : compositeur logiciel `BaseViewManager` `640×240` → `640×480` trié par Z (avec `flip_x`, échelle, teinte RGB555, ombres bitmap sur les 19 polices ROM, export JSON des calques live et compositeur multi-couches *Boonta Eve Podrace*).

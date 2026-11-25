@@ -2,17 +2,17 @@
 
 Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode I* `#50069` & *Revenge From Mars* `#50070`).
 
-## Avancement Global : **~84 %**
+## Avancement Global : **~89 %**
 
 | Chantier | Avancement | Statut |
 |---|---:|---|
-| 1. Outil ROM & Extraction (`pin2k-rom-tool`) | **95 %** | Layouts UI + Gamecode + Assets complets |
+| 1. Outil ROM & Extraction (`pin2k-rom-tool`) | **96 %** | Layouts UI + Gamecode + Assets complets + pipeline Ghidra 12.2 (`1 867` fonctions / `248` classes) |
 | 2. Abstraction Matérielle & PDB (`pin2k-hal`) | **98 %** | Prêt cabinet, série & compositeur Z-trié |
-| 3. Moteur de Jeu & Écrans Natifs (`pin2k-core`) | **78 %** | 100 % des écrans/scènes SWE1 natifs ; finalisation VM `ScriptRuntime` et migration data-driven en cours |
-| 4. Couverture des Assets SWE1 (`gfx` / `fonts` / `audio`) | **47 %** | Polices 100 % (`19/19`), Anims 47 % (`186/392`), Audio 6 % (`47/689`) |
+| 3. Moteur de Jeu & Écrans Natifs (`pin2k-core`) | **86 %** | 100 % des écrans/scènes SWE1 + banque audio `ARD`/`ACD` + moteur `Leff` + règles portées depuis Ghidra |
+| 4. Couverture des Assets SWE1 (`gfx` / `fonts` / `audio`) | **82 %** | Polices **100 % (`19/19`)**, Audio **100 % (`689/689`)**, Anims **47 % (`186/392`)** |
 | 5. Runtime Desktop, Console Debug & HD (`pin2k-desktop`) | **78 %** | Web Console 5 onglets & PNG OK ; audio natif/Web et fenêtre native `--window`/`--fullscreen` à finaliser |
 | 6. Modding d'Assets & Scènes Custom (`mod.json`) | **30 %** | Remplacement `gfx/` & audio natif OK ; WebAudio mods, polices, règles à états et scènes custom à faire |
-| 7. Documentation & Qualité | **100 %** | 39/39 tests OK, 0 avertissement, documentation complète à jour |
+| 7. Documentation & Qualité | **100 %** | **42/42 tests OK**, 0 avertissement, documentation complète à jour |
 
 ---
 
@@ -43,8 +43,11 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 
 ---
 
-## 3. Moteur de Jeu & Écrans Natifs (`pin2k-core`) — **78 %**
-- [x] Architecture modulaire complète (`machine/{mod, score_display, hud_display, vspinner, attract_render, scene_render, system_screens, render, script_exec, swe1_playfield, rfm_playfield, admin_nav, tests}.rs`)
+## 3. Moteur de Jeu & Écrans Natifs (`pin2k-core`) — **86 %**
+- [x] Architecture modulaire complète (`machine/{mod, leff, score_display, hud_display, vspinner, attract_render, scene_render, system_screens, render, script_exec, swe1_playfield, rfm_playfield, admin_nav, tests}.rs`)
+- [x] **Banque audio complète extraite de la ROM (`swe1_audio.rs`)** : `382` pools `ARD` (`407` IDs DCS-2 uniques) + `695` descripteurs `ACD` avec `resolve_ard()`, `resolve_acd()` et `Pin2kMachine::emit_ard()`
+- [x] **Moteur de chorégraphie lampes/flashers (`machine/leff.rs`, 14 `LeffKind`)** : `RampMade`, `MainMultiballStart`, `MainMultiballJackpot`, `JediMultiballClash`, `JediMultiballFinish`, `SkillShotAward`, `SuperJetsStart`, `ShieldHit`, `LaserFired`, `SceneHit`, `SceneComplete`, `C3P0Complete`, `ExtraBallCollected`, `BonusShow`
+- [x] **Règles SWE1 portées depuis la décompilation Ghidra 12.2** (`1 867` fonctions / `248` classes de `swe1_0200.elf`) : `SkillShot` progressif (`500 000`..`3 000 000`), `G-U-N-G-A-N` Super Jets (`20 s`, `51 550` pts), combos de rampes, `BuildC3P0` (`6` pièces), `JediLetters` (`500 000 + 50 000*n` + `2 000 000`), `Multiball` (`5 000 000` Super Jackpot), `JediMultiball`, `QuestionMark`, `R2D2` Hurry-Up, et `start_ard`/`hit_ard`/`complete_ard` + scores authentiques des 14 scènes
 - [x] HUD authentique : `DeffScoreDisplay` (9 noms Star Wars uniques, scores avec virgules, sabres gauche/poignée/droite) et `DeffLaserStatusBackground` (vaisseau Naboo + `LASERS`/`TORPEDOS`)
 - [x] Spinners virtuels fidèles (`VirtualSpinners` / `DeffVSpinner`) : déclenchés **uniquement sur passage rampe** avec rotation des 4 sons tourniquet DCS (`0x03C3`, `0x03C9`, `0x03CA`, `0x03CB`)
 - [x] **Attract Mode complet (20 écrans `AttractDeff`)** incluant `DeffAttractModeKahunaLogo` + rayons lumineux 9 couleurs RGB555
@@ -60,10 +63,10 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 
 ---
 
-## 4. Couverture des Assets SWE1 (`docs/ASSETS_MATRIX.md`) — **47 %**
+## 4. Couverture des Assets SWE1 (`docs/ASSETS_MATRIX.md`) — **82 %**
 - [x] **Polices Bitmap (`fonts/`)** : **19 / 19 (100 %)** chargées et utilisées avec ombres & alignement dans `SoftwareCompositor`
+- [x] **Pistes Audio DCS-2 (`audio/`)** : **689 / 689 (100 %)** indexées dans `swe1_audio.rs` (`382` pools `ARD` / `695` `ACD`) et déclenchables via `Pin2kMachine::emit_ard()`
 - [x] **Animations & Sprites (`gfx/`)** : **186 / 392 (47 %)** utilisées (toutes les 14 scènes intros+fonds, Attract complet, sabres, Naboo HUD, spinners, Bonus personnages/rangs, Match, Game Over, Extra Ball, Multiballs, Holo Obi-Wan, mire alignement)
-- [ ] **Pistes Audio DCS-2 (`audio/`)** : **47 / 689 (6 %)** utilisées (thèmes, musiques de scènes, tourniquets, tirs, explosions) → reste les répliques vocales contextuelles secondaires
 
 ---
 
@@ -95,7 +98,7 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 ---
 
 ## 7. Documentation & Qualité — **100 %**
-- [x] `RUSTFLAGS="-D warnings" cargo check --workspace --all-targets` (**0 avertissement**) et **39 / 39 tests unitaires** verts
+- [x] `RUSTFLAGS="-D warnings" cargo check --workspace --all-targets` (**0 avertissement**), **42 / 42 tests unitaires** verts et `cargo build --release --workspace` OK
 - [x] Validation visuelle sur **11 captures PNG** (`attract:0`, `ingame`, `spinner_left`, `scene:6`, `scene:0`, `scene:12`, `bonus`, `match`, `hstd_entry`, `diag:colorbar`, `diag:switch`)
 - [x] [README.md](../README.md) & [SCREEN_LAYOUT_REFERENCE.md](SCREEN_LAYOUT_REFERENCE.md)
 - [x] [ARCHITECTURE_GUIDE.md](ARCHITECTURE_GUIDE.md) & [HARDWARE_NOTES.md](HARDWARE_NOTES.md)
