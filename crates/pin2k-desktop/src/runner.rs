@@ -23,7 +23,8 @@ use crate::demo_scripts::{
     build_admin_script, build_all_sequences_script, build_demo_script, build_diag_script,
     build_podrace_script, build_rfm_demo_script,
 };
-use pin2k_hal::{PdbDriver, PlayfieldSignature, TracedLptPort};
+use pin2k_hal::{LampState, PdbDriver, PlayfieldSignature, TracedLptPort, PinballHardware};
+use pin2k_rom_tool::asset_extractor::SoundManifest;
 use crate::web_ui::{spawn_web_server, DebugCommand, SharedWebState};
 
 pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
@@ -121,6 +122,36 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
         audio.apply_mod_audio(mod_dir, &manifest.sound_overrides);
     }
 
+    // Build /api/assets catalog for the Web Debug Console
+    if cli.web_port.is_some() {
+        let anims: Vec<serde_json::Value> = compositor
+            .anim_catalog()
+            .into_iter()
+            .map(|(n, frames, fps)| serde_json::json!({"name": n, "frames": frames, "fps": fps}))
+            .collect();
+        let fonts = compositor.font_names();
+        let mut sounds: Vec<serde_json::Value> = Vec::new();
+        if let Some(ref dir) = cli.assets_dir {
+            if let Ok(raw) = fs::read_to_string(dir.join("audio/sound_manifest.json")) {
+                if let Ok(m) = serde_json::from_str::<SoundManifest>(&raw) {
+                    for s in m.sounds {
+                        if let Some(id) = s.dcs_id {
+                            sounds.push(serde_json::json!({"id": id, "hex": format!("0x{id:04X}"), "name": s.name, "file": s.file}));
+                        }
+                    }
+                }
+            }
+        }
+        if let Ok(mut st) = shared_web.lock() {
+            st.assets_json = serde_json::json!({
+                "anims": anims,
+                "fonts": fonts,
+                "sounds": sounds,
+            })
+            .to_string();
+        }
+    }
+
     if let Some(port) = cli.web_port {
         spawn_web_server(&cli.web_bind, port, Arc::clone(&shared_web), cli.assets_dir.clone())?;
     }
@@ -214,6 +245,7 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
     let mut scheduled_releases: Vec<(u64, u8)> = Vec::new();
     let pace_realtime = cli.realtime || cli.web_port.is_some();
     let mut frame: u64 = 0;
+    let mut step_once = false;
 
     loop {
         if cli.frames > 0 && frame >= cli.frames {
@@ -255,6 +287,7 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
 
         // Apply web UI switch presses & debug commands
         let mut pending_dbg = Vec::new();
+        let mut is_paused = false;
         if let Ok(mut st) = shared_web.lock() {
             for (sw_id, closed, hold_ms) in st.pending_switches.drain(..) {
                 machine.hw.port.inner_mut().set_virtual_switch(sw_id, closed);
@@ -262,8 +295,11 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
                 scheduled_releases.push((frame + hold_frames, sw_id));
             }
             pending_dbg.extend(st.pending_debug.drain(..));
+            is_paused = st.paused;
         }
+        let mut state_mutated = false;
         for cmd in pending_dbg {
+            state_mutated = true;
             match cmd {
                 DebugCommand::LaunchMode(m) => {
                     machine.debug_launch_mode(&m);
@@ -280,15 +316,41 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
                 DebugCommand::PulseDrive(did, ms) => {
                     machine.debug_pulse_drive(did, ms);
                 }
+                DebugCommand::SetLamp(lid, val) => {
+                    let st = match val {
+                        0 => LampState::Off,
+                        1 => LampState::On,
+                        _ => LampState::Blinking { period_ms: 250 },
+                    };
+                    machine.hw.set_lamp(lid, st);
+                }
+                DebugCommand::PlayerCmd(c) => {
+                    machine.debug_apply_player_cmd(&c);
+                }
+                DebugCommand::TogglePause => {
+                    is_paused = !is_paused;
+                    if let Ok(mut st) = shared_web.lock() {
+                        st.paused = is_paused;
+                    }
+                }
+                DebugCommand::StepFrame => {
+                    step_once = true;
+                }
             }
         }
 
-        // Update active animation selection from SWE1 game state before ticking
-        let hint = machine.active_anim_hint.clone();
-        machine.video.select_anim_by_hint(&hint);
-        machine.video.tick_clock(16);
+        if !is_paused || step_once || state_mutated {
+            let dt = if is_paused && !step_once { 0 } else { 16 };
+            step_once = false;
 
-        machine.tick(16);
+            // Update active animation selection from SWE1 game state before ticking
+            let hint = machine.active_anim_hint.clone();
+            machine.video.select_anim_by_hint(&hint);
+            if dt > 0 {
+                machine.video.tick_clock(dt as u64);
+            }
+            machine.tick(dt);
+        }
 
         let emitted_events = machine.drain_events();
         let mut db_dirty = false;
@@ -354,6 +416,24 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
         // Publish frame & state to web UI if active
         if cli.web_port.is_some() && frame % 4 == 0 {
             if let Ok(png) = machine.video.encode_png() {
+                let players_json: Vec<serde_json::Value> = machine
+                    .players
+                    .iter()
+                    .enumerate()
+                    .map(|(i, pl)| {
+                        serde_json::json!({
+                            "index": i + 1,
+                            "character": pl.character_name(),
+                            "score": pl.score,
+                            "lasers": pl.laser_shots,
+                            "shield": pl.shield_health,
+                            "jedi": pl.jedi_letters,
+                            "rank": pl.jedi_rank.label(),
+                            "active": i == machine.current_player,
+                        })
+                    })
+                    .collect();
+                let layers_json = machine.video.last_frame_layers_json();
                 if let Ok(mut st) = shared_web.lock() {
                     let (seq, sfile, sloop) = st
                         .active_sound_file
@@ -361,12 +441,28 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
                         .unwrap_or((0, String::new(), false));
                     st.latest_png = png;
                     st.status_json = serde_json::json!({
+                        "game": format!("{:?}", machine.game_title),
                         "state": format!("{:?}", machine.state),
                         "score": machine.score,
                         "ball": machine.current_ball,
                         "credits": machine.credits,
                         "rank": rank_str,
+                        "lasers": machine.players[machine.current_player].laser_shots,
+                        "shield": machine.players[machine.current_player].shield_health,
                         "banner": machine.status_banner,
+                        "attract_index": machine.attract.index,
+                        "attract_name": format!("{:?}", machine.attract.current()),
+                        "active_scene": machine.active_scene.as_ref().map(|s| s.scene.title()),
+                        "multiball": format!("{:?}", machine.multiball),
+                        "spinners": {
+                            "left_active": machine.left_spinner.active,
+                            "left_spins": machine.left_spinner.total_spins,
+                            "right_active": machine.right_spinner.active,
+                            "right_spins": machine.right_spinner.total_spins,
+                        },
+                        "players": players_json,
+                        "paused": st.paused,
+                        "layers": layers_json,
                         "sound_seq": seq,
                         "sound_file": sfile,
                         "sound_loop": sloop,

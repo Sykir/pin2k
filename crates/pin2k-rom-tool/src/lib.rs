@@ -5,6 +5,7 @@ pub mod elf_writer;
 pub mod gamecode_extractor;
 pub mod gfx_decoder;
 pub mod interleave;
+pub mod layout_extractor;
 pub mod prism;
 pub mod scanner;
 pub mod symbols;

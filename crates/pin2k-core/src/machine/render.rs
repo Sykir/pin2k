@@ -160,6 +160,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     pub(super) fn render_frame(&mut self) {
+        self.video.begin_frame();
+
         if self.state == MachineState::Boot {
             self.active_anim_hint.clear();
             self.video.draw_text("WILLIAMS PINBALL 2000", 320, 62, 0x7FE0, 2);
@@ -169,30 +171,33 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             return;
         }
         if self.state == MachineState::Diagnostics {
-            self.active_anim_hint.clear();
-            let (title, rows) = self.admin_display_lines();
-            self.video.draw_text(&title, 320, 22, 0x7FE0, 2);
-            for (i, (line, selected)) in rows.iter().enumerate() {
-                let prefix = if *selected { "> " } else { "  " };
-                let color = if *selected { 0x03FF } else { 0x7FFF };
+            if self.debug_anim_override.is_none() {
+                self.active_anim_hint.clear();
+                let (title, rows) = self.admin_display_lines();
+                self.video.draw_text(&title, 320, 22, 0x7FE0, 2);
+                for (i, (line, selected)) in rows.iter().enumerate() {
+                    let prefix = if *selected { "> " } else { "  " };
+                    let color = if *selected { 0x03FF } else { 0x7FFF };
+                    self.video.draw_text(
+                        &format!("{prefix}{line}"),
+                        320,
+                        66 + (i as i32) * 26,
+                        color,
+                        2,
+                    );
+                }
                 self.video.draw_text(
-                    &format!("{prefix}{line}"),
+                    "UP/DN: SELECT   ENTER: OK   ESC: BACK",
                     320,
-                    66 + (i as i32) * 26,
-                    color,
-                    2,
+                    216,
+                    0x5EF7,
+                    1,
                 );
             }
-            self.video.draw_text(
-                "UP/DN: SELECT   ENTER: OK   ESC: BACK",
-                320,
-                216,
-                0x5EF7,
-                1,
-            );
             self.video.present();
             return;
         }
+
         let frame_idx = match self.attract.current() {
             AttractDeff::P2kLogo if self.state == MachineState::Attract => (self.attract.timer_ms / 66) as usize,
             AttractDeff::KahunaLogo if self.state == MachineState::Attract => (self.attract.timer_ms / 40) as usize,
@@ -204,68 +209,42 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
         match self.state {
             MachineState::Attract => {
-                match self.attract.current() {
-                    AttractDeff::Hstd => {
-                        self.video.draw_text("HIGHEST SCORES", 320, 26, 0x7FE0, 2);
-                        for (i, hs) in self.high_scores.iter().take(4).enumerate() {
-                            let ini: String = hs.initials.iter().collect();
-                            self.video.draw_text(
-                                &format!("#{} {}  {:>10}", i + 1, ini, hs.score),
-                                320,
-                                68 + (i as i32) * 26,
-                                0x7FFF,
-                                2,
-                            );
-                        }
+                if self.game_title == GameTitle::Swe1 && self.debug_anim_override.is_none() {
+                    self.render_swe1_attract_frame();
+                } else if self.debug_anim_override.is_none() {
+                    if !self.status_banner.is_empty() {
+                        self.video.draw_text(&self.status_banner, 320, 190, 0x7FE0, 2);
                     }
-                    AttractDeff::JediTableYouth
-                    | AttractDeff::JediTableKnight
-                    | AttractDeff::JediTableMaster
-                    | AttractDeff::JediTableSpirit => {
-                        self.video.draw_text(&self.status_banner, 320, 32, 0x03FF, 2);
-                        self.video.draw_text("QGJ   OBI   ANI   PAD", 320, 96, 0x7FFF, 2);
-                        self.video.draw_text("DEFEAT DARTH MAUL TO ADVANCE", 320, 140, 0x7FE0, 1);
+                    if (self.elapsed_ms / 500) % 2 == 0 {
+                        let price_txt = if self.free_play {
+                            "FREE PLAY - PRESS START".to_string()
+                        } else if self.credits > 0 {
+                            format!("CREDITS {} - PRESS START", self.credits)
+                        } else {
+                            "INSERT COIN".to_string()
+                        };
+                        self.video.draw_text(&price_txt, 320, 222, 0x03FF, 1);
                     }
-                    AttractDeff::ScoreAwards => {
-                        self.video.draw_text("REPLAY AT 15,000,000", 320, 74, 0x7FE0, 2);
-                        self.video.draw_text("EXTRA BALL AT 4 SCENES", 320, 114, 0x7FFF, 2);
-                    }
-                    AttractDeff::GameCredits1
-                    | AttractDeff::GameCredits2
-                    | AttractDeff::GameCredits3
-                    | AttractDeff::GameCredits4 => {
-                        self.video.draw_text(&self.status_banner, 320, 74, 0x7FE0, 2);
-                        self.video.draw_text("STAR WARS EPISODE I PINBALL", 320, 116, 0x7FFF, 2);
-                    }
-                    _ => {
-                        if !self.status_banner.is_empty() {
-                            self.video.draw_text(&self.status_banner, 320, 190, 0x7FE0, 2);
-                        }
-                    }
-                }
-                // DeffAttractModePriceBackground: blink FREE PLAY / CREDITS every 500 ms
-                if (self.elapsed_ms / 500) % 2 == 0 {
-                    let price_txt = if self.free_play {
-                        "FREE PLAY - PRESS START".to_string()
-                    } else if self.credits > 0 {
-                        format!("CREDITS {} - PRESS START", self.credits)
-                    } else {
-                        "INSERT COIN".to_string()
-                    };
-                    self.video.draw_text(&price_txt, 320, 222, 0x03FF, 1);
                 }
             }
             MachineState::InGame | MachineState::Tilt => {
-                if !self.status_banner.is_empty() {
-                    self.video.draw_text(&self.status_banner, 320, 190, 0x7FE0, 2);
+                if self.game_title == GameTitle::Swe1 {
+                    self.render_score_display(true);
+                    self.render_laser_status_hud();
+                    self.render_virtual_spinners();
+                    self.render_ingame_banner();
+                } else {
+                    if !self.status_banner.is_empty() {
+                        self.video.draw_text(&self.status_banner, 320, 190, 0x7FE0, 2);
+                    }
+                    self.video.draw_text(
+                        &format!("P{}  BALL {}   {:>10}", self.current_player + 1, self.current_ball, self.score),
+                        320,
+                        218,
+                        0x7FFF,
+                        2,
+                    );
                 }
-                self.video.draw_text(
-                    &format!("P{}  BALL {}   {:>10}", self.current_player + 1, self.current_ball, self.score),
-                    320,
-                    218,
-                    0x7FFF,
-                    2,
-                );
             }
             MachineState::HighScoreEntry => {
                 let (p_num, p_score, p_rank) = self

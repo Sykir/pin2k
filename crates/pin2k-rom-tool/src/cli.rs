@@ -311,6 +311,17 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output_dir: PathBuf,
     },
+
+    /// Extract complete screen layouts, coordinates, Z-orders, fonts, colors, and Deff metadata from an ELF32 binary.
+    ExtractLayout {
+        /// Path to the symbolized ELF32 executable (e.g. `work/swe1_0200.elf`).
+        #[arg(long)]
+        elf: PathBuf,
+
+        /// Output directory for `rom_layout_db.json`.
+        #[arg(short, long)]
+        output_dir: PathBuf,
+    },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

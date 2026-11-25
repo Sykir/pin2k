@@ -37,7 +37,34 @@ impl JediRank {
     }
 }
 
-/// All 12 *Star Wars Episode I* holoprojector scenes (`Scenes` class in `swe1_0200`).
+/// All 9 official Star Wars character names from `player_name_table_data` (`0x2dc798`).
+pub const PLAYER_CHARACTER_NAMES: [&str; 9] = [
+    "Qui-Gon",
+    "Jar Jar",
+    "Anakin",
+    "Amidala",
+    "Obi-Wan",
+    "R2-D2",
+    "Yoda",
+    "Watto",
+    "Darth Maul",
+];
+
+/// Formats a score with US thousands commas (`1,234,500`) matching SWE1's `%v` formatter.
+pub fn format_score_commas(score: u64) -> String {
+    let s = score.to_string();
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len() + s.len() / 3);
+    for (idx, &b) in bytes.iter().enumerate() {
+        if idx > 0 && (bytes.len() - idx) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(b as char);
+    }
+    out
+}
+
+/// All 14 *Star Wars Episode I* holoprojector scenes (`scene_table_data` @ `0x002dc95c`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Swe1Scene {
     BattleDroid,
@@ -52,10 +79,12 @@ pub enum Swe1Scene {
     JarJarJuggle,
     WattosChance,
     MosEspaCantina,
+    R2D2,
+    QuestionMark,
 }
 
 impl Swe1Scene {
-    pub const ALL: [Swe1Scene; 12] = [
+    pub const ALL: [Swe1Scene; 14] = [
         Swe1Scene::BattleDroid,
         Swe1Scene::DestroyerDroid,
         Swe1Scene::FederationFighter,
@@ -68,6 +97,8 @@ impl Swe1Scene {
         Swe1Scene::JarJarJuggle,
         Swe1Scene::WattosChance,
         Swe1Scene::MosEspaCantina,
+        Swe1Scene::R2D2,
+        Swe1Scene::QuestionMark,
     ];
 
     pub const fn title(self) -> &'static str {
@@ -84,6 +115,8 @@ impl Swe1Scene {
             Swe1Scene::JarJarJuggle => "JAR JAR JUGGLE",
             Swe1Scene::WattosChance => "WATTO'S CHANCE CUBE",
             Swe1Scene::MosEspaCantina => "MOS ESPA CANTINA",
+            Swe1Scene::R2D2 => "R2-D2 REPAIR",
+            Swe1Scene::QuestionMark => "MYSTERY (?)",
         }
     }
 
@@ -102,6 +135,8 @@ impl Swe1Scene {
             Swe1Scene::JarJarJuggle => "anim_jarjar_juggle_intro_movie",
             Swe1Scene::WattosChance => "anim_wattos_chance_intro_badge",
             Swe1Scene::MosEspaCantina => "anim_musical_chairs_intro_movie",
+            Swe1Scene::R2D2 => "anim_r2d2_intro_movie",
+            Swe1Scene::QuestionMark => "anim_question_mark_intro_movie",
         }
     }
 
@@ -120,6 +155,8 @@ impl Swe1Scene {
             Swe1Scene::JarJarJuggle => "anim_obiwan_holo_jarjar",
             Swe1Scene::WattosChance => "anim_obiwan_holo_watto",
             Swe1Scene::MosEspaCantina => "anim_obiwan_holo_yoda",
+            Swe1Scene::R2D2 => "anim_obiwan_holo_r2d2",
+            Swe1Scene::QuestionMark => "anim_obiwan_holo_question",
         }
     }
 
@@ -138,6 +175,8 @@ impl Swe1Scene {
             Swe1Scene::JarJarJuggle => "anim_jarjar_juggle",
             Swe1Scene::WattosChance => "anim_watto_cube",
             Swe1Scene::MosEspaCantina => "anim_chairs",
+            Swe1Scene::R2D2 => "anim_r2d2_scene_r2d2_unit",
+            Swe1Scene::QuestionMark => "anim_question_mark_green",
         }
     }
 
@@ -156,6 +195,8 @@ impl Swe1Scene {
             Swe1Scene::JarJarJuggle => 4_466,      // 67 frames @ 15fps
             Swe1Scene::WattosChance => 2_200,
             Swe1Scene::MosEspaCantina => 3_733,    // 56 frames @ 15fps
+            Swe1Scene::R2D2 => 3_533,              // 53 frames @ 15fps
+            Swe1Scene::QuestionMark => 5_133,      // 77 frames @ 15fps
         }
     }
 
@@ -191,13 +232,15 @@ impl Swe1Scene {
         }
     }
 
-    /// Minimum scenes started before this scene becomes eligible (`scene_info` table `0x2e179c`).
+    /// Minimum scenes started before this scene becomes eligible (`scene_info` table `0x2dc95c`).
     pub const fn min_scenes_started(self) -> u32 {
         match self {
             Swe1Scene::MosEspaCantina
+            | Swe1Scene::R2D2
             | Swe1Scene::DestroyerDroid
             | Swe1Scene::HoverTank
-            | Swe1Scene::WattosChance => 1,
+            | Swe1Scene::WattosChance
+            | Swe1Scene::QuestionMark => 1,
             Swe1Scene::QueenFashion => 2,
             _ => 0,
         }
@@ -278,9 +321,11 @@ pub enum ActiveMultiball {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerState {
     pub score: u64,
+    #[serde(default)]
+    pub character_idx: usize,
     pub jedi_letters: u8, // bitmask 0..4 for J, E, D, I
     pub jedi_rank: JediRank,
-    pub scenes_completed: u16, // 12-bit mask of completed `Swe1Scene`
+    pub scenes_completed: u16, // 14-bit mask of completed `Swe1Scene`
     pub next_scene_idx: usize,
     pub shield_health: u8, // 0..=12; 0 opens Shield Popper to start scene!
     #[serde(default)]
@@ -297,6 +342,7 @@ impl Default for PlayerState {
     fn default() -> Self {
         Self {
             score: 0,
+            character_idx: 0,
             jedi_letters: 0,
             jedi_rank: JediRank::Padawan,
             scenes_completed: 0,
@@ -314,6 +360,22 @@ impl Default for PlayerState {
 }
 
 impl PlayerState {
+    /// Returns this player's assigned Star Wars character name from `player_name_table_data`.
+    pub fn character_name(&self) -> &'static str {
+        PLAYER_CHARACTER_NAMES[self.character_idx % PLAYER_CHARACTER_NAMES.len()]
+    }
+
+    /// Chooses a unique character index (`DeffScoreDisplay::is_name_unique`) not yet taken in `used`.
+    pub fn pick_unique_character(seed: usize, used: &[usize]) -> usize {
+        for off in 0..PLAYER_CHARACTER_NAMES.len() {
+            let cand = (seed + off) % PLAYER_CHARACTER_NAMES.len();
+            if !used.contains(&cand) {
+                return cand;
+            }
+        }
+        seed % PLAYER_CHARACTER_NAMES.len()
+    }
+
     pub fn award_jedi_letter(&mut self) -> bool {
         for bit in 0..4u8 {
             if (self.jedi_letters & (1 << bit)) == 0 {
@@ -334,14 +396,15 @@ impl PlayerState {
     }
 
     pub fn choose_next_scene(&mut self) -> Swe1Scene {
-        for offset in 0..12 {
-            let idx = (self.next_scene_idx + offset) % 12;
+        let n = Swe1Scene::ALL.len();
+        for offset in 0..n {
+            let idx = (self.next_scene_idx + offset) % n;
             if (self.scenes_completed & (1 << idx)) == 0 {
-                self.next_scene_idx = (idx + 1) % 12;
+                self.next_scene_idx = (idx + 1) % n;
                 return Swe1Scene::ALL[idx];
             }
         }
-        // All 12 completed -> reset cycle!
+        // All 14 completed -> reset cycle!
         self.scenes_completed = 0;
         self.next_scene_idx = 1;
         Swe1Scene::ALL[0]

@@ -1,12 +1,18 @@
 //! Deterministic fixed-timestep *Star Wars Episode I* (`#50069`) Pinball 2000 machine runtime.
 
 mod admin_nav;
+mod attract_render;
+mod hud_display;
 mod render;
 mod rfm_playfield;
+mod score_display;
 mod script_exec;
 mod swe1_playfield;
 #[cfg(test)]
 mod tests;
+mod vspinner;
+
+pub use vspinner::VirtualSpinnerState;
 
 use pin2k_hal::{
     AudioBackend, HeadlessAudio, PinballHardware, VideoBackend,
@@ -108,6 +114,12 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub multiball: ActiveMultiball,
     pub rfm: RfmState,
     pub attract: AttractController,
+    pub left_spinner: VirtualSpinnerState,
+    pub right_spinner: VirtualSpinnerState,
+    pub left_saber_color: usize,
+    pub right_saber_color: usize,
+    pub saber_flare_ms: u32,
+    pub debug_anim_override: Option<String>,
     pub status_banner: String,
     pub banner_timer_ms: u32,
     pub active_anim_hint: String,
@@ -179,6 +191,12 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             multiball: ActiveMultiball::None,
             rfm: RfmState::default(),
             attract: AttractController::default(),
+            left_spinner: VirtualSpinnerState::default(),
+            right_spinner: VirtualSpinnerState::default(),
+            left_saber_color: 2,  // Blue (Qui-Gon / Obi-Wan)
+            right_saber_color: 0, // Green
+            saber_flare_ms: 0,
+            debug_anim_override: None,
             status_banner: banner,
             banner_timer_ms: 0,
             active_anim_hint: String::new(),
@@ -249,6 +267,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
     pub(super) fn add_score(&mut self, pts: u64) {
         let scaled = pts.saturating_mul(self.score_multiplier.max(1));
+        if pts > 0 {
+            self.saber_flare_ms = 350;
+        }
         if let Some(p) = self.players.get_mut(self.current_player) {
             p.score = p.score.saturating_add(scaled);
             p.bonus_points = p.bonus_points.saturating_add(scaled / 10);
@@ -418,10 +439,17 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             if !self.free_play {
                 self.credits -= 1;
             }
-            self.players = vec![PlayerState::default()];
+            let char_idx = ((self.elapsed_ms / 16) as usize) % 9;
+            let p0 = PlayerState {
+                character_idx: char_idx,
+                ..PlayerState::default()
+            };
+            self.players = vec![p0];
             self.current_player = 0;
             self.current_ball = 1;
             self.score = 0;
+            self.left_saber_color = 2;
+            self.right_saber_color = 0;
             self.audits.total_games_played = self.audits.total_games_played.saturating_add(1);
             self.state = MachineState::InGame;
             self.audio.stop_all();
@@ -435,7 +463,16 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             if !self.free_play {
                 self.credits -= 1;
             }
-            self.players.push(PlayerState::default());
+            let used: Vec<usize> = self.players.iter().map(|p| p.character_idx).collect();
+            let char_idx = PlayerState::pick_unique_character(
+                (self.elapsed_ms as usize / 16) + self.players.len(),
+                &used,
+            );
+            let new_p = PlayerState {
+                character_idx: char_idx,
+                ..PlayerState::default()
+            };
+            self.players.push(new_p);
             let count = self.players.len();
             self.emit_event(GameEvent::PlayerAdded { player_count: count });
             self.set_banner(format!("PLAYER {count} ADDED"), 2_500);
@@ -466,14 +503,13 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.rfm.multiball = RfmMultiball::None;
         }
 
-        // Eject 1 ball to shooter lane
+        // Eject 1 ball to shooter lane (spinners remain inactive until a ramp shot!)
         self.pending_eject_balls = 1;
         self.eject_cooldown_ms = 0;
-        self.active_anim_hint = if self.game_title == GameTitle::Swe1 {
-            "anim_spinner_1".to_string()
-        } else {
-            String::new()
-        };
+        self.left_spinner = VirtualSpinnerState::default();
+        self.right_spinner = VirtualSpinnerState::default();
+        self.debug_anim_override = None;
+        self.active_anim_hint.clear();
         self.emit_event(GameEvent::BallStarted {
             player: self.current_player + 1,
             ball: self.current_ball,
@@ -664,7 +700,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.attract.tick(dt_ms);
             let cur = self.attract.current();
             if self.game_title == GameTitle::Swe1 {
-                self.active_anim_hint = cur.anim_hint().unwrap_or("").to_string();
+                if self.debug_anim_override.is_none() {
+                    self.active_anim_hint.clear();
+                }
                 self.status_banner = match cur {
                     AttractDeff::KahunaLogo | AttractDeff::P2kLogo | AttractDeff::HasbroAd => String::new(),
                     AttractDeff::SlideShow => "STAR WARS EPISODE I".to_string(),
@@ -691,6 +729,10 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         if self.banner_timer_ms > 0 {
             self.banner_timer_ms = self.banner_timer_ms.saturating_sub(dt_ms);
         }
+        if self.saber_flare_ms > 0 {
+            self.saber_flare_ms = self.saber_flare_ms.saturating_sub(dt_ms);
+        }
+        self.update_virtual_spinners(dt_ms);
         if self.ball_save_ms > 0 {
             self.ball_save_ms = self.ball_save_ms.saturating_sub(dt_ms);
         }
@@ -738,6 +780,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 if sc.timer_ms == 0 {
                     let title = sc.scene.title();
                     self.active_scene = None;
+                    self.active_anim_hint.clear();
                     self.audio.play_sound(sound::MAIN_THEME_LOOP, true);
                     self.set_banner(format!("{title} TIME EXPIRED"), 2_500);
                 }

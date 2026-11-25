@@ -1,13 +1,14 @@
 use pin2k_hal::{AudioBackend, PinballHardware, SoundId, VideoBackend};
 
-use super::{HstdEntrySession, MachineState, Pin2kMachine};
+use super::{DiagPage, HstdEntrySession, MachineState, Pin2kMachine, VirtualSpinnerState};
 use crate::admin::AdminScreen;
+use crate::attract::AttractDeff;
 use crate::mods::{HomebrewSwitchRule, ModManifest};
 use crate::rfm_rules::{GameTitle, RfmMultiball, RfmWave};
 use crate::script_engine::{GameScript, ScriptAction, ScriptRuntime, ScriptTrigger};
 use crate::storage::{GameHistoryEntry, LocalDb};
-use crate::swe1_rules::{ActiveMultiball, ActiveSceneState, JediRank, Swe1Scene};
-use crate::swe1_tables::{drive, sw};
+use crate::swe1_rules::{ActiveMultiball, ActiveSceneState, JediRank, PlayerState, Swe1Scene};
+use crate::swe1_tables::{drive, sound, sw};
 
 impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A> {
     pub fn apply_mod(&mut self, manifest: &ModManifest) {
@@ -101,6 +102,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     /// Debug helper: immediately jumps to a state, SWE1 scene, or scripted mode.
     pub fn debug_launch_mode(&mut self, target: &str) -> bool {
         let key = target.trim().to_ascii_lowercase();
+        self.debug_anim_override = None;
+
         match key.as_str() {
             "game:swe1" | "swe1" => {
                 self.game_title = GameTitle::Swe1;
@@ -108,6 +111,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.state = MachineState::Attract;
                 self.balls_in_play = 0;
                 self.active_scene = None;
+                self.active_anim_hint.clear();
                 self.set_banner("GAME: STAR WARS EPISODE I", 3_000);
                 return true;
             }
@@ -117,6 +121,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.state = MachineState::Attract;
                 self.balls_in_play = 0;
                 self.active_scene = None;
+                self.active_anim_hint.clear();
                 self.set_banner("GAME: REVENGE FROM MARS", 3_000);
                 return true;
             }
@@ -136,23 +141,129 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.balls_in_play = 0;
                 self.active_scene = None;
                 self.multiball = ActiveMultiball::None;
-                self.active_anim_hint = self.attract.current().anim_hint().unwrap_or("").to_string();
+                self.active_anim_hint.clear();
                 self.set_banner("DEBUG: ATTRACT MODE", 3_000);
                 return true;
             }
             "ingame" | "start" => {
-                if self.state != MachineState::InGame {
-                    if !matches!(self.state, MachineState::Boot | MachineState::Attract) {
-                        self.state = MachineState::Attract;
-                    }
-                    self.try_start_or_add_player();
-                }
+                self.ensure_ingame_for(self.game_title);
                 self.active_scene = None;
                 self.multiball = ActiveMultiball::None;
-                if self.game_title == GameTitle::Swe1 {
-                    self.active_anim_hint = "anim_spinner_1".to_string();
-                }
+                self.left_spinner = VirtualSpinnerState::default();
+                self.right_spinner = VirtualSpinnerState::default();
+                self.active_anim_hint.clear();
                 self.set_banner("DEBUG: IN GAME", 3_000);
+                return true;
+            }
+            "skill_shot" => {
+                self.ensure_ingame_swe1();
+                self.active_scene = None;
+                self.multiball = ActiveMultiball::None;
+                self.skill_shot_ready = true;
+                self.active_anim_hint = "anim_super_skill_shot_icon".to_string();
+                self.set_banner("SKILL SHOT READY - SHOOT JETS!", 4_000);
+                return true;
+            }
+            "hangar_multiball" => {
+                self.ensure_ingame_swe1();
+                self.active_scene = None;
+                self.multiball = ActiveMultiball::HangarMultiball {
+                    jackpots_lit: true,
+                    jackpots_collected: 0,
+                };
+                self.pending_eject_balls = self.pending_eject_balls.saturating_add(2);
+                self.ball_save_ms = 20_000;
+                self.emit_sound(sound::MULTIBALL_MUSIC_LOOP, true);
+                self.active_anim_hint = "anim_multiball_start_movie".to_string();
+                self.set_banner("THEED HANGAR 3-BALL MULTIBALL!", 4_000);
+                return true;
+            }
+            "holo_select" => {
+                self.ensure_ingame_swe1();
+                self.active_scene = None;
+                self.multiball = ActiveMultiball::None;
+                self.players[self.current_player].shield_health = 0;
+                self.players[self.current_player].scene_select_ready = true;
+                self.set_shield_raised(true);
+                let idx = self.players[self.current_player].next_scene_idx % Swe1Scene::ALL.len();
+                let sc = Swe1Scene::ALL[idx];
+                self.active_anim_hint = sc.holo_anim_hint().to_string();
+                self.set_banner(format!("SELECT SCENE: {}", sc.title()), 4_000);
+                return true;
+            }
+            "spinner_left" => {
+                self.ensure_ingame_swe1();
+                self.trigger_virtual_spinner(false, true);
+                self.set_banner("LEFT RAMP SPINNER ACTIVE", 2_500);
+                return true;
+            }
+            "spinner_right" => {
+                self.ensure_ingame_swe1();
+                self.trigger_virtual_spinner(true, true);
+                self.set_banner("RIGHT RAMP SPINNER ACTIVE", 2_500);
+                return true;
+            }
+            "sub_escape" => {
+                self.ensure_ingame_swe1();
+                self.active_anim_hint = "anim_gungan_sub_chomp".to_string();
+                self.emit_sound(sound::BATTLE_MUSIC_LOOP, true);
+                self.set_banner("SUB ESCAPE!", 4_000);
+                return true;
+            }
+            "bonus" => {
+                self.ensure_ingame_swe1();
+                self.active_anim_hint = "anim_bonus_background".to_string();
+                let p = &self.players[self.current_player];
+                let total = p.bonus_points.saturating_mul(p.bonus_multiplier as u64);
+                self.set_banner(format!("BONUS: {} X {} = {}", p.bonus_points, p.bonus_multiplier, total), 4_000);
+                return true;
+            }
+            "match" => {
+                self.cut_all_holds();
+                self.state = MachineState::Attract;
+                self.active_anim_hint = "anim_match_movie".to_string();
+                self.debug_anim_override = Some("anim_match_movie".to_string());
+                self.set_banner("MATCH SEQUENCE", 4_000);
+                return true;
+            }
+            "game_over" => {
+                self.cut_all_holds();
+                self.state = MachineState::Attract;
+                self.active_anim_hint = "anim_darth_maul_game_over".to_string();
+                self.debug_anim_override = Some("anim_darth_maul_game_over".to_string());
+                self.emit_sound(sound::GAME_OVER_MUSIC, false);
+                self.set_banner("GAME OVER", 4_000);
+                return true;
+            }
+            "game_intro" => {
+                self.ensure_ingame_swe1();
+                self.active_anim_hint = "anim_republic_cruiser_intro".to_string();
+                self.set_banner("EPISODE I INTRO", 4_000);
+                return true;
+            }
+            "extra_ball" => {
+                self.ensure_ingame_swe1();
+                self.players[self.current_player].extra_balls += 1;
+                self.active_anim_hint = "anim_extra_ball_show".to_string();
+                self.set_banner("EXTRA BALL!", 3_500);
+                return true;
+            }
+            "ball_save" => {
+                self.ensure_ingame_swe1();
+                self.ball_save_ms = 15_000;
+                self.set_banner("SHOOT AGAIN! FORCE BALL SAVE!", 3_000);
+                return true;
+            }
+            "tilt_warning" => {
+                self.ensure_ingame_swe1();
+                self.set_banner("DANGER! TILT WARNING!", 3_000);
+                return true;
+            }
+            "slam_tilt" => {
+                self.cut_all_holds();
+                self.state = MachineState::Attract;
+                self.balls_in_play = 0;
+                self.set_banner("SLAM TILT!", 4_000);
                 return true;
             }
             "diagnostics" | "admin" => {
@@ -167,6 +278,40 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.state = MachineState::Diagnostics;
                 self.admin_screen = AdminScreen::DebugLauncher { cursor: 0 };
                 self.set_banner("DEBUG LAUNCHER", 3_000);
+                return true;
+            }
+            "diag:switch" => {
+                self.cut_all_holds();
+                self.state = MachineState::Diagnostics;
+                self.diag_page = DiagPage::SwitchTest;
+                self.admin_screen = AdminScreen::SwitchTest;
+                return true;
+            }
+            "diag:coil" => {
+                self.cut_all_holds();
+                self.state = MachineState::Diagnostics;
+                self.diag_page = DiagPage::CoilTest { selected_drive: 0 };
+                self.admin_screen = AdminScreen::CoilTest { selected_drive: 0 };
+                return true;
+            }
+            "diag:lamp" => {
+                self.cut_all_holds();
+                self.state = MachineState::Diagnostics;
+                self.diag_page = DiagPage::LampTest { selected_lamp: 2 };
+                self.admin_screen = AdminScreen::LampTest { selected_lamp: 2 };
+                return true;
+            }
+            "diag:sound" => {
+                self.cut_all_holds();
+                self.state = MachineState::Diagnostics;
+                self.admin_screen = AdminScreen::SoundTest { selected_idx: 0 };
+                return true;
+            }
+            "diag:align" => {
+                self.cut_all_holds();
+                self.state = MachineState::Diagnostics;
+                self.debug_anim_override = Some("system_video_test_align".to_string());
+                self.active_anim_hint = "system_video_test_align".to_string();
                 return true;
             }
             "hstd_entry" | "high_score_entry" => {
@@ -191,6 +336,24 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             _ => {}
         }
 
+        // Attract specific slide (`attract:0`..`attract:19`)
+        if let Some(idx_str) = key.strip_prefix("attract:") {
+            if let Ok(idx) = idx_str.parse::<usize>() {
+                if idx < AttractDeff::ALL.len() {
+                    self.cut_all_holds();
+                    self.game_title = GameTitle::Swe1;
+                    self.state = MachineState::Attract;
+                    self.balls_in_play = 0;
+                    self.active_scene = None;
+                    self.attract.index = idx;
+                    self.attract.timer_ms = 0;
+                    self.attract.last_game_played = true;
+                    self.active_anim_hint.clear();
+                    return true;
+                }
+            }
+        }
+
         // RFM Waves (`rfm_wave:0`..`8`, `capture_multiball`, `martian_attack`)
         if let Some(wave_idx_str) = key.strip_prefix("rfm_wave:") {
             if let Some(wave) = wave_idx_str
@@ -198,13 +361,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 .ok()
                 .and_then(|i| RfmWave::ALL.get(i).copied())
             {
-                self.game_title = GameTitle::Rfm;
-                if self.state != MachineState::InGame {
-                    if !matches!(self.state, MachineState::Boot | MachineState::Attract) {
-                        self.state = MachineState::Attract;
-                    }
-                    self.try_start_or_add_player();
-                }
+                self.ensure_ingame_for(GameTitle::Rfm);
                 self.rfm.active_wave = Some(wave);
                 self.rfm.wave_hits_left = wave.required_hits();
                 self.set_banner(format!("RFM WAVE: {}", wave.title()), 4_000);
@@ -212,10 +369,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
         }
         if key == "capture_multiball" || key == "martian_attack" {
-            self.game_title = GameTitle::Rfm;
-            if self.state != MachineState::InGame {
-                self.try_start_or_add_player();
-            }
+            self.ensure_ingame_for(GameTitle::Rfm);
             self.rfm.multiball = if key == "capture_multiball" {
                 RfmMultiball::CaptureMultiball { jackpots: 0 }
             } else {
@@ -227,14 +381,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
 
         // Ensure we are InGame for scene/mode launches
-        if self.state != MachineState::InGame {
-            if !matches!(self.state, MachineState::Boot | MachineState::Attract) {
-                self.state = MachineState::Attract;
-            }
-            self.try_start_or_add_player();
-        }
+        self.ensure_ingame_for(self.game_title);
 
-        // Check SWE1 scenes (`scene:0`..`scene:11` or `podrace` etc.)
+        // Check SWE1 scenes (`scene:0`..`scene:13` or `podrace` etc.)
         let scene_opt = if let Some(idx_str) = key.strip_prefix("scene:") {
             idx_str
                 .parse::<usize>()
@@ -254,6 +403,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 "jar_jar_juggle" => Some(Swe1Scene::JarJarJuggle),
                 "wattos_chance" => Some(Swe1Scene::WattosChance),
                 "mos_espa_cantina" => Some(Swe1Scene::MosEspaCantina),
+                "r2d2" | "r2_d2" => Some(Swe1Scene::R2D2),
+                "question_mark" | "mystery" => Some(Swe1Scene::QuestionMark),
                 _ => None,
             }
         };
@@ -297,7 +448,71 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         false
     }
 
+    fn ensure_ingame_for(&mut self, game: GameTitle) {
+        self.game_title = game;
+        if self.state != MachineState::InGame {
+            self.state = MachineState::Attract;
+            self.try_start_or_add_player();
+        }
+    }
+
+    fn ensure_ingame_swe1(&mut self) {
+        self.ensure_ingame_for(GameTitle::Swe1);
+    }
+
+    /// Applies debug player/gameplay mutators (`add_player`, `next_player`, `ball:N`, `lasers:N`, `shield:N`, `jedi:N`, `rank:N`).
+    pub fn debug_apply_player_cmd(&mut self, cmd: &str) -> bool {
+        let key = cmd.trim().to_ascii_lowercase();
+        if key == "add_player" {
+            self.ensure_ingame_swe1();
+            if self.players.len() < 4 {
+                let used: Vec<usize> = self.players.iter().map(|p| p.character_idx).collect();
+                let char_idx = PlayerState::pick_unique_character(self.players.len() + 1, &used);
+                self.players.push(PlayerState {
+                    character_idx: char_idx,
+                    ..PlayerState::default()
+                });
+                return true;
+            }
+            return false;
+        }
+        if key == "next_player" && !self.players.is_empty() {
+            self.current_player = (self.current_player + 1) % self.players.len();
+            self.score = self.players[self.current_player].score;
+            return true;
+        }
+        if let Some(v) = key.strip_prefix("ball:").and_then(|s| s.parse::<u8>().ok()) {
+            self.current_ball = v.clamp(1, 5);
+            return true;
+        }
+        if let Some(v) = key.strip_prefix("lasers:").and_then(|s| s.parse::<u8>().ok()) {
+            self.players[self.current_player].laser_shots = v.min(9);
+            return true;
+        }
+        if let Some(v) = key.strip_prefix("shield:").and_then(|s| s.parse::<u8>().ok()) {
+            self.players[self.current_player].shield_health = v.min(12);
+            self.set_shield_raised(v == 0);
+            return true;
+        }
+        if let Some(v) = key.strip_prefix("jedi:").and_then(|s| s.parse::<u8>().ok()) {
+            self.players[self.current_player].jedi_letters = v & 0x0F;
+            return true;
+        }
+        if let Some(v) = key.strip_prefix("rank:").and_then(|s| s.parse::<u8>().ok()) {
+            self.players[self.current_player].jedi_rank = match v {
+                0 => JediRank::Padawan,
+                1 => JediRank::Youth,
+                2 => JediRank::Knight,
+                3 => JediRank::Master,
+                _ => JediRank::Spirit,
+            };
+            return true;
+        }
+        false
+    }
+
     pub fn debug_play_anim(&mut self, anim_name: &str) {
+        self.debug_anim_override = Some(anim_name.to_string());
         self.active_anim_hint = anim_name.to_string();
         self.set_banner(format!("ANIM: {anim_name}"), 3_000);
     }
@@ -307,12 +522,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     pub fn debug_add_score(&mut self, points: u64) {
-        if self.state != MachineState::InGame {
-            if !matches!(self.state, MachineState::Boot | MachineState::Attract) {
-                self.state = MachineState::Attract;
-            }
-            self.try_start_or_add_player();
-        }
+        self.ensure_ingame_for(self.game_title);
         self.add_score(points);
     }
 

@@ -311,3 +311,222 @@
         assert!(machine.debug_launch_mode("hstd_entry"));
         assert_eq!(machine.state, MachineState::HighScoreEntry);
     }
+
+    #[test]
+    fn score_display_renders_character_names_scores_and_sabers() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine = Pin2kMachine::new(driver, HeadlessVideo::default());
+
+        // Start 2-player SWE1 game
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
+        assert_eq!(machine.players.len(), 2);
+        let p0_name = machine.players[0].character_name();
+        let p1_name = machine.players[1].character_name();
+        assert_ne!(p0_name, p1_name);
+        assert!(crate::swe1_rules::PLAYER_CHARACTER_NAMES.contains(&p0_name));
+        assert!(crate::swe1_rules::PLAYER_CHARACTER_NAMES.contains(&p1_name));
+
+        machine.add_score(1_234_560);
+        machine.tick(16);
+
+        let texts = &machine.video.last_font_text_cmds;
+        assert!(texts.iter().any(|t| {
+            t.text == p0_name && t.x == 36 && t.y == 8 && t.z == 10 && t.align == pin2k_hal::TextAlign::Left
+        }));
+        assert!(texts.iter().any(|t| {
+            t.text == "1,234,560" && t.x > 36 && t.y == 7 && t.z == 10 && t.align == pin2k_hal::TextAlign::Left
+        }));
+        assert!(texts.iter().any(|t| {
+            t.text == p1_name && t.x < 525 && t.y == 8 && t.z == 10 && t.align == pin2k_hal::TextAlign::Right
+        }));
+        assert!(texts.iter().any(|t| {
+            t.text == "0" && t.x == 525 && t.y == 7 && t.z == 10 && t.align == pin2k_hal::TextAlign::Right
+        }));
+
+        let sprites = &machine.video.last_sprite_cmds;
+        assert!(sprites
+            .iter()
+            .any(|s| s.anim_name == "anim_saber_handle" && s.x == 261 && s.y == 7 && s.z == 9));
+        assert!(sprites
+            .iter()
+            .any(|s| s.anim_name.starts_with("anim_saber_") && s.x == 16 && s.y == 7 && s.z == 9 && !s.flip_x));
+        assert!(sprites
+            .iter()
+            .any(|s| s.anim_name.starts_with("anim_saber_") && s.x == 300 && s.y == 7 && s.z == 9 && s.flip_x));
+    }
+
+    #[test]
+    fn laser_status_hud_shows_ready_and_depleted_states() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine = Pin2kMachine::new(driver, HeadlessVideo::default());
+
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
+        machine.tick(16);
+
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_naboo_fighter_tiny_rotate"
+                && s.x == 535
+                && s.y == 10
+                && s.z == 20
+                && s.monochrome_rgb555.is_none()
+        }));
+        assert!(machine
+            .video
+            .last_font_text_cmds
+            .iter()
+            .any(|t| (t.text == "LASER" || t.text == "LASERS") && t.z == 21));
+
+        machine.players[0].laser_shots = 0;
+        machine.tick(16);
+
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_naboo_fighter_tiny_rotate"
+                && s.x == 535
+                && s.y == 10
+                && s.z == 20
+                && s.monochrome_rgb555 == Some(0x294A)
+        }));
+        assert!(machine
+            .video
+            .last_font_text_cmds
+            .iter()
+            .any(|t| t.text == "0" && t.x == 585 && t.y == 35 && t.z == 21));
+    }
+
+    #[test]
+    fn virtual_spinners_stay_idle_until_ramp_pass_and_play_turnstile_sound() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
+        for _ in 0..20 {
+            machine.tick(16);
+        }
+        assert!(!machine.left_spinner.active);
+        assert!(!machine.right_spinner.active);
+        assert!(!machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .any(|s| s.anim_name.starts_with("anim_spinner_")));
+
+        // Left ramp pass triggers left virtual spinner + turnstile sound
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
+        machine.tick(16);
+        assert!(machine.left_spinner.active);
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_spinner_bracket_left" && s.x == 43 && s.y == 174 && s.z == 22
+        }));
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_spinner_1" && s.x == 43 && s.y == 174 && s.z == 22
+        }));
+        assert!(machine
+            .audio
+            .played
+            .iter()
+            .any(|(sid, _)| *sid == crate::swe1_tables::sound::SPINNER_TICKS[0]));
+
+        // Right ramp pass triggers right virtual spinner
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_RAMP_ENTER);
+        machine.tick(16);
+        assert!(machine.right_spinner.active);
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_spinner_bracket_right" && s.x == 421 && s.y == 174 && s.z == 22
+        }));
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_spinner_2" && s.x == 421 && s.y == 174 && s.z == 22
+        }));
+    }
+
+    #[test]
+    fn attract_kahuna_logo_renders_tinted_light_flare_and_spinning_logo() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine = Pin2kMachine::new(driver, HeadlessVideo::default());
+
+        assert!(machine.debug_launch_mode("attract:0"));
+        for _ in 0..5 {
+            machine.tick(16);
+        }
+
+        let sprites = &machine.video.last_sprite_cmds;
+        assert!(sprites.iter().any(|s| {
+            s.anim_name == "anim_kahuna_logo_flare"
+                && s.x == 23
+                && s.y == 7
+                && s.z == 7
+                && s.monochrome_rgb555.is_some()
+        }));
+        assert!(sprites.iter().any(|s| {
+            s.anim_name == "anim_kahuna_logo_spinning" && s.x == 187 && s.y == 80 && s.z == 8
+        }));
+        assert!(machine.video.last_font_text_cmds.iter().any(|t| {
+            t.z == 250 && (t.text.contains("FREE PLAY") || t.text.contains("PRESS START"))
+        }));
+    }
+
+    #[test]
+    fn debug_launch_mode_and_player_cmds_cover_all_modes() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine = Pin2kMachine::new(driver, HeadlessVideo::default());
+
+        // Must transition directly from Boot -> InGame when debug-launching in-game modes
+        assert_eq!(machine.state, MachineState::Boot);
+        assert!(machine.debug_launch_mode("ingame"));
+        assert_eq!(machine.state, MachineState::InGame);
+        assert!(machine.debug_launch_mode("boot"));
+        assert_eq!(machine.state, MachineState::Boot);
+        assert!(machine.debug_launch_mode("scene:6"));
+        assert_eq!(machine.state, MachineState::InGame);
+
+        for mode in [
+            "game:swe1",
+            "game:rfm",
+            "attract:0",
+            "attract:19",
+            "scene:0",
+            "scene:12",
+            "scene:13",
+            "sub_escape",
+            "skill_shot",
+            "holo_select",
+            "hangar_multiball",
+            "darth_maul_duel",
+            "spinner_left",
+            "spinner_right",
+            "bonus",
+            "match",
+            "game_over",
+            "hstd_entry",
+            "diag:align",
+        ] {
+            assert!(machine.debug_launch_mode(mode), "failed debug_launch_mode({mode})");
+        }
+
+        assert!(machine.debug_launch_mode("game:swe1"));
+        assert!(machine.debug_launch_mode("ingame"));
+        let prev_score = machine.players[0].score;
+
+        machine.debug_add_score(1_000_000);
+        assert!(machine.players[0].score >= prev_score + 1_000_000);
+        assert!(machine.debug_apply_player_cmd("lasers:5"));
+        assert_eq!(machine.players[0].laser_shots, 5);
+        assert!(machine.debug_apply_player_cmd("jedi:7"));
+        assert_eq!(machine.players[0].jedi_letters, 7);
+        assert!(machine.debug_apply_player_cmd("shield:0"));
+        assert_eq!(machine.players[0].shield_health, 0);
+        assert!(machine.debug_apply_player_cmd("rank:3"));
+        assert_eq!(machine.players[0].jedi_rank, crate::swe1_rules::JediRank::Master);
+        assert!(machine.debug_apply_player_cmd("ball:2"));
+        assert_eq!(machine.current_ball, 2);
+        assert!(machine.debug_apply_player_cmd("add_player"));
+        assert_eq!(machine.players.len(), 2);
+        assert!(machine.debug_apply_player_cmd("next_player"));
+        assert_eq!(machine.current_player, 1);
+    }

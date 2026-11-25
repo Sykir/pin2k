@@ -195,13 +195,24 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.popper_hold_ms = 900;
                 self.on_shield_popper_entered();
             }
-            // Left & Right Ramps + Left Loop -> JEDI Letters, Scene Shots, Multiball Jackpots!
-            sw::LEFT_RAMP_ENTER | sw::RIGHT_RAMP_ENTER => {
+            // Left & Right Ramps + Left Loop -> Virtual Spinners + JEDI Letters, Scene Shots, Multiball Jackpots!
+            sw::LEFT_RAMP_ENTER => {
                 self.skill_shot_ready = false;
+                self.trigger_virtual_spinner(false, true);
+                self.add_score(25_000);
+            }
+            sw::RIGHT_RAMP_ENTER => {
+                self.skill_shot_ready = false;
+                self.trigger_virtual_spinner(true, true);
                 self.add_score(25_000);
             }
             sw::RAMP_MADE_LEFT | sw::RAMP_MADE_RIGHT | sw::LEFT_LOOP_UPPER | sw::LEFT_LOOP_ROLLOVER => {
                 self.skill_shot_ready = false;
+                if id == sw::RAMP_MADE_LEFT {
+                    self.trigger_virtual_spinner(false, true);
+                } else if id == sw::RAMP_MADE_RIGHT {
+                    self.trigger_virtual_spinner(true, true);
+                }
                 self.on_major_shot_made(id);
             }
             // Inlanes & Outlanes & Captive Ball
@@ -338,6 +349,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
     pub fn start_darth_maul_duel(&mut self) {
         self.players[self.current_player].jedi_letters = 0;
+        self.right_saber_color = 1; // Red Sith lightsaber
         self.hw.set_drive_hold(drive::LIGHTSABER_NEON, true);
         self.multiball = ActiveMultiball::DarthMaulDuel {
             maul_health: 100,
@@ -469,6 +481,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             });
             if scene == Swe1Scene::Podrace {
                 self.active_anim_hint = "anim_podrace_closeup".to_string();
+            } else {
+                self.active_anim_hint.clear();
             }
             self.set_banner(format!("{} VICTORY! +1,500,000", scene.title()), 3_500);
         }

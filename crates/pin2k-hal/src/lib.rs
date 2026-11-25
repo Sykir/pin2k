@@ -79,10 +79,86 @@ pub trait PinballHardware {
     fn sync(&mut self, _dt_ms: u32) {}
 }
 
+/// Text horizontal alignment matching XINA `Justification` (`Left`, `Center`, `Right`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+/// Z-ordered sprite draw command matching XINA `BaseViewManager::Display`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpriteDrawCmd {
+    pub anim_name: String,
+    pub frame: usize,
+    pub x: i32,
+    pub y: i32,
+    pub z: u8,
+    pub flip_x: bool,
+    pub scale_x: u32,
+    pub scale_y: u32,
+    pub monochrome_rgb555: Option<u16>,
+}
+
+impl SpriteDrawCmd {
+    pub fn new(anim_name: impl Into<String>, frame: usize, x: i32, y: i32, z: u8) -> Self {
+        Self {
+            anim_name: anim_name.into(),
+            frame,
+            x,
+            y,
+            z,
+            flip_x: false,
+            scale_x: 1,
+            scale_y: 1,
+            monochrome_rgb555: None,
+        }
+    }
+}
+
+/// Z-ordered bitmap font text draw command matching XINA `Font::plot_text_*`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextDrawCmd {
+    pub font_name: String,
+    pub text: String,
+    pub x: i32,
+    pub y: i32,
+    pub z: u8,
+    pub color_rgb555: u16,
+    pub shadow_rgb555: Option<u16>,
+    pub align: TextAlign,
+}
+
+/// Z-ordered solid/translucent rectangle draw command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RectDrawCmd {
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+    pub z: u8,
+    pub color_rgb555: u16,
+    pub alpha: u8,
+}
+
 /// 640×480 (640×240×2) 2D compositor abstraction replacing the MediaGX blitter.
 pub trait VideoBackend {
+    /// Begins a new logical frame, clearing queued Z-ordered draw layers.
+    fn begin_frame(&mut self) {}
+
     /// Queues a sprite/animation frame for drawing at `(x, y)` with Z-order `z`.
     fn draw_sprite(&mut self, id: AssetId, frame: usize, x: i32, y: i32, z: u8);
+
+    /// Queues a named ROM sprite/animation layer with exact coordinates, Z-priority, flip, scale, and optional monochrome tint.
+    fn draw_named_sprite(&mut self, _cmd: SpriteDrawCmd) {}
+
+    /// Queues a ROM bitmap-font text layer with exact coordinates, Z-priority, RGB555 colors, and alignment.
+    fn draw_font_text(&mut self, _cmd: TextDrawCmd) {}
+
+    /// Queues a filled rectangle layer with exact coordinates, Z-priority, RGB555 color, and alpha.
+    fn draw_rect(&mut self, _cmd: RectDrawCmd) {}
 
     /// Draws HUD text onto the playfield reflection overlay.
     fn draw_text(&mut self, _text: &str, _x: i32, _y: i32, _color_rgb555: u16, _scale: u8) {}
@@ -210,12 +286,36 @@ impl PinballHardware for MockHardware {
 pub struct HeadlessVideo {
     pub draw_calls: Vec<(AssetId, usize, i32, i32, u8)>,
     pub text_calls: Vec<(String, i32, i32)>,
+    pub sprite_cmds: Vec<SpriteDrawCmd>,
+    pub font_text_cmds: Vec<TextDrawCmd>,
+    pub rect_cmds: Vec<RectDrawCmd>,
+    pub last_sprite_cmds: Vec<SpriteDrawCmd>,
+    pub last_font_text_cmds: Vec<TextDrawCmd>,
+    pub last_rect_cmds: Vec<RectDrawCmd>,
     pub frames_presented: u64,
 }
 
 impl VideoBackend for HeadlessVideo {
+    fn begin_frame(&mut self) {
+        self.sprite_cmds.clear();
+        self.font_text_cmds.clear();
+        self.rect_cmds.clear();
+    }
+
     fn draw_sprite(&mut self, id: AssetId, frame: usize, x: i32, y: i32, z: u8) {
         self.draw_calls.push((id, frame, x, y, z));
+    }
+
+    fn draw_named_sprite(&mut self, cmd: SpriteDrawCmd) {
+        self.sprite_cmds.push(cmd);
+    }
+
+    fn draw_font_text(&mut self, cmd: TextDrawCmd) {
+        self.font_text_cmds.push(cmd);
+    }
+
+    fn draw_rect(&mut self, cmd: RectDrawCmd) {
+        self.rect_cmds.push(cmd);
     }
 
     fn draw_text(&mut self, text: &str, x: i32, y: i32, _color_rgb555: u16, _scale: u8) {
@@ -223,6 +323,9 @@ impl VideoBackend for HeadlessVideo {
     }
 
     fn present(&mut self) {
+        self.last_sprite_cmds = self.sprite_cmds.clone();
+        self.last_font_text_cmds = self.font_text_cmds.clone();
+        self.last_rect_cmds = self.rect_cmds.clone();
         self.frames_presented += 1;
     }
 }

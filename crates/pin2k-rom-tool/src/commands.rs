@@ -15,6 +15,7 @@ use pin2k_rom_tool::interleave::{
     crc32_ieee, discover_dcs_pair, discover_prism_pairs, interleave_buffers, reconstruct_from_zip,
     reconstruct_prism_image, InterleaveMode,
 };
+use pin2k_rom_tool::layout_extractor::extract_rom_layout_from_elf;
 use pin2k_rom_tool::prism::{assemble_bar3_update_dir, load_update_bundle, verify_prism_images};
 use pin2k_rom_tool::scanner::{scan_ascii_strings, scan_headers, ScanReport};
 use pin2k_rom_tool::symbols::SymbolTable;
@@ -648,6 +649,21 @@ pub(crate) fn dispatch(cli: Cli) -> Result<()> {
                 script.attract.len(),
                 script.modes.len(),
                 script.rules.len()
+            );
+        }
+
+        Commands::ExtractLayout { elf, output_dir } => {
+            let db = extract_rom_layout_from_elf(&elf, &output_dir)?;
+            println!(
+                "Extracted ROM layout DB -> {}/rom_layout_db.json (symbols={}, deffs={}, players={}, scenes={}, attract={}, acd={}, ard={})",
+                output_dir.display(),
+                db.elf_symbols_count,
+                db.deff_count,
+                db.player_names.len(),
+                db.scenes.len(),
+                db.attract_sequence.len(),
+                db.acd_commands.len(),
+                db.ard_descriptors.len()
             );
         }
     }

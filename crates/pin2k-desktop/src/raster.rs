@@ -2,6 +2,65 @@ use image::{Rgba, RgbaImage};
 
 use crate::compositor::SCREEN_W;
 
+pub(crate) fn rgb555_to_rgba(color_rgb555: u16, alpha: u8) -> [u8; 4] {
+    let r = (((color_rgb555 >> 10) & 0x1F) as u8) << 3;
+    let g = (((color_rgb555 >> 5) & 0x1F) as u8) << 3;
+    let b = ((color_rgb555 & 0x1F) as u8) << 3;
+    [r, g, b, alpha]
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn blit_rgba_ex(
+    dst: &mut RgbaImage,
+    src: &RgbaImage,
+    ox: i32,
+    oy: i32,
+    scale_x: u32,
+    scale_y: u32,
+    max_y: i32,
+    flip_x: bool,
+    monochrome_rgb555: Option<u16>,
+) {
+    let sx_scale = scale_x.max(1);
+    let sy_scale = scale_y.max(1);
+    let tint = monochrome_rgb555.map(|c| rgb555_to_rgba(c, 255));
+    let w = src.width();
+    let h = src.height();
+
+    for sy in 0..h {
+        for dy_rep in 0..sy_scale {
+            let dy = oy + (sy * sy_scale + dy_rep) as i32;
+            if !(0..max_y).contains(&dy) {
+                continue;
+            }
+            for sx in 0..w {
+                let src_x = if flip_x { w - 1 - sx } else { sx };
+                let p = src.get_pixel(src_x, sy);
+                if p.0[3] == 0 {
+                    continue;
+                }
+                let out_px = if let Some([tr, tg, tb, _]) = tint {
+                    let lum = p.0[0].max(p.0[1]).max(p.0[2]) as u16;
+                    Rgba([
+                        ((tr as u16 * lum) / 255) as u8,
+                        ((tg as u16 * lum) / 255) as u8,
+                        ((tb as u16 * lum) / 255) as u8,
+                        p.0[3],
+                    ])
+                } else {
+                    *p
+                };
+                for dx_rep in 0..sx_scale {
+                    let dx = ox + (sx * sx_scale + dx_rep) as i32;
+                    if (0..SCREEN_W as i32).contains(&dx) {
+                        dst.put_pixel(dx as u32, dy as u32, out_px);
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn blit_rgba_clipped(
     dst: &mut RgbaImage,
     src: &RgbaImage,
@@ -10,24 +69,7 @@ pub(crate) fn blit_rgba_clipped(
     scale_x: u32,
     max_y: i32,
 ) {
-    for sy in 0..src.height() {
-        let dy = oy + sy as i32;
-        if !(0..max_y).contains(&dy) {
-            continue;
-        }
-        for sx in 0..src.width() {
-            let p = src.get_pixel(sx, sy);
-            if p.0[3] == 0 {
-                continue;
-            }
-            for dx_rep in 0..scale_x {
-                let dx = ox + (sx * scale_x + dx_rep) as i32;
-                if (0..SCREEN_W as i32).contains(&dx) {
-                    dst.put_pixel(dx as u32, dy as u32, *p);
-                }
-            }
-        }
-    }
+    blit_rgba_ex(dst, src, ox, oy, scale_x, 1, max_y, false, None);
 }
 
 pub(crate) fn fill_rect(img: &mut RgbaImage, x: i32, y: i32, w: i32, h: i32, color: [u8; 4]) {
@@ -37,7 +79,23 @@ pub(crate) fn fill_rect(img: &mut RgbaImage, x: i32, y: i32, w: i32, h: i32, col
     let y1 = (y + h).min(img.height() as i32).max(0) as u32;
     for py in y0..y1 {
         for px in x0..x1 {
-            img.put_pixel(px, py, Rgba(color));
+            if color[3] == 255 {
+                img.put_pixel(px, py, Rgba(color));
+            } else if color[3] > 0 {
+                let dst = img.get_pixel(px, py).0;
+                let a = color[3] as u16;
+                let inv = 255 - a;
+                img.put_pixel(
+                    px,
+                    py,
+                    Rgba([
+                        ((color[0] as u16 * a + dst[0] as u16 * inv) / 255) as u8,
+                        ((color[1] as u16 * a + dst[1] as u16 * inv) / 255) as u8,
+                        ((color[2] as u16 * a + dst[2] as u16 * inv) / 255) as u8,
+                        255,
+                    ]),
+                );
+            }
         }
     }
 }

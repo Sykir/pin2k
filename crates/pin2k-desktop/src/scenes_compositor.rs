@@ -24,10 +24,6 @@ impl SoftwareCompositor {
                 self.render_podrace_scene(true);
                 true
             }
-            "anim_spinner_1" => {
-                self.render_ingame_spinners();
-                true
-            }
             "anim_bdroid_on_stap" => {
                 let _ = self.blit_named("anim_bdroid_background", 0, 0, 0, 1);
                 let _ = self.blit_named("anim_left_bdroid_standing", f60, 40, 80, 1);

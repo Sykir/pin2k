@@ -1,10 +1,5 @@
 //! Zero-dependency pure-Rust HTTP live cabinet viewer, WebAudio DCS player,
-//! and interactive switchboard (`--web-port <PORT>`).
-//!
-//! Lets any browser connect to `http://127.0.0.1:<PORT>` to view the live
-//! 640×480 *Star Wars Episode I* holoprojector + playfield telemetry, hear
-//! extracted `.ogg` DCS audio tracks via WebAudio, and trigger real playfield
-//! switches with keyboard or mouse clicks.
+//! and interactive switchboard + full Debug Console (`--web-port <PORT>`).
 
 use std::collections::HashMap;
 use std::fs;
@@ -17,14 +12,42 @@ use std::thread;
 use pin2k_hal::{AudioBackend, SoundId};
 use pin2k_rom_tool::asset_extractor::SoundManifest;
 
+/// Decodes URL percent-encoded strings (`%3A` -> `:`, `%20` / `+` -> ` `).
+pub fn percent_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let h1 = (bytes[i + 1] as char).to_digit(16);
+            let h2 = (bytes[i + 2] as char).to_digit(16);
+            if let (Some(a), Some(b)) = (h1, h2) {
+                out.push(((a << 4) | b) as u8);
+                i += 3;
+                continue;
+            }
+        } else if bytes[i] == b'+' {
+            out.push(b' ');
+            i += 1;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum DebugCommand {
     LaunchMode(String),
     PlayAnim(String),
     PlaySound(u16),
     AddScore(u64),
     PulseDrive(u8, u8),
+    SetLamp(u8, u8),
+    PlayerCmd(String),
+    TogglePause,
+    StepFrame,
 }
 
 #[derive(Default)]
@@ -33,9 +56,11 @@ pub struct SharedWebState {
     pub status_json: String,
     pub events_json: String,
     pub db_json: String,
-    pub pending_switches: Vec<(u8, bool, u32)>, // (sw_id, closed, hold_ms)
+    pub assets_json: String,
+    pub pending_switches: Vec<(u8, bool, u32)>,
     pub pending_debug: Vec<DebugCommand>,
-    pub active_sound_file: Option<(u64, String, bool)>, // (seq, filename, looping)
+    pub active_sound_file: Option<(u64, String, bool)>,
+    pub paused: bool,
 }
 
 #[derive(Clone)]
@@ -54,7 +79,6 @@ impl WebAudioBridge {
                 if let Ok(m) = serde_json::from_str::<SoundManifest>(&raw) {
                     for entry in m.sounds {
                         if let Some(id) = entry.dcs_id {
-                            // Prefer single-loop or intro or oneshot first seen
                             map.entry(id).or_insert(entry.file);
                         }
                     }
@@ -121,7 +145,7 @@ fn handle_client(
     shared: &Arc<Mutex<SharedWebState>>,
     assets_dir: Option<&Path>,
 ) -> std::io::Result<()> {
-    let mut buf = [0u8; 2048];
+    let mut buf = [0u8; 4096];
     let n = stream.read(&mut buf)?;
     if n == 0 {
         return Ok(());
@@ -134,7 +158,7 @@ fn handle_client(
     let path = raw_path.split('?').next().unwrap_or(raw_path);
 
     if method == "POST" && path.starts_with("/api/switch/") {
-        if let Ok(sw_id) = path.trim_start_matches("/api/switch/").parse::<u8>() {
+        if let Ok(sw_id) = percent_decode(path.trim_start_matches("/api/switch/")).parse::<u8>() {
             if let Ok(mut st) = shared.lock() {
                 st.pending_switches.push((sw_id, true, 96));
             }
@@ -143,7 +167,7 @@ fn handle_client(
     }
 
     if method == "POST" && path.starts_with("/api/debug/mode/") {
-        let mode = path.trim_start_matches("/api/debug/mode/").to_string();
+        let mode = percent_decode(path.trim_start_matches("/api/debug/mode/"));
         if let Ok(mut st) = shared.lock() {
             st.pending_debug.push(DebugCommand::LaunchMode(mode));
         }
@@ -151,7 +175,7 @@ fn handle_client(
     }
 
     if method == "POST" && path.starts_with("/api/debug/anim/") {
-        let anim = path.trim_start_matches("/api/debug/anim/").to_string();
+        let anim = percent_decode(path.trim_start_matches("/api/debug/anim/"));
         if let Ok(mut st) = shared.lock() {
             st.pending_debug.push(DebugCommand::PlayAnim(anim));
         }
@@ -159,7 +183,7 @@ fn handle_client(
     }
 
     if method == "POST" && path.starts_with("/api/debug/sound/") {
-        let raw_id = path.trim_start_matches("/api/debug/sound/");
+        let raw_id = percent_decode(path.trim_start_matches("/api/debug/sound/"));
         let parsed = if let Some(hex) = raw_id.strip_prefix("0x").or_else(|| raw_id.strip_prefix("0X")) {
             u16::from_str_radix(hex, 16).ok()
         } else {
@@ -174,12 +198,74 @@ fn handle_client(
     }
 
     if method == "POST" && path.starts_with("/api/debug/score/") {
-        if let Ok(pts) = path.trim_start_matches("/api/debug/score/").parse::<u64>() {
+        if let Ok(pts) = percent_decode(path.trim_start_matches("/api/debug/score/")).parse::<u64>() {
             if let Ok(mut st) = shared.lock() {
                 st.pending_debug.push(DebugCommand::AddScore(pts));
             }
         }
         return write_response(&mut stream, "200 OK", "application/json", b"{\"ok\":true}");
+    }
+
+    if method == "POST" && path.starts_with("/api/debug/drive/") {
+        let rest = percent_decode(path.trim_start_matches("/api/debug/drive/"));
+        let mut sp = rest.split('/');
+        if let (Some(id_s), Some(ms_s)) = (sp.next(), sp.next()) {
+            if let (Ok(id), Ok(ms)) = (id_s.parse::<u8>(), ms_s.parse::<u8>()) {
+                if let Ok(mut st) = shared.lock() {
+                    st.pending_debug.push(DebugCommand::PulseDrive(id, ms));
+                }
+            }
+        }
+        return write_response(&mut stream, "200 OK", "application/json", b"{\"ok\":true}");
+    }
+
+    if method == "POST" && path.starts_with("/api/debug/lamp/") {
+        let rest = percent_decode(path.trim_start_matches("/api/debug/lamp/"));
+        let mut sp = rest.split('/');
+        if let (Some(id_s), Some(st_s)) = (sp.next(), sp.next()) {
+            if let (Ok(id), Ok(val)) = (id_s.parse::<u8>(), st_s.parse::<u8>()) {
+                if let Ok(mut st) = shared.lock() {
+                    st.pending_debug.push(DebugCommand::SetLamp(id, val));
+                }
+            }
+        }
+        return write_response(&mut stream, "200 OK", "application/json", b"{\"ok\":true}");
+    }
+
+    if method == "POST" && path.starts_with("/api/debug/player/") {
+        let cmd = percent_decode(path.trim_start_matches("/api/debug/player/"));
+        if let Ok(mut st) = shared.lock() {
+            st.pending_debug.push(DebugCommand::PlayerCmd(cmd));
+        }
+        return write_response(&mut stream, "200 OK", "application/json", b"{\"ok\":true}");
+    }
+
+    if method == "POST" && path == "/api/debug/pause" {
+        if let Ok(mut st) = shared.lock() {
+            st.pending_debug.push(DebugCommand::TogglePause);
+        }
+        return write_response(&mut stream, "200 OK", "application/json", b"{\"ok\":true}");
+    }
+
+    if method == "POST" && path == "/api/debug/step" {
+        if let Ok(mut st) = shared.lock() {
+            st.pending_debug.push(DebugCommand::StepFrame);
+        }
+        return write_response(&mut stream, "200 OK", "application/json", b"{\"ok\":true}");
+    }
+
+    if path == "/api/assets" {
+        let json = shared
+            .lock()
+            .map(|s| {
+                if s.assets_json.is_empty() {
+                    "{\"anims\":[],\"fonts\":[],\"sounds\":[]}".into()
+                } else {
+                    s.assets_json.clone()
+                }
+            })
+            .unwrap_or_else(|_| "{}".into());
+        return write_response(&mut stream, "200 OK", "application/json", json.as_bytes());
     }
 
     if path == "/api/db" {
@@ -258,3 +344,16 @@ fn write_response(
 }
 
 const INDEX_HTML: &str = include_str!("web_ui.html");
+
+#[cfg(test)]
+mod tests {
+    use super::percent_decode;
+
+    #[test]
+    fn percent_decode_handles_colons_and_spaces() {
+        assert_eq!(percent_decode("scene%3A0"), "scene:0");
+        assert_eq!(percent_decode("game%3Aswe1"), "game:swe1");
+        assert_eq!(percent_decode("rfm_wave%3A8"), "rfm_wave:8");
+        assert_eq!(percent_decode("hello+world%21"), "hello world!");
+    }
+}
