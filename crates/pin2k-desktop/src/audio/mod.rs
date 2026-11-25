@@ -1,14 +1,12 @@
 //! Cross-platform native OGG Vorbis audio player (pure-Rust `lewton` decoder)
 //! + WebAudio bridge (`CompositeAudioBackend`).
-//!
-//! - **Windows**: decodes `.ogg` -> PCM `i16` in pure Rust and plays via `winmm.dll` (`waveOutOpen`/`waveOutWrite`).
-//! - **Linux**: decodes `.ogg` -> PCM `i16` and streams to `aplay` / `pw-cat` / `paplay` when available,
-//!   degrading gracefully in headless environments without audio hardware.
-//! - **Web UI**: simultaneously forwards DCS sound IDs to `WebAudioBridge`.
+
+mod platform;
 
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -21,9 +19,12 @@ use crate::web_ui::{SharedWebState, WebAudioBridge};
 
 enum AudioCmd {
     Play {
+        id: u16,
         file: PathBuf,
         volume: f32,
+        looping: bool,
     },
+    Stop(u16),
     StopAll,
 }
 
@@ -58,13 +59,7 @@ impl CompositeAudioBackend {
                 }
             }
         }
-
-        let native_tx = if enable_native {
-            Some(spawn_native_audio_worker())
-        } else {
-            None
-        };
-
+        let native_tx = enable_native.then(spawn_native_audio_worker);
         Self {
             web,
             sound_files: Arc::new(map),
@@ -75,8 +70,9 @@ impl CompositeAudioBackend {
         }
     }
 
-    /// Registers custom `.ogg` audio overrides from `<mod_dir>/audio/` for mods & homebrew games.
+    /// Registers custom `.ogg` audio overrides from `<mod_dir>/audio/` for native and WebAudio.
     pub fn apply_mod_audio(&mut self, mod_dir: &Path, overrides: &HashMap<String, String>) {
+        self.web.apply_mod_audio(mod_dir, overrides);
         let adir = mod_dir.join("audio");
         if !adir.is_dir() {
             return;
@@ -101,8 +97,10 @@ impl AudioBackend for CompositeAudioBackend {
         if let Some(tx) = &self.native_tx {
             if let Some(path) = self.override_paths.get(&id.0) {
                 let _ = tx.send(AudioCmd::Play {
+                    id: id.0,
                     file: path.clone(),
                     volume: self.volume,
+                    looping,
                 });
                 return;
             }
@@ -115,8 +113,10 @@ impl AudioBackend for CompositeAudioBackend {
                 let path = dir.join(fname);
                 if path.exists() {
                     let _ = tx.send(AudioCmd::Play {
+                        id: id.0,
                         file: path,
                         volume: self.volume,
+                        looping,
                     });
                 }
             }
@@ -125,6 +125,9 @@ impl AudioBackend for CompositeAudioBackend {
 
     fn stop_sound(&mut self, id: SoundId) {
         self.web.stop_sound(id);
+        if let Some(ref tx) = self.native_tx {
+            let _ = tx.send(AudioCmd::Stop(id.0));
+        }
     }
 
     fn stop_all(&mut self) {
@@ -143,16 +146,45 @@ impl AudioBackend for CompositeAudioBackend {
 fn spawn_native_audio_worker() -> Sender<AudioCmd> {
     let (tx, rx) = mpsc::channel::<AudioCmd>();
     thread::spawn(move || {
+        let stop_gen = Arc::new(AtomicU64::new(0));
+        let mut active: HashMap<u16, Arc<AtomicBool>> = HashMap::new();
         while let Ok(cmd) = rx.recv() {
             match cmd {
-                AudioCmd::Play { file, volume } => {
+                AudioCmd::Play { id, file, volume, looping } => {
+                    if looping {
+                        if let Some(prev) = active.remove(&id) {
+                            prev.store(true, Ordering::Relaxed);
+                        }
+                    }
+                    let cancel = Arc::new(AtomicBool::new(false));
+                    active.insert(id, Arc::clone(&cancel));
+                    let gen = stop_gen.load(Ordering::Relaxed);
+                    let gen_ref = Arc::clone(&stop_gen);
                     if let Ok((pcm, sample_rate, channels)) = decode_ogg_to_pcm(&file, volume) {
-                        thread::spawn(move || {
-                            play_pcm_platform(&pcm, sample_rate, channels);
+                        thread::spawn(move || loop {
+                            if cancel.load(Ordering::Relaxed)
+                                || gen_ref.load(Ordering::Relaxed) != gen
+                            {
+                                break;
+                            }
+                            platform::play_pcm_platform(&pcm, sample_rate, channels, &cancel, &gen_ref, gen);
+                            if !looping {
+                                break;
+                            }
                         });
                     }
                 }
-                AudioCmd::StopAll => {}
+                AudioCmd::Stop(id) => {
+                    if let Some(flag) = active.remove(&id) {
+                        flag.store(true, Ordering::Relaxed);
+                    }
+                }
+                AudioCmd::StopAll => {
+                    stop_gen.fetch_add(1, Ordering::Relaxed);
+                    for (_, flag) in active.drain() {
+                        flag.store(true, Ordering::Relaxed);
+                    }
+                }
             }
         }
     });
@@ -174,113 +206,3 @@ fn decode_ogg_to_pcm(path: &Path, volume: f32) -> anyhow::Result<(Vec<i16>, u32,
     Ok((pcm, sr, ch))
 }
 
-#[cfg(target_os = "linux")]
-fn play_pcm_platform(pcm: &[i16], sample_rate: u32, channels: u16) {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-
-    let bytes: Vec<u8> = pcm.iter().flat_map(|s| s.to_le_bytes()).collect();
-    let rate_str = sample_rate.to_string();
-    let ch_str = channels.to_string();
-
-    // Try standard Linux audio daemons non-fatally; silent no-op in headless environments
-    if let Ok(mut child) = Command::new("aplay")
-        .args(["-q", "-f", "S16_LE", "-r", &rate_str, "-c", &ch_str])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-    {
-        if let Some(ref mut stdin) = child.stdin {
-            let _ = stdin.write_all(&bytes);
-        }
-        let _ = child.wait();
-    }
-}
-
-#[cfg(windows)]
-fn play_pcm_platform(pcm: &[i16], sample_rate: u32, channels: u16) {
-    use std::ffi::c_void;
-    use std::mem::size_of;
-
-    #[repr(C)]
-    struct WaveFormatEx {
-        w_format_tag: u16,
-        n_channels: u16,
-        n_samples_per_sec: u32,
-        n_avg_bytes_per_sec: u32,
-        n_block_align: u16,
-        w_bits_per_sample: u16,
-        cb_size: u16,
-    }
-
-    #[repr(C)]
-    struct WaveHdr {
-        lp_data: *const u8,
-        dw_buffer_length: u32,
-        dw_bytes_recorded: u32,
-        dw_user: usize,
-        dw_flags: u32,
-        dw_loops: u32,
-        lp_next: *mut c_void,
-        reserved: usize,
-    }
-
-    #[link(name = "winmm")]
-    extern "system" {
-        fn waveOutOpen(
-            phwo: *mut *mut c_void,
-            u_device_id: u32,
-            pwfx: *const WaveFormatEx,
-            dw_callback: usize,
-            dw_instance: usize,
-            fdw_open: u32,
-        ) -> u32;
-        fn waveOutPrepareHeader(hwo: *mut c_void, pwh: *mut WaveHdr, cbwh: u32) -> u32;
-        fn waveOutWrite(hwo: *mut c_void, pwh: *mut WaveHdr, cbwh: u32) -> u32;
-        fn waveOutUnprepareHeader(hwo: *mut c_void, pwh: *mut WaveHdr, cbwh: u32) -> u32;
-        fn waveOutClose(hwo: *mut c_void) -> u32;
-    }
-
-    if pcm.is_empty() || channels == 0 || sample_rate == 0 {
-        return;
-    }
-    let bytes: Vec<u8> = pcm.iter().flat_map(|s| s.to_le_bytes()).collect();
-    let block_align = channels * 2;
-    let fmt = WaveFormatEx {
-        w_format_tag: 1, // WAVE_FORMAT_PCM
-        n_channels: channels,
-        n_samples_per_sec: sample_rate,
-        n_avg_bytes_per_sec: sample_rate * (block_align as u32),
-        n_block_align: block_align,
-        w_bits_per_sample: 16,
-        cb_size: 0,
-    };
-
-    unsafe {
-        let mut hwo: *mut c_void = std::ptr::null_mut();
-        if waveOutOpen(&mut hwo, u32::MAX, &fmt, 0, 0, 0) != 0 || hwo.is_null() {
-            return;
-        }
-        let mut hdr = WaveHdr {
-            lp_data: bytes.as_ptr(),
-            dw_buffer_length: bytes.len() as u32,
-            dw_bytes_recorded: 0,
-            dw_user: 0,
-            dw_flags: 0,
-            dw_loops: 0,
-            lp_next: std::ptr::null_mut(),
-            reserved: 0,
-        };
-        if waveOutPrepareHeader(hwo, &mut hdr, size_of::<WaveHdr>() as u32) == 0 {
-            let _ = waveOutWrite(hwo, &mut hdr, size_of::<WaveHdr>() as u32);
-            let dur_ms = (pcm.len() as u64 * 1000) / ((sample_rate as u64) * (channels as u64));
-            thread::sleep(std::time::Duration::from_millis(dur_ms + 30));
-            let _ = waveOutUnprepareHeader(hwo, &mut hdr, size_of::<WaveHdr>() as u32);
-        }
-        let _ = waveOutClose(hwo);
-    }
-}
-
-#[cfg(not(any(target_os = "linux", windows)))]
-fn play_pcm_platform(_pcm: &[i16], _sample_rate: u32, _channels: u16) {}

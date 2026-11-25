@@ -101,4 +101,12 @@ pub(crate) struct Cli {
     /// Optional directory to export every rendered 640×480 frame (`frame_0000.png`..) for video encoding.
     #[arg(long)]
     pub(crate) frames_out_dir: Option<PathBuf>,
+
+    /// Open a native desktop window (`4:3`, `F11`/`Alt+Enter` toggles fullscreen) at 60 Hz.
+    #[arg(long, default_value_t = false)]
+    pub(crate) window: bool,
+
+    /// Launch directly in native fullscreen (`4:3` letterboxed) at 60 Hz.
+    #[arg(long, default_value_t = false)]
+    pub(crate) fullscreen: bool,
 }

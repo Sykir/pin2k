@@ -575,6 +575,10 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.rfm.wave_hits_left = 0;
             self.rfm.multiball = RfmMultiball::None;
         }
+        if let Some(ref mut rt) = self.script_runtime {
+            rt.active_player = self.current_player.min(3);
+        }
+        self.eval_script_trigger(ScriptTrigger::OnBallStart);
 
         // Eject 1 ball to shooter lane (spinners remain inactive until a ramp shot!)
         self.pending_eject_balls = 1;
@@ -649,6 +653,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.players[self.current_player].bonus_points = 10_000;
             self.players[self.current_player].bonus_multiplier = 1;
         }
+        self.eval_script_trigger(ScriptTrigger::OnBallEnd);
         self.state = MachineState::InGame;
 
         // Extra ball check
@@ -780,6 +785,16 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
         if self.state == MachineState::Attract {
             self.attract.tick(dt_ms);
+            if self.strict_script_mode {
+                if let Some(ref mut rt) = self.script_runtime {
+                    if let Some(slide) = rt.tick_attract(dt_ms, self.attract.last_game_played) {
+                        self.status_banner = slide.banner.clone();
+                        if let Some(ref anim) = slide.anim_hint {
+                            self.active_anim_hint = anim.clone();
+                        }
+                    }
+                }
+            }
             let cur = self.attract.current();
             if self.game_title == GameTitle::Swe1 {
                 if self.debug_anim_override.is_none() {
@@ -820,6 +835,20 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.update_virtual_spinners(dt_ms);
         self.tick_leff(dt_ms);
         self.tick_fx(dt_ms);
+        if self.state == MachineState::InGame && self.script_runtime.is_some() {
+            let (expired_timers, expired_modes) = {
+                let rt = self.script_runtime.as_mut().unwrap();
+                rt.active_player = self.current_player.min(3);
+                rt.tick_timers(dt_ms)
+            };
+            for timer in expired_timers {
+                self.eval_script_trigger(ScriptTrigger::OnTimer { timer });
+            }
+            for mode in expired_modes {
+                self.eval_script_trigger(ScriptTrigger::OnModeExit { mode });
+            }
+            self.eval_script_trigger(ScriptTrigger::OnTick);
+        }
         if self.game_title == GameTitle::Swe1 && self.state == MachineState::InGame {
             if let Some(p) = self.players.get_mut(self.current_player) {
                 p.super_jets_ms = p.super_jets_ms.saturating_sub(dt_ms);

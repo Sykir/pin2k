@@ -2,30 +2,30 @@
 
 Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode I* `#50069` & *Revenge From Mars* `#50070`).
 
-## Avancement Global : **~91 %** | Indice de Jouabilité : **87,4 / 100**
+## Avancement Global : **~94 %** | Indice de Jouabilité : **93,5 / 100**
 
 | Chantier | Avancement | Statut |
 |---|---:|---|
 | 1. Outil ROM & Extraction (`pin2k-rom-tool`) | **96 %** | Layouts UI + Gamecode + Assets complets + pipeline Ghidra 12.2 (`1 867` fonctions / `248` classes) |
 | 2. Abstraction Matérielle & PDB (`pin2k-hal`) | **98 %** | Prêt cabinet, série & compositeur Z-trié |
-| 3. Moteur de Jeu & Écrans Natifs (`pin2k-core`) | **90 %** | 100 % des écrans/scènes SWE1 + banque audio `ARD`/`ACD` + moteurs `Leff` & `FX` + règles portées depuis Ghidra |
+| 3. Moteur de Jeu & Écrans Natifs (`pin2k-core`) | **95 %** | 100 % des écrans/scènes (Podrace unifié), banque `ARD`/`ACD`, `Leff` & `FX`, `ScriptRuntime` complet (`player_vars` 1–4J, timers/modes) |
 | 4. Couverture des Assets SWE1 (`gfx` / `fonts` / `audio`) | **97 %** | Polices **100 % (`19/19`)**, Audio **100 % (`689/689`)**, Anims **90 % (`354/392`)** |
-| 5. Runtime Desktop, Console Debug & HD (`pin2k-desktop`) | **78 %** | Web Console 5 onglets & PNG OK ; audio natif/Web et fenêtre native `--window`/`--fullscreen` à finaliser |
-| 6. Modding d'Assets & Scènes Custom (`mod.json`) | **30 %** | Remplacement `gfx/` & audio natif OK ; WebAudio mods, polices, règles à états et scènes custom à faire |
+| 5. Runtime Desktop, Console Debug & HD (`pin2k-desktop`) | **90 %** | Fenêtre native `--window`/`--fullscreen` (`winit`+`softbuffer`), audio natif `StopAll`/bouclage + mods WebAudio, Web Console 5 onglets |
+| 6. Modding d'Assets & Scènes Custom (`mod.json`) | **35 %** | Remplacement `gfx/` & audio natif + WebAudio OK ; polices, règles à états et scènes custom à faire |
 | 7. Documentation & Qualité | **100 %** | **42/42 tests OK**, E2E vidéo **14/14**, 0 avertissement, documentation complète à jour |
 
-### Indice de Jouabilité (`Playability Score`) : **87,4 / 100**
+### Indice de Jouabilité (`Playability Score`) : **93,5 / 100**
 
-> *Web / Émulation (`--web-port`) : **~90 / 100** — Cabinet physique (PDB + écran natif) : **~82 / 100***
+> *Desktop natif (`--window`/`--fullscreen`) & Web (`--web-port`) : **~95 / 100** — Cabinet physique (PDB) : **~88 / 100***
 
 | Critère de jouabilité | Poids | Niveau | Points | État actuel |
 |---|---:|---:|---:|---|
-| **1. Boucle de partie & Règles SWE1** | 25 % | 92 % | `23,0 / 25` | 1–4 joueurs, Skill Shot, 14 scènes, Super Jets, Combos, C-3PO, J-E-D-I, Multiballs, Bonus/Match/HSTD, Tilt, Ball Save |
+| **1. Boucle de partie & Règles SWE1** | 25 % | 94 % | `23,5 / 25` | 1–4 joueurs, Skill Shot, 14 scènes (Podrace unifié), Super Jets, Combos, C-3PO, J-E-D-I, Multiballs, `ScriptRuntime` complet |
 | **2. Fidélité Visuelle & HUD (`640×240`)** | 20 % | 92 % | `18,4 / 20` | `DeffScoreDisplay`, `DeffLaserStatusBackground`, `DeffVSpinner`, 20 slides Attract, intros isolées, `354/392` anims, `19/19` polices |
-| **3. Audio & Réactivité Sonore** | 15 % | 80 % | `12,0 / 15` | `689/689` pistes DCS-2 (`382` pools `ARD`), WebAudio OK ; reste fix `StopAll`/bouclage en audio natif OS |
-| **4. Contrôles, Latence & Affichage** | 15 % | 75 % | `11,3 / 15` | Clavier Web + Debug Console OK ; manque la fenêtre native `--window`/`--fullscreen` (60 Hz direct) |
-| **5. Lampes, Bobines & Matériel PDB** | 15 % | 88 % | `13,2 / 15` | Protocole PDB exact, `14` `Leff*`, optos NC, LPT Linux + Série Win/Linux ; validation terrain longue durée restante |
-| **6. Stabilité, Sauvegarde & Diagnostics** | 10 % | 95 % | `9,5 / 10` | Persistance `pin2k_db.json`, tous écrans Diagnostics/Admin, `42/42` tests + E2E vidéo `14/14` verts |
+| **3. Audio & Réactivité Sonore** | 15 % | 95 % | `14,3 / 15` | `689/689` pistes DCS-2 (`382` pools `ARD`), `StopAll`/bouclage natif OS + WebAudio + overrides mods `/audio/` OK |
+| **4. Contrôles, Latence & Affichage** | 15 % | 92 % | `13,8 / 15` | Fenêtre native `--window` / `--fullscreen` 60 Hz (`4:3`, `F11`/`Alt+Entrée`) + clavier cabinet + Console Web |
+| **5. Lampes, Bobines & Matériel PDB** | 15 % | 90 % | `13,5 / 15` | Protocole PDB exact, `14` `Leff*`, optos NC, LPT Linux + Série Win/Linux ; validation terrain longue durée restante |
+| **6. Stabilité, Sauvegarde & Diagnostics** | 10 % | 100 % | `10,0 / 10` | Persistance `pin2k_db.json`, tous écrans Diagnostics/Admin, `42/42` tests + E2E vidéo `14/14` verts |
 
 ---
 
@@ -69,10 +69,8 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 - [x] VM de scripts `ScriptRuntime` + persistance `pin2k_db.json`
 - [x] **Cohabitation natif / `game_script.json`** : `game_script.json` ne court-circuite plus les switchs SWE1/RFM natifs tant que `--strict-script` n'est pas activé (modes `Homebrew` et `mod.json` inchangés)
 - [x] **Séparation stricte Intro de scène / Scène active** : fond opaque `z=0`, vidéo `220×160` étirée `2×` centrée dans le cadre ovale `anim_jedi_scene_intro_frame`, badge centré sur le rebord inférieur, HUD masqué pendant les intros & écrans plein écran puis affiché dès l'entrée en scène active
-- [ ] **Finaliser le câblage de `ScriptRuntime` dans `Pin2kMachine`** :
-  - Déclencher `OnBallStart`, `OnBallEnd`, `OnTick` et décrémenter `rt.timers` (`OnTimer`) ainsi que `rt.active_modes` (`OnModeExit`) dans `update_timers()`, et brancher `tick_attract()` lorsque le script pilote l'Attract
-  - Isoler les variables par joueur (`player_vars` vs `global_vars`) pour le support multijoueur 1–4 joueurs dans `ScriptRuntime`
-- [ ] **Unifier le compositing des scènes dans `pin2k-core`** : rapatrier `render_podrace_scene` dans `crates/pin2k-core/src/machine/scene_render.rs` et supprimer le doublon historique `crates/pin2k-desktop/src/scenes_compositor.rs`
+- [x] **Câblage complet de `ScriptRuntime` dans `Pin2kMachine`** (`script_engine/mod.rs` + `schema.rs`) : `OnBallStart`, `OnBallEnd`, `OnTick`, `OnTimer`, `OnModeExit`, `tick_attract()` en `--strict-script` et isolation `player_vars` 1–4 joueurs
+- [x] **Compositing des scènes unifié dans `pin2k-core`** : `render_podrace_layers` rapatrié dans `fx/scene_extras.rs` et suppression du doublon `scenes_compositor.rs`
 - [ ] **Passage en 100 % Data-Driven** : déplacer toutes les descriptions visuelles et règles restantes vers `game_script.json` / `rom_layout_db.json` / manifestes JSON et activer `--strict-script` par défaut
 
 ---
@@ -89,9 +87,9 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 - [x] **Console de Debug Web 5 onglets** (`web_ui.rs` + `web_ui.html`) : lancement direct de tous modes/scènes/diagnostics (avec décodage `%3A`), Pause/Step, mutations joueurs/temps, explorateur `/api/assets`, bobines/lampes, inspecteur `Couches Live`
 - [x] Audio natif pur-Rust (`lewton` → `winmm.dll` Windows / `aplay` Linux) + WebAudio
 - [x] Compilation croisée Windows (`x86_64-pc-windows-msvc`, `x86_64-pc-windows-gnu`) et Linux
-- [ ] Corriger `AudioCmd::StopAll` et le support `looping` dans le worker audio natif (`crates/pin2k-desktop/src/audio.rs`)
-- [ ] Exposer `override_paths` audio des mods dans `WebAudioBridge` et la route HTTP `/audio/` (`crates/pin2k-desktop/src/web_ui.rs`)
-- [ ] **Affichage Natif Desktop Fenêtré & Plein Écran (`--window` / `--fullscreen`)** (`winit` + `softbuffer`/`wgpu`, ratio `4:3`, `F11` / `Alt+Entrée`)
+- [x] `AudioCmd::StopAll`, `AudioCmd::Stop` et bouclage (`looping`) corrigés avec annulation atomique dans le worker audio natif (`crates/pin2k-desktop/src/audio/{mod,platform}.rs`)
+- [x] `override_paths` audio des mods exposés dans `WebAudioBridge` et la route HTTP `/audio/` (`crates/pin2k-desktop/src/web_ui/{mod,state}.rs`)
+- [x] **Affichage Natif Desktop Fenêtré & Plein Écran (`--window` / `--fullscreen`)** (`window.rs`, `winit` + `softbuffer` pur-Rust, ratio `4:3`, `F11` / `Alt+Entrée`)
 - [ ] **Rendu HD & Upscaling** (voir [HD_UPSCALING_GUIDE.md](HD_UPSCALING_GUIDE.md)) : shaders WebGL2 côté navigateur + support `gfx_hd/` + cache LRU
 
 ---

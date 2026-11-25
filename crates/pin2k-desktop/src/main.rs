@@ -7,9 +7,9 @@ mod compositor;
 mod demo_scripts;
 mod raster;
 mod runner;
-mod scenes_compositor;
 mod telemetry;
 mod web_ui;
+mod window;
 
 use anyhow::Result;
 use clap::Parser;

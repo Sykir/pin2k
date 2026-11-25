@@ -226,4 +226,37 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
     }
 
+    /// Layered *Boonta Eve Podrace* canyon + Anakin + rival podracer scene (`z = 1..6`).
+    pub(crate) fn render_podrace_layers(&mut self, active_ms: u32) {
+        let t = (active_ms / 16) as usize;
+        if t < 60 {
+            self.fx_sprite("anim_podrace_starting", t, 0, 0, 2, 1);
+            return;
+        }
+        let race_t = t.saturating_sub(60);
+        let scroll_x = -(((race_t * 3) % 160) as i32);
+        self.fx_sprite("anim_podrace_sky", 0, 0, 0, 1, 1);
+        self.fx_sprite("anim_podrace_horizon", 0, scroll_x, 4, 2, 1);
+        self.fx_sprite("anim_podrace_ground", race_t, 0, 112, 3, 1);
+
+        let cycle = race_t % 55;
+        if (28..54).contains(&cycle) {
+            self.fx_sprite("anim_podrace_2_explosion", cycle - 28, 145, 18, 4, 1);
+        } else {
+            let rival_x = 245 + (((race_t as i32) * 5) % 90) - 45;
+            self.fx_sprite("anim_podrace_2", race_t, rival_x, 90, 4, 1);
+        }
+        let sway = match (race_t / 20) % 4 {
+            0 => (race_t % 20) as i32 * 2 - 20,
+            1 => 20 - (race_t % 20) as i32 * 2,
+            2 => -((race_t % 20) as i32),
+            _ => -20 + (race_t % 20) as i32,
+        };
+        self.fx_sprite("anim_podrace_1", race_t, 143 + sway, 76, 5, 1);
+        if (51..68).contains(&race_t) || (101..118).contains(&race_t) {
+            self.fx_sprite("anim_podrace_checkpoint", 0, 224, 10, 6, 1);
+        }
+        let mph = 615 + ((race_t * 4) % 332);
+        self.fx_text("font_shadow_9_data", format!("SPEED {mph} MPH"), 556, 12, 8, 0x03FF);
+    }
 }

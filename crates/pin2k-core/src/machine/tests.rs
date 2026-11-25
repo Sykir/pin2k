@@ -591,8 +591,14 @@
             machine.tick(16);
 
             if scene == Swe1Scene::Podrace {
-                // Podrace leaves z<=7 clear so SoftwareCompositor::render_podrace_scene draws 3D track
-                assert!(!machine.video.last_sprite_cmds.iter().any(|s| s.z <= 7));
+                assert!(
+                    machine
+                        .video
+                        .last_sprite_cmds
+                        .iter()
+                        .any(|s| s.anim_name.starts_with("anim_podrace_") && s.z <= 6),
+                    "missing Podrace layers in pin2k-core"
+                );
                 assert!(machine
                     .video
                     .last_font_text_cmds

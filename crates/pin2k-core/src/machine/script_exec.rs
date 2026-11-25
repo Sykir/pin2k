@@ -632,24 +632,24 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 ScriptAction::AddScore { points } => self.add_score(*points),
                 ScriptAction::SetVar { var, value } => {
                     if let Some(ref mut rt) = self.script_runtime {
-                        rt.vars.insert(var.clone(), *value);
+                        rt.set_var(var, *value);
                     }
                 }
                 ScriptAction::IncVar { var, delta } => {
                     if let Some(ref mut rt) = self.script_runtime {
-                        let e = rt.vars.entry(var.clone()).or_insert(0);
-                        *e = e.saturating_add(*delta);
+                        let next = rt.get_var(var).saturating_add(*delta);
+                        rt.set_var(var, next);
                     }
                 }
                 ScriptAction::SetBit { var, bit } => {
                     if let Some(ref mut rt) = self.script_runtime {
-                        let e = rt.vars.entry(var.clone()).or_insert(0);
-                        *e |= 1i64 << (*bit as u32 & 63);
+                        let next = rt.get_var(var) | (1i64 << (*bit as u32 & 63));
+                        rt.set_var(var, next);
                     }
                 }
                 ScriptAction::ClearVar { var } => {
                     if let Some(ref mut rt) = self.script_runtime {
-                        rt.vars.insert(var.clone(), 0);
+                        rt.set_var(var, 0);
                     }
                 }
                 ScriptAction::PulseDrive { drive_id, ms } => {

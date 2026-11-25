@@ -153,8 +153,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.render_scene_footer(hits, secs, "TANKS");
                 }
                 Swe1Scene::Podrace => {
-                    // Leave `z <= 7` empty so `SoftwareCompositor::render_podrace_scene` renders
-                    // the layered canyon + Anakin + podracer battle, then overlay HUD at `z=8`.
+                    self.render_podrace_layers(sc.active_ms);
                     let lap = 4u8.saturating_sub(hits).clamp(1, 3);
                     self.scene_text(
                         "font_shadow_11_data",

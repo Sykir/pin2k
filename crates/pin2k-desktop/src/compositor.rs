@@ -77,7 +77,6 @@ pub struct SoftwareCompositor {
     active_anim_idx: Option<usize>,
     pub(crate) anim_elapsed_ms: u64,
     anim_loop: bool,
-    pub(crate) podrace_scene_ticks: usize,
     queued_texts: Vec<(String, i32, i32, [u8; 4], u8)>,
     queued_frame: usize,
     layer_ops: Vec<LayerOp>,
@@ -103,7 +102,6 @@ impl SoftwareCompositor {
             active_anim_idx: None,
             anim_elapsed_ms: 0,
             anim_loop: true,
-            podrace_scene_ticks: 0,
             queued_texts: Vec::new(),
             queued_frame: 0,
             layer_ops: Vec::new(),
@@ -392,35 +390,26 @@ impl VideoBackend for SoftwareCompositor {
                 self.native_240.put_pixel(sx, sy, Rgba([110, 130, 180, 255]));
             }
 
-            let active_name = self
-                .active_anim_idx
-                .and_then(|i| self.anims.get(i))
-                .map(|a| a.name.clone())
-                .unwrap_or_default();
-
-            if !self.render_specialized_scene(&active_name) {
-                self.podrace_scene_ticks = 0;
-                if let Some(idx) = self.active_anim_idx {
-                    let elapsed = self.anim_elapsed_ms;
-                    let looping = self.anim_loop;
-                    if let Some(anim) = self.anims.get_mut(idx) {
-                        let fps = anim.fps.max(1) as u64;
-                        let frames = anim.ensure_decoded();
-                        if !frames.is_empty() {
-                            let raw_idx = ((elapsed * fps) / 1000) as usize;
-                            let fi = if looping {
-                                raw_idx % frames.len()
-                            } else {
-                                raw_idx.min(frames.len() - 1)
-                            };
-                            let f = &frames[fi];
-                            let scale_x = if f.width() <= 240 { 2u32 } else { 1u32 };
-                            let draw_w = f.width() * scale_x;
-                            let draw_h = f.height();
-                            let ox = ((SCREEN_W as i32) - (draw_w as i32)) / 2;
-                            let oy = (185i32 - (draw_h as i32)).max(4);
-                            blit_rgba_clipped(&mut self.native_240, f, ox, oy, scale_x, 240);
-                        }
+            if let Some(idx) = self.active_anim_idx {
+                let elapsed = self.anim_elapsed_ms;
+                let looping = self.anim_loop;
+                if let Some(anim) = self.anims.get_mut(idx) {
+                    let fps = anim.fps.max(1) as u64;
+                    let frames = anim.ensure_decoded();
+                    if !frames.is_empty() {
+                        let raw_idx = ((elapsed * fps) / 1000) as usize;
+                        let fi = if looping {
+                            raw_idx % frames.len()
+                        } else {
+                            raw_idx.min(frames.len() - 1)
+                        };
+                        let f = &frames[fi];
+                        let scale_x = if f.width() <= 240 { 2u32 } else { 1u32 };
+                        let draw_w = f.width() * scale_x;
+                        let draw_h = f.height();
+                        let ox = ((SCREEN_W as i32) - (draw_w as i32)) / 2;
+                        let oy = (185i32 - (draw_h as i32)).max(4);
+                        blit_rgba_clipped(&mut self.native_240, f, ox, oy, scale_x, 240);
                     }
                 }
             }
@@ -506,10 +495,6 @@ impl VideoBackend for SoftwareCompositor {
 }
 
 impl SoftwareCompositor {
-    pub(crate) fn blit_named(&mut self, name: &str, frame_idx: usize, ox: i32, oy: i32, scale_x: u32) -> bool {
-        self.blit_named_ex(name, frame_idx, ox, oy, scale_x, 1, false, None)
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn blit_named_ex(
         &mut self,
@@ -545,63 +530,6 @@ impl SoftwareCompositor {
             monochrome_rgb555,
         );
         true
-    }
-
-    /// Multi-layer *Star Wars Episode I* `DeffPodRaceSceneBackground` holoprojector compositor:
-    /// - Intro (`t < 60`): Boonta Eve starting-grid movie (`anim_podrace_starting`, 60 frames) + badge
-    /// - Race (`t >= 60`): Sky + scrolling Beggar's Canyon horizon + rushing desert floor +
-    ///   rival podracer / explosion + 100-frame Anakin's Podracer + Checkpoint & Speedometer HUD
-    /// - Victory (`victory == true`): Sky + Horizon + Ground + `anim_podrace_closeup` camera flyby
-    pub(crate) fn render_podrace_scene(&mut self, victory: bool) {
-        let t = self.podrace_scene_ticks;
-        self.podrace_scene_ticks = self.podrace_scene_ticks.saturating_add(1);
-
-        if !victory && t < 60 && self.blit_named("anim_podrace_starting", t, 0, 0, 2) {
-            return;
-        }
-
-        let race_t = t.saturating_sub(60);
-        let _ = self.blit_named("anim_podrace_sky", 0, 0, 0, 1);
-        let scroll_x = -(((race_t * 3) % 160) as i32);
-        let _ = self.blit_named("anim_podrace_horizon", 0, scroll_x, 4, 1);
-        // Victory lap decelerates onto the slow ground strip (`anim_podrace_ground_slow`).
-        let ground = if victory { "anim_podrace_ground_slow" } else { "anim_podrace_ground" };
-        let _ = self.blit_named(ground, race_t, 0, 112, 1);
-
-        if victory {
-            let _ = self.blit_named("anim_podrace_closeup", race_t, 0, 0, 1);
-            return;
-        }
-
-        let cycle = race_t % 55;
-        if (28..54).contains(&cycle) {
-            let _ = self.blit_named("anim_podrace_2_explosion", cycle - 28, 145, 18, 1);
-        } else {
-            let rival_x = 245 + (((race_t as i32) * 5) % 90) - 45;
-            let _ = self.blit_named("anim_podrace_2", race_t, rival_x, 90, 1);
-        }
-
-        let sway = match (race_t / 20) % 4 {
-            0 => (race_t % 20) as i32 * 2 - 20,
-            1 => 20 - (race_t % 20) as i32 * 2,
-            2 => -((race_t % 20) as i32),
-            _ => -20 + (race_t % 20) as i32,
-        };
-        let _ = self.blit_named("anim_podrace_1", race_t, 143 + sway, 76, 1);
-
-        if (51..68).contains(&race_t) || (101..118).contains(&race_t) {
-            let _ = self.blit_named("anim_podrace_checkpoint", 0, 224, 10, 1);
-        }
-        let mph = 615 + ((race_t * 4) % 332);
-        fill_rect(&mut self.native_240, 488, 8, 142, 16, [10, 18, 34, 255]);
-        draw_string(
-            &mut self.native_240,
-            &format!("SPEED {mph} MPH"),
-            496,
-            12,
-            [110, 250, 255, 255],
-            1,
-        );
     }
 
     fn pick_bitmap_font(scale: u8, text: &str) -> &'static str {

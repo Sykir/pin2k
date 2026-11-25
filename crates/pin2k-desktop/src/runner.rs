@@ -243,13 +243,17 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
     };
 
     let mut scheduled_releases: Vec<(u64, u8)> = Vec::new();
-    let pace_realtime = cli.realtime || cli.web_port.is_some();
+    let pace_realtime = cli.realtime || cli.web_port.is_some() || cli.window || cli.fullscreen;
     let mut frame: u64 = 0;
     let mut step_once = false;
 
-    loop {
+    let mut step_frame = |machine: &mut Pin2kMachine<
+        PdbDriver<MaybeTracedLpt>,
+        SoftwareCompositor,
+        CompositeAudioBackend,
+    >| -> Result<bool> {
         if cli.frames > 0 && frame >= cli.frames {
-            break;
+            return Ok(false);
         }
 
         // Queue Swe1Scene::Podrace (index 6) right before Center Scoop entry in `--script podrace`
@@ -486,8 +490,25 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
         }
 
         frame += 1;
-        if pace_realtime {
-            thread::sleep(Duration::from_millis(16));
+        Ok(true)
+    };
+
+    if cli.window || cli.fullscreen {
+        let win_title = format!("Pinball 2000 — {}", rom_version_str);
+        crate::window::run_windowed(&win_title, cli.fullscreen, |switches| {
+            for &(sw_id, closed) in switches {
+                machine.hw.port.inner_mut().set_virtual_switch(sw_id, closed);
+            }
+            match step_frame(&mut machine) {
+                Ok(true) => Some(machine.video.framebuffer.as_raw().to_vec()),
+                _ => None,
+            }
+        })?;
+    } else {
+        while step_frame(&mut machine)? {
+            if pace_realtime {
+                thread::sleep(Duration::from_millis(16));
+            }
         }
     }
 

@@ -15,6 +15,8 @@ pin2k-hal = { path = "../pin2k-hal" }
 pin2k-rom-tool = { path = "../pin2k-rom-tool" }
 serde.workspace = true
 serde_json.workspace = true
+softbuffer = "0.4"
+winit = "0.30"
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
