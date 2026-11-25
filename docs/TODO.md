@@ -2,17 +2,30 @@
 
 Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode I* `#50069` & *Revenge From Mars* `#50070`).
 
-## Avancement Global : **~89 %**
+## Avancement Global : **~91 %** | Indice de Jouabilité : **87,4 / 100**
 
 | Chantier | Avancement | Statut |
 |---|---:|---|
 | 1. Outil ROM & Extraction (`pin2k-rom-tool`) | **96 %** | Layouts UI + Gamecode + Assets complets + pipeline Ghidra 12.2 (`1 867` fonctions / `248` classes) |
 | 2. Abstraction Matérielle & PDB (`pin2k-hal`) | **98 %** | Prêt cabinet, série & compositeur Z-trié |
-| 3. Moteur de Jeu & Écrans Natifs (`pin2k-core`) | **86 %** | 100 % des écrans/scènes SWE1 + banque audio `ARD`/`ACD` + moteur `Leff` + règles portées depuis Ghidra |
+| 3. Moteur de Jeu & Écrans Natifs (`pin2k-core`) | **90 %** | 100 % des écrans/scènes SWE1 + banque audio `ARD`/`ACD` + moteurs `Leff` & `FX` + règles portées depuis Ghidra |
 | 4. Couverture des Assets SWE1 (`gfx` / `fonts` / `audio`) | **97 %** | Polices **100 % (`19/19`)**, Audio **100 % (`689/689`)**, Anims **90 % (`354/392`)** |
 | 5. Runtime Desktop, Console Debug & HD (`pin2k-desktop`) | **78 %** | Web Console 5 onglets & PNG OK ; audio natif/Web et fenêtre native `--window`/`--fullscreen` à finaliser |
 | 6. Modding d'Assets & Scènes Custom (`mod.json`) | **30 %** | Remplacement `gfx/` & audio natif OK ; WebAudio mods, polices, règles à états et scènes custom à faire |
-| 7. Documentation & Qualité | **100 %** | **42/42 tests OK**, 0 avertissement, documentation complète à jour |
+| 7. Documentation & Qualité | **100 %** | **42/42 tests OK**, E2E vidéo **14/14**, 0 avertissement, documentation complète à jour |
+
+### Indice de Jouabilité (`Playability Score`) : **87,4 / 100**
+
+> *Web / Émulation (`--web-port`) : **~90 / 100** — Cabinet physique (PDB + écran natif) : **~82 / 100***
+
+| Critère de jouabilité | Poids | Niveau | Points | État actuel |
+|---|---:|---:|---:|---|
+| **1. Boucle de partie & Règles SWE1** | 25 % | 92 % | `23,0 / 25` | 1–4 joueurs, Skill Shot, 14 scènes, Super Jets, Combos, C-3PO, J-E-D-I, Multiballs, Bonus/Match/HSTD, Tilt, Ball Save |
+| **2. Fidélité Visuelle & HUD (`640×240`)** | 20 % | 92 % | `18,4 / 20` | `DeffScoreDisplay`, `DeffLaserStatusBackground`, `DeffVSpinner`, 20 slides Attract, intros isolées, `354/392` anims, `19/19` polices |
+| **3. Audio & Réactivité Sonore** | 15 % | 80 % | `12,0 / 15` | `689/689` pistes DCS-2 (`382` pools `ARD`), WebAudio OK ; reste fix `StopAll`/bouclage en audio natif OS |
+| **4. Contrôles, Latence & Affichage** | 15 % | 75 % | `11,3 / 15` | Clavier Web + Debug Console OK ; manque la fenêtre native `--window`/`--fullscreen` (60 Hz direct) |
+| **5. Lampes, Bobines & Matériel PDB** | 15 % | 88 % | `13,2 / 15` | Protocole PDB exact, `14` `Leff*`, optos NC, LPT Linux + Série Win/Linux ; validation terrain longue durée restante |
+| **6. Stabilité, Sauvegarde & Diagnostics** | 10 % | 95 % | `9,5 / 10` | Persistance `pin2k_db.json`, tous écrans Diagnostics/Admin, `42/42` tests + E2E vidéo `14/14` verts |
 
 ---
 
