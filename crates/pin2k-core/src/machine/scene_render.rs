@@ -42,30 +42,46 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     /// Renders active SWE1 scenes (intros + all 14 backgrounds), multiballs, holo-select, or skill shot.
     pub(super) fn render_swe1_ingame_scene(&mut self) {
         let f60 = ((self.elapsed_ms * 60) / 1000) as usize;
-        let f15 = ((self.elapsed_ms * 15) / 1000) as usize;
 
         if let Some(sc) = self.active_scene.clone() {
             if sc.intro_remaining_ms > 0 {
-                // Place movie & badge BEHIND the double-oval bezel so black edges are masked cleanly
-                self.scene_sprite(sc.scene.intro_anim_hint(), f15, 76, 40, 200);
-                self.scene_sprite(sc.scene.intro_badge_anim(), 0, 290, 74, 201);
-                self.scene_sprite("anim_jedi_scene_intro_frame", 0, 59, 22, 202);
-                self.scene_text(
-                    "font_shadow_15_data",
-                    sc.scene.title(),
-                    320,
-                    192,
-                    203,
-                    0x7FFF,
-                    Some(0x7C00),
-                    TextAlign::Center,
+                // Phase 1 — Authentic Scene Intro (`Deff*SceneIntro`), cleanly isolated from gameplay:
+                // 1. Opaque black backdrop at z=0 so no legacy/background mode bleeds through.
+                self.video.draw_rect(RectDrawCmd {
+                    x: 0,
+                    y: 0,
+                    w: 640,
+                    h: 240,
+                    z: 0,
+                    color_rgb555: 0x0000,
+                    alpha: 255,
+                });
+                // 2. Intro movie (220x160 doubled horizontally -> 440x160) centered inside the
+                //    434x157 oval aperture of `anim_jedi_scene_intro_frame` (522x195 at (59, 14)).
+                let intro_total = sc.scene.intro_duration_ms().max(sc.intro_remaining_ms);
+                let intro_elapsed_ms = intro_total.saturating_sub(sc.intro_remaining_ms) as u64;
+                let intro_frame = ((intro_elapsed_ms * 15) / 1000) as usize;
+                let mut movie = SpriteDrawCmd::new(
+                    sc.scene.intro_anim_hint(),
+                    intro_frame,
+                    100,
+                    31,
+                    200,
                 );
+                movie.scale_x = 2;
+                self.video.draw_named_sprite(movie);
+                // 3. Double-oval metallic bezel on top of the movie edges.
+                self.scene_sprite("anim_jedi_scene_intro_frame", 0, 59, 14, 202);
+                // 4. Scene badge horizontally centered on x=320 across the lower rim (y=14+0x7a=136),
+                //    matching Ghidra `DeffDestroyerDroidSceneIntro::Run()`.
+                let badge_x = 320 - (sc.scene.intro_badge_width() / 2);
+                self.scene_sprite(sc.scene.intro_badge_anim(), 0, badge_x, 136, 203);
                 self.scene_text(
                     "font_shadow_11_data",
                     "GET READY - SHOOT FLASHING SHOTS!",
                     320,
-                    214,
-                    203,
+                    224,
+                    204,
                     0x7FE0,
                     Some(0x0000),
                     TextAlign::Center,

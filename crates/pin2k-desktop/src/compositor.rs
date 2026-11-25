@@ -557,7 +557,6 @@ impl SoftwareCompositor {
         self.podrace_scene_ticks = self.podrace_scene_ticks.saturating_add(1);
 
         if !victory && t < 60 && self.blit_named("anim_podrace_starting", t, 0, 0, 2) {
-            let _ = self.blit_named("anim_podrace_intro_badge", 0, 187, 8, 1);
             return;
         }
 

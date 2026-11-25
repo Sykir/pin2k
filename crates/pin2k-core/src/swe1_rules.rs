@@ -160,6 +160,27 @@ impl Swe1Scene {
         }
     }
 
+    /// Native pixel width of `intro_badge_anim()` from `swe1_0200` (`gfx_manifest.json`),
+    /// used to center the badge horizontally inside `anim_jedi_scene_intro_frame` (`522x195`).
+    pub const fn intro_badge_width(self) -> i32 {
+        match self {
+            Swe1Scene::BattleDroid => 304,
+            Swe1Scene::DestroyerDroid => 426,
+            Swe1Scene::FederationFighter => 295,
+            Swe1Scene::GunganBattle => 386,
+            Swe1Scene::HangarEscape => 299,
+            Swe1Scene::HoverTank => 407,
+            Swe1Scene::Podrace => 266,
+            Swe1Scene::ProbeDroid => 327,
+            Swe1Scene::QueenFashion => 304,
+            Swe1Scene::JarJarJuggle => 330,
+            Swe1Scene::WattosChance => 410,
+            Swe1Scene::MosEspaCantina => 394,
+            Swe1Scene::R2D2 => 355,
+            Swe1Scene::QuestionMark => 446,
+        }
+    }
+
     /// Extracted Obi-Wan hologram selection animation (`anim_obiwan_holo_*`) for this scene.
     pub const fn holo_anim_hint(self) -> &'static str {
         match self {

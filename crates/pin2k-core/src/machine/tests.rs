@@ -541,18 +541,46 @@
             assert!(machine.debug_launch_mode(&format!("scene:{idx}")));
             machine.tick(16);
 
-            // Intro movie & badge frame (z=200..202 bezel on top)
+            // Intro: black backdrop (z=0), 2x-stretched movie centered in oval (100,31,z=200),
+            // bezel (59,14,z=202), centered badge on top (z=203), and no gameplay HUD overlap.
+            assert!(
+                machine.video.last_rect_cmds.iter().any(|r| r.z == 0 && r.w == 640 && r.h == 240),
+                "missing opaque intro backdrop for {scene:?}"
+            );
             assert!(
                 machine.video.last_sprite_cmds.iter().any(|s| {
-                    s.anim_name == "anim_jedi_scene_intro_frame" && s.z == 202
+                    s.anim_name == scene.intro_anim_hint()
+                        && s.x == 100
+                        && s.y == 31
+                        && s.scale_x == 2
+                        && s.z == 200
+                }),
+                "missing centered 2x intro movie for {scene:?}"
+            );
+            assert!(
+                machine.video.last_sprite_cmds.iter().any(|s| {
+                    s.anim_name == "anim_jedi_scene_intro_frame"
+                        && s.x == 59
+                        && s.y == 14
+                        && s.z == 202
                 }),
                 "missing intro frame for {scene:?}"
             );
             assert!(
                 machine.video.last_sprite_cmds.iter().any(|s| {
-                    s.anim_name == scene.intro_badge_anim() && s.z == 201
+                    s.anim_name == scene.intro_badge_anim()
+                        && s.x == 320 - scene.intro_badge_width() / 2
+                        && s.z == 203
                 }),
-                "missing intro badge for {scene:?}"
+                "missing centered intro badge for {scene:?}"
+            );
+            assert!(
+                !machine
+                    .video
+                    .last_sprite_cmds
+                    .iter()
+                    .any(|s| s.anim_name == "anim_saber_handle"),
+                "gameplay HUD must not overlap scene intro for {scene:?}"
             );
 
             // Skip intro and verify active scene rendering

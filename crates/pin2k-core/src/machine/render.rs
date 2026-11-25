@@ -209,15 +209,34 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
             MachineState::InGame | MachineState::Tilt => {
                 if self.game_title == GameTitle::Swe1 {
+                    let is_scene_intro = self
+                        .active_scene
+                        .as_ref()
+                        .is_some_and(|s| s.intro_remaining_ms > 0);
+                    let is_fullscreen_special = matches!(
+                        self.special_screen,
+                        Some(
+                            super::SpecialScreen::Bonus
+                                | super::SpecialScreen::Match
+                                | super::SpecialScreen::GameOver
+                                | super::SpecialScreen::GameIntro
+                                | super::SpecialScreen::ExtraBall
+                                | super::SpecialScreen::SlamTilt
+                        )
+                    );
                     if let Some(screen) = self.special_screen {
                         self.render_special_screen(screen);
                     } else if self.debug_anim_override.is_none() {
                         self.render_swe1_ingame_scene();
                     }
-                    self.render_score_display(true);
-                    self.render_laser_status_hud();
-                    self.render_virtual_spinners();
-                    self.render_ingame_banner();
+                    // Keep scene intros & fullscreen cutscenes clean without HUD overlap;
+                    // show score display, laser HUD, spinners, and banners during active gameplay.
+                    if !is_scene_intro && !is_fullscreen_special {
+                        self.render_score_display(true);
+                        self.render_laser_status_hud();
+                        self.render_virtual_spinners();
+                        self.render_ingame_banner();
+                    }
                     if self.state == MachineState::Tilt {
                         self.render_tilt_overlay();
                     }
