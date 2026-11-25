@@ -105,7 +105,14 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
     let mut compositor = SoftwareCompositor::new();
     compositor.native_fullscreen = !cli.telemetry_overlay;
     let mut loaded_anims = if let Some(ref dir) = cli.assets_dir {
-        compositor.load_assets(dir)?
+        let n = compositor.load_assets(dir)?;
+        if cli.hd {
+            let hd_n = compositor.load_hd_assets(dir)?;
+            if hd_n > 0 {
+                println!("Loaded {hd_n} HD upscaled animations from {}/gfx_hd", dir.display());
+            }
+        }
+        n
     } else {
         0
     };

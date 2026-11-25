@@ -9,6 +9,7 @@ pub mod layout_extractor;
 pub mod prism;
 pub mod scanner;
 pub mod symbols;
+pub mod upscaler;
 
 use thiserror::Error;
 

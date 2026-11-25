@@ -666,6 +666,29 @@ pub(crate) fn dispatch(cli: Cli) -> Result<()> {
                 db.ard_descriptors.len()
             );
         }
+
+        Commands::UpscaleAssets {
+            assets_dir,
+            scale,
+            filter,
+            anim,
+            soft_alpha,
+        } => {
+            let opts = pin2k_rom_tool::upscaler::UpscaleOptions {
+                scale,
+                filter: filter.into(),
+                anim_filter: anim,
+                crisp_alpha: !soft_alpha,
+            };
+            let rep = pin2k_rom_tool::upscaler::upscale_assets_dir(&assets_dir, &opts)?;
+            println!(
+                "Upscaled {} animations ({} frames) at {}x -> {}/gfx_hd/gfx_manifest.json",
+                rep.animations_processed,
+                rep.frames_upscaled,
+                rep.scale,
+                assets_dir.display()
+            );
+        }
     }
 
     Ok(())

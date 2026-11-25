@@ -322,6 +322,46 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output_dir: PathBuf,
     },
+
+    /// Upscale extracted `gfx/` animations into `gfx_hd/` with transparent RGB edge-padding.
+    UpscaleAssets {
+        /// Assets directory containing `gfx/gfx_manifest.json`.
+        #[arg(long)]
+        assets_dir: PathBuf,
+
+        /// Integer upscale factor (`2`, `3`, or `4`).
+        #[arg(long, default_value_t = 2)]
+        scale: u32,
+
+        /// Resize filter (`lanczos3`, `catmull-rom`, or `nearest`).
+        #[arg(long, value_enum, default_value_t = CliUpscaleFilter::Lanczos3)]
+        filter: CliUpscaleFilter,
+
+        /// Optional case-insensitive animation name substring filter (e.g. `kahuna_logo`).
+        #[arg(long)]
+        anim: Option<String>,
+
+        /// Keep soft anti-aliased alpha instead of crisp 1-bit Pinball 2000 silhouette alpha.
+        #[arg(long, default_value_t = false)]
+        soft_alpha: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum CliUpscaleFilter {
+    Lanczos3,
+    CatmullRom,
+    Nearest,
+}
+
+impl From<CliUpscaleFilter> for pin2k_rom_tool::upscaler::UpscaleFilter {
+    fn from(v: CliUpscaleFilter) -> Self {
+        match v {
+            CliUpscaleFilter::Lanczos3 => Self::Lanczos3,
+            CliUpscaleFilter::CatmullRom => Self::CatmullRom,
+            CliUpscaleFilter::Nearest => Self::Nearest,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

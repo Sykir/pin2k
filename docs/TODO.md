@@ -6,7 +6,7 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 
 | Chantier | Avancement | Statut |
 |---|---:|---|
-| 1. Outil ROM & Extraction (`pin2k-rom-tool`) | **96 %** | Layouts UI + Gamecode + Assets complets + pipeline Ghidra 12.2 (`1 867` fonctions / `248` classes) |
+| 1. Outil ROM & Extraction (`pin2k-rom-tool`) | **98 %** | Layouts UI + Gamecode + Assets + `upscale-assets` (`gfx_hd/`) + pipeline Ghidra 12.2 (`1 867` fonctions / `248` classes) |
 | 2. Abstraction Matérielle & PDB (`pin2k-hal`) | **98 %** | Prêt cabinet, série & compositeur Z-trié |
 | 3. Moteur de Jeu & Écrans Natifs (`pin2k-core`) | **95 %** | 100 % des écrans/scènes (Podrace unifié), banque `ARD`/`ACD`, `Leff` & `FX`, `ScriptRuntime` complet (`player_vars` 1–4J, timers/modes) |
 | 4. Couverture des Assets SWE1 (`gfx` / `fonts` / `audio`) | **97 %** | Polices **100 % (`19/19`)**, Audio **100 % (`689/689`)**, Anims **90 % (`354/392`)** |
@@ -41,7 +41,7 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 - [x] Découpage modulaire (`main.rs`, `cli.rs`, `commands.rs`, `layout_extractor.rs`)
 - [ ] Étendre `extract-gamecode` pour exporter 100 % des règles scénaristiques SWE1 & RFM dans `game_script.json`
 - [ ] Décodage audio DCS-2 brut depuis `u109`/`u110` (fallback sans `*_sound.bin`)
-- [ ] Sous-commande `upscale-assets` (`xBRZ` / `Lanczos` + *edge-padding* alpha → `gfx_hd/`)
+- [x] **Sous-commande `upscale-assets`** (`upscaler.rs`, `Lanczos3`/`CatmullRom`/`Nearest` + *edge-padding* RGB transparent → `gfx_hd/gfx_manifest.json`)
 
 ---
 
@@ -90,7 +90,8 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 - [x] `AudioCmd::StopAll`, `AudioCmd::Stop` et bouclage (`looping`) corrigés avec annulation atomique dans le worker audio natif (`crates/pin2k-desktop/src/audio/{mod,platform}.rs`)
 - [x] `override_paths` audio des mods exposés dans `WebAudioBridge` et la route HTTP `/audio/` (`crates/pin2k-desktop/src/web_ui/{mod,state}.rs`)
 - [x] **Affichage Natif Desktop Fenêtré & Plein Écran (`--window` / `--fullscreen`)** (`window.rs`, `winit` + `softbuffer` pur-Rust, ratio `4:3`, `F11` / `Alt+Entrée`)
-- [ ] **Rendu HD & Upscaling** (voir [HD_UPSCALING_GUIDE.md](HD_UPSCALING_GUIDE.md)) : shaders WebGL2 côté navigateur + support `gfx_hd/` + cache LRU
+- [x] Support `gfx_hd/` via `--hd` dans `SoftwareCompositor` (`load_hd_assets()` avec rééchantillonnage propre sur `640×240`)
+- [ ] **Rendu HD WebGL2 & cache LRU** (voir [HD_UPSCALING_GUIDE.md](HD_UPSCALING_GUIDE.md)) : shaders WebGL2 côté navigateur + cache LRU mémoire
 
 ---
 
@@ -110,7 +111,7 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 ---
 
 ## 7. Documentation & Qualité — **100 %**
-- [x] `RUSTFLAGS="-D warnings" cargo check --workspace --all-targets` (**0 avertissement**), **42 / 42 tests unitaires** verts et `cargo build --release --workspace` OK
+- [x] `RUSTFLAGS="-D warnings" cargo check --workspace --all-targets` (**0 avertissement**), **43 / 43 tests unitaires** verts et `cargo build --release --workspace` OK
 - [x] Validation fonctionnelle **End-to-End 14 / 14 étapes** enregistrée en vidéo MP4 (`work/e2e_validation.mp4`, 1 455 frames, 48,5 s @ 30 fps) : Attract, 2 joueurs + sabres + lasers, Skill Shot, Rampes + Spinners + Combo, G-U-N-G-A-N Super Jets, tirs Laser, Intros complètes → Scènes actives (*Battle Droid* & *Podrace 3D*), Multiballs, Bonus/Match/HSTD, et Diagnostics
 - [x] Validation visuelle sur **11 captures PNG** (`attract:0`, `ingame`, `spinner_left`, `scene:6`, `scene:0`, `scene:12`, `bonus`, `match`, `hstd_entry`, `diag:colorbar`, `diag:switch`)
 - [x] [README.md](../README.md) & [SCREEN_LAYOUT_REFERENCE.md](SCREEN_LAYOUT_REFERENCE.md)

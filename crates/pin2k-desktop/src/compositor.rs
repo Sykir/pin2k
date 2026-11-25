@@ -32,6 +32,7 @@ pub struct LoadedAnim {
     pub name: String,
     pub fps: u32,
     pub height: u32,
+    pub hd_scale: u32,
     frame_paths: Vec<PathBuf>,
     decoded_frames: Vec<RgbaImage>,
 }
@@ -39,9 +40,22 @@ pub struct LoadedAnim {
 impl LoadedAnim {
     fn ensure_decoded(&mut self) -> &[RgbaImage] {
         if self.decoded_frames.is_empty() && !self.frame_paths.is_empty() {
+            let scale = self.hd_scale.max(1);
             for p in &self.frame_paths {
                 if let Ok(img) = image::open(p) {
-                    self.decoded_frames.push(img.to_rgba8());
+                    let rgba = img.to_rgba8();
+                    if scale > 1 {
+                        let lw = (rgba.width() / scale).max(1);
+                        let lh = (rgba.height() / scale).max(1);
+                        self.decoded_frames.push(image::imageops::resize(
+                            &rgba,
+                            lw,
+                            lh,
+                            image::imageops::FilterType::Triangle,
+                        ));
+                    } else {
+                        self.decoded_frames.push(rgba);
+                    }
                 }
             }
         }
@@ -135,6 +149,7 @@ impl SoftwareCompositor {
                     name: clean,
                     fps: entry.fps.max(1),
                     height: entry.height,
+                    hd_scale: 1,
                     frame_paths,
                     decoded_frames: Vec::new(),
                 });
@@ -174,6 +189,41 @@ impl SoftwareCompositor {
         Ok(self.anims.len())
     }
 
+    /// Overrides matching animations with upscaled HD frames from `<assets_dir>/gfx_hd/gfx_manifest.json`.
+    pub fn load_hd_assets(&mut self, assets_dir: &Path) -> anyhow::Result<usize> {
+        let hd_dir = assets_dir.join("gfx_hd");
+        let manifest_path = hd_dir.join("gfx_manifest.json");
+        if !manifest_path.exists() {
+            return Ok(0);
+        }
+        let raw = fs::read_to_string(&manifest_path)?;
+        let manifest: GfxManifest = serde_json::from_str(&raw)?;
+        let mut upgraded = 0usize;
+        for entry in manifest.animations {
+            let clean = entry.symbol_name.trim_end_matches("_ptr");
+            let Some(&idx) = self.anim_lookup.get(clean) else {
+                continue;
+            };
+            let frame_paths: Vec<PathBuf> = entry
+                .exported_frames
+                .iter()
+                .map(|rel| hd_dir.join(rel))
+                .filter(|p| p.exists())
+                .collect();
+            if frame_paths.is_empty() {
+                continue;
+            }
+            if let Some(anim) = self.anims.get_mut(idx) {
+                let scale = (entry.height / anim.height.max(1)).clamp(1, 4);
+                anim.frame_paths = frame_paths;
+                anim.decoded_frames.clear();
+                anim.hd_scale = scale;
+                upgraded += 1;
+            }
+        }
+        Ok(upgraded)
+    }
+
     /// Loads custom `.png` animation folders from `<mod_dir>/gfx/<anim_name>/*.png`,
     /// overriding or adding animations for mods & standalone homebrew games.
     pub fn load_mod_assets(
@@ -210,6 +260,7 @@ impl SoftwareCompositor {
                 name: folder_name.clone(),
                 fps: 30,
                 height,
+                hd_scale: 1,
                 frame_paths,
                 decoded_frames: Vec::new(),
             });
