@@ -444,15 +444,17 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             MachineState::InGame => {
                 // Evaluate mod / homebrew switch rules first
                 let matched_mod = self.apply_mod_switch_rules(id);
-                let matched_script = self.eval_script_trigger(ScriptTrigger::OnSwitch { sw_id: id });
                 if self.game_title == GameTitle::Homebrew {
+                    let matched_script =
+                        self.eval_script_trigger(ScriptTrigger::OnSwitch { sw_id: id });
                     if !matched_mod && !matched_script {
                         self.handle_homebrew_builtin_switch(id);
                     }
                     return;
                 }
-                if (matched_script || self.strict_script_mode) && self.script_runtime.is_some() {
-                    // Script handled this switch (or strict script mode is active); only run core hardware ball/flipper/trough mechanics
+                if self.strict_script_mode && self.script_runtime.is_some() {
+                    // Strict script mode: let game_script.json drive playfield rules; only keep core hardware ball/flipper/trough mechanics
+                    let _ = self.eval_script_trigger(ScriptTrigger::OnSwitch { sw_id: id });
                     if matches!(
                         id,
                         sw::TROUGH_BALL_1
