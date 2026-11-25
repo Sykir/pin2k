@@ -103,6 +103,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     pub fn debug_launch_mode(&mut self, target: &str) -> bool {
         let key = target.trim().to_ascii_lowercase();
         self.debug_anim_override = None;
+        self.special_screen = None;
+        self.special_screen_ms = 0;
 
         match key.as_str() {
             "game:swe1" | "swe1" => {
@@ -205,13 +207,42 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
             "sub_escape" => {
                 self.ensure_ingame_swe1();
+                self.active_scene = None;
+                self.multiball = ActiveMultiball::None;
+                self.special_screen = Some(super::SpecialScreen::SubEscape);
                 self.active_anim_hint = "anim_gungan_sub_chomp".to_string();
                 self.emit_sound(sound::BATTLE_MUSIC_LOOP, true);
                 self.set_banner("SUB ESCAPE!", 4_000);
                 return true;
             }
+            "build_c3p0" => {
+                self.ensure_ingame_swe1();
+                self.active_scene = None;
+                self.special_screen = Some(super::SpecialScreen::BuildC3P0);
+                self.active_anim_hint = "anim_build_c3p0".to_string();
+                self.set_banner("BUILD C-3PO", 4_000);
+                return true;
+            }
+            "ramp_combo" => {
+                self.ensure_ingame_swe1();
+                self.special_screen = Some(super::SpecialScreen::RampCombo);
+                self.active_anim_hint = "anim_naboo_flyby_single".to_string();
+                self.set_banner("RAMP COMBO!", 3_000);
+                return true;
+            }
+            "jedi_ready" | "jedi_multiball_ready" => {
+                self.ensure_ingame_swe1();
+                self.active_scene = None;
+                self.special_screen = Some(super::SpecialScreen::JediMultiballReady);
+                self.active_anim_hint = "anim_saber_ball_loop".to_string();
+                self.set_banner("JEDI MULTIBALL READY!", 4_000);
+                return true;
+            }
             "bonus" => {
                 self.ensure_ingame_swe1();
+                self.active_scene = None;
+                self.multiball = ActiveMultiball::None;
+                self.special_screen = Some(super::SpecialScreen::Bonus);
                 self.active_anim_hint = "anim_bonus_background".to_string();
                 let p = &self.players[self.current_player];
                 let total = p.bonus_points.saturating_mul(p.bonus_multiplier as u64);
@@ -221,22 +252,24 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             "match" => {
                 self.cut_all_holds();
                 self.state = MachineState::Attract;
+                self.special_screen = Some(super::SpecialScreen::Match);
                 self.active_anim_hint = "anim_match_movie".to_string();
-                self.debug_anim_override = Some("anim_match_movie".to_string());
                 self.set_banner("MATCH SEQUENCE", 4_000);
                 return true;
             }
             "game_over" => {
                 self.cut_all_holds();
                 self.state = MachineState::Attract;
+                self.special_screen = Some(super::SpecialScreen::GameOver);
                 self.active_anim_hint = "anim_darth_maul_game_over".to_string();
-                self.debug_anim_override = Some("anim_darth_maul_game_over".to_string());
                 self.emit_sound(sound::GAME_OVER_MUSIC, false);
                 self.set_banner("GAME OVER", 4_000);
                 return true;
             }
             "game_intro" => {
                 self.ensure_ingame_swe1();
+                self.active_scene = None;
+                self.special_screen = Some(super::SpecialScreen::GameIntro);
                 self.active_anim_hint = "anim_republic_cruiser_intro".to_string();
                 self.set_banner("EPISODE I INTRO", 4_000);
                 return true;
@@ -244,6 +277,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             "extra_ball" => {
                 self.ensure_ingame_swe1();
                 self.players[self.current_player].extra_balls += 1;
+                self.special_screen = Some(super::SpecialScreen::ExtraBall);
                 self.active_anim_hint = "anim_extra_ball_show".to_string();
                 self.set_banner("EXTRA BALL!", 3_500);
                 return true;
@@ -251,11 +285,13 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             "ball_save" => {
                 self.ensure_ingame_swe1();
                 self.ball_save_ms = 15_000;
+                self.special_screen = Some(super::SpecialScreen::BallSave);
                 self.set_banner("SHOOT AGAIN! FORCE BALL SAVE!", 3_000);
                 return true;
             }
             "tilt_warning" => {
                 self.ensure_ingame_swe1();
+                self.special_screen = Some(super::SpecialScreen::TiltWarning);
                 self.set_banner("DANGER! TILT WARNING!", 3_000);
                 return true;
             }
@@ -263,12 +299,14 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.cut_all_holds();
                 self.state = MachineState::Attract;
                 self.balls_in_play = 0;
+                self.special_screen = Some(super::SpecialScreen::SlamTilt);
                 self.set_banner("SLAM TILT!", 4_000);
                 return true;
             }
             "diagnostics" | "admin" => {
                 self.cut_all_holds();
                 self.state = MachineState::Diagnostics;
+                self.diag_page = DiagPage::SwitchTest;
                 self.admin_screen = AdminScreen::Root { cursor: 0 };
                 self.set_banner("DEBUG: ADMIN MENU", 3_000);
                 return true;
@@ -276,6 +314,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             "debug" | "debug_menu" => {
                 self.cut_all_holds();
                 self.state = MachineState::Diagnostics;
+                self.diag_page = DiagPage::SwitchTest;
                 self.admin_screen = AdminScreen::DebugLauncher { cursor: 0 };
                 self.set_banner("DEBUG LAUNCHER", 3_000);
                 return true;
@@ -304,14 +343,39 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             "diag:sound" => {
                 self.cut_all_holds();
                 self.state = MachineState::Diagnostics;
+                self.diag_page = DiagPage::SwitchTest;
                 self.admin_screen = AdminScreen::SoundTest { selected_idx: 0 };
                 return true;
             }
             "diag:align" => {
                 self.cut_all_holds();
                 self.state = MachineState::Diagnostics;
-                self.debug_anim_override = Some("system_video_test_align".to_string());
+                self.diag_page = DiagPage::AlignTest;
                 self.active_anim_hint = "system_video_test_align".to_string();
+                return true;
+            }
+            "diag:colorbar" => {
+                self.cut_all_holds();
+                self.state = MachineState::Diagnostics;
+                self.diag_page = DiagPage::ColorBarTest;
+                return true;
+            }
+            "diag:grid" => {
+                self.cut_all_holds();
+                self.state = MachineState::Diagnostics;
+                self.diag_page = DiagPage::GridTest;
+                return true;
+            }
+            "diag:rgb" => {
+                self.cut_all_holds();
+                self.state = MachineState::Diagnostics;
+                self.diag_page = DiagPage::RgbTest;
+                return true;
+            }
+            "diag:fuse" => {
+                self.cut_all_holds();
+                self.state = MachineState::Diagnostics;
+                self.diag_page = DiagPage::FuseTest;
                 return true;
             }
             "hstd_entry" | "high_score_entry" => {
@@ -328,6 +392,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 return true;
             }
             "tilt" => {
+                self.ensure_ingame_swe1();
                 self.cut_all_holds();
                 self.state = MachineState::Tilt;
                 self.set_banner("DEBUG: TILT", 3_000);

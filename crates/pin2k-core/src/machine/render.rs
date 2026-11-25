@@ -163,36 +163,13 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.video.begin_frame();
 
         if self.state == MachineState::Boot {
-            self.active_anim_hint.clear();
-            self.video.draw_text("WILLIAMS PINBALL 2000", 320, 62, 0x7FE0, 2);
-            self.video.draw_text(self.game_title.title(), 320, 100, 0x7FFF, 2);
-            self.video.draw_text("XINA / PRISM ROM CHECK ... OK", 320, 150, 0x03E0, 1);
+            self.render_boot_screen();
             self.video.present();
             return;
         }
         if self.state == MachineState::Diagnostics {
             if self.debug_anim_override.is_none() {
-                self.active_anim_hint.clear();
-                let (title, rows) = self.admin_display_lines();
-                self.video.draw_text(&title, 320, 22, 0x7FE0, 2);
-                for (i, (line, selected)) in rows.iter().enumerate() {
-                    let prefix = if *selected { "> " } else { "  " };
-                    let color = if *selected { 0x03FF } else { 0x7FFF };
-                    self.video.draw_text(
-                        &format!("{prefix}{line}"),
-                        320,
-                        66 + (i as i32) * 26,
-                        color,
-                        2,
-                    );
-                }
-                self.video.draw_text(
-                    "UP/DN: SELECT   ENTER: OK   ESC: BACK",
-                    320,
-                    216,
-                    0x5EF7,
-                    1,
-                );
+                self.render_diagnostics_screen();
             }
             self.video.present();
             return;
@@ -209,7 +186,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
         match self.state {
             MachineState::Attract => {
-                if self.game_title == GameTitle::Swe1 && self.debug_anim_override.is_none() {
+                if let Some(screen) = self.special_screen {
+                    self.render_special_screen(screen);
+                } else if self.game_title == GameTitle::Swe1 && self.debug_anim_override.is_none() {
                     self.render_swe1_attract_frame();
                 } else if self.debug_anim_override.is_none() {
                     if !self.status_banner.is_empty() {
@@ -229,10 +208,18 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
             MachineState::InGame | MachineState::Tilt => {
                 if self.game_title == GameTitle::Swe1 {
+                    if let Some(screen) = self.special_screen {
+                        self.render_special_screen(screen);
+                    } else if self.debug_anim_override.is_none() {
+                        self.render_swe1_ingame_scene();
+                    }
                     self.render_score_display(true);
                     self.render_laser_status_hud();
                     self.render_virtual_spinners();
                     self.render_ingame_banner();
+                    if self.state == MachineState::Tilt {
+                        self.render_tilt_overlay();
+                    }
                 } else {
                     if !self.status_banner.is_empty() {
                         self.video.draw_text(&self.status_banner, 320, 190, 0x7FE0, 2);
@@ -247,39 +234,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 }
             }
             MachineState::HighScoreEntry => {
-                let (p_num, p_score, p_rank) = self
-                    .hstd_session
-                    .queue
-                    .first()
-                    .copied()
-                    .unwrap_or((1, self.score, JediRank::Padawan));
-                self.video.draw_text("GREAT SCORE - ENTER INITIALS", 320, 28, 0x7FE0, 2);
-                self.video.draw_text(
-                    &format!("PLAYER {p_num}  -  {p_score} ({})", p_rank.label()),
-                    320,
-                    64,
-                    0x7FFF,
-                    2,
-                );
-                let mut slots = String::new();
-                for (i, &ch) in self.hstd_session.initials.iter().enumerate() {
-                    if i > 0 {
-                        slots.push_str("   ");
-                    }
-                    if i == self.hstd_session.cursor {
-                        slots.push_str(&format!("[{ch}]"));
-                    } else {
-                        slots.push_str(&format!(" {ch} "));
-                    }
-                }
-                self.video.draw_text(&slots, 320, 118, 0x03FF, 3);
-                self.video.draw_text(
-                    "FLIPPERS: SELECT LETTER   START: CONFIRM",
-                    320,
-                    196,
-                    0x5EF7,
-                    1,
-                );
+                self.render_hstd_entry_screen();
             }
             _ => {}
         }

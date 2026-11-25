@@ -530,3 +530,172 @@
         assert!(machine.debug_apply_player_cmd("next_player"));
         assert_eq!(machine.current_player, 1);
     }
+
+    #[test]
+    fn all_14_scenes_render_intro_and_active_background_layers() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine = Pin2kMachine::new(driver, HeadlessVideo::default());
+
+        for (idx, &scene) in Swe1Scene::ALL.iter().enumerate() {
+            assert!(machine.debug_launch_mode(&format!("scene:{idx}")));
+            machine.tick(16);
+
+            // Intro movie & badge frame (z=200..202 bezel on top)
+            assert!(
+                machine.video.last_sprite_cmds.iter().any(|s| {
+                    s.anim_name == "anim_jedi_scene_intro_frame" && s.z == 202
+                }),
+                "missing intro frame for {scene:?}"
+            );
+            assert!(
+                machine.video.last_sprite_cmds.iter().any(|s| {
+                    s.anim_name == scene.intro_badge_anim() && s.z == 201
+                }),
+                "missing intro badge for {scene:?}"
+            );
+
+            // Skip intro and verify active scene rendering
+            if let Some(ref mut sc) = machine.active_scene {
+                sc.intro_remaining_ms = 0;
+            }
+            machine.active_anim_hint = scene.gameplay_anim_hint().to_string();
+            machine.tick(16);
+
+            if scene == Swe1Scene::Podrace {
+                // Podrace leaves z<=7 clear so SoftwareCompositor::render_podrace_scene draws 3D track
+                assert!(!machine.video.last_sprite_cmds.iter().any(|s| s.z <= 7));
+                assert!(machine
+                    .video
+                    .last_font_text_cmds
+                    .iter()
+                    .any(|t| t.z == 8 && t.text.contains("LAP")));
+            } else {
+                assert!(
+                    machine.video.last_sprite_cmds.iter().any(|s| s.z <= 6),
+                    "missing active background sprite for {scene:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn all_special_screens_render_authentic_rom_layers() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine = Pin2kMachine::new(driver, HeadlessVideo::default());
+
+        let expected: [(&str, Option<&str>, &str); 12] = [
+            ("bonus", Some("anim_bonus_background"), "BONUS"),
+            ("match", Some("anim_match_movie"), "MATCH"),
+            ("game_over", Some("anim_darth_maul_game_over"), "GAME OVER"),
+            ("game_intro", Some("anim_republic_cruiser_intro"), "STAR WARS EPISODE I"),
+            ("extra_ball", Some("anim_extra_ball_show"), "EXTRA BALL!"),
+            ("ball_save", None, "BALL SAVED"),
+            ("tilt_warning", None, "DANGER! DANGER!"),
+            ("slam_tilt", None, "SLAM TILT"),
+            ("sub_escape", Some("anim_gungan_sub_chomp"), "SUB ESCAPE"),
+            ("build_c3p0", Some("anim_build_c3p0"), "BUILD C-3PO"),
+            ("ramp_combo", Some("anim_naboo_flyby_single"), "RAMP COMBO!"),
+            ("jedi_ready", Some("anim_saber_ball_loop"), "JEDI MULTIBALL READY!"),
+        ];
+
+        for (mode, sprite_opt, text_frag) in expected {
+            assert!(machine.debug_launch_mode(mode), "failed launch {mode}");
+            machine.tick(16);
+            if let Some(spr) = sprite_opt {
+                assert!(
+                    machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == spr),
+                    "missing sprite {spr} for {mode}"
+                );
+            }
+            assert!(
+                machine
+                    .video
+                    .last_font_text_cmds
+                    .iter()
+                    .any(|t| t.text.contains(text_frag)),
+                "missing text '{text_frag}' for {mode}"
+            );
+        }
+    }
+
+    #[test]
+    fn boot_tilt_hstd_and_all_diagnostics_use_rom_compositor_without_legacy_fallback() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine = Pin2kMachine::new(driver, HeadlessVideo::default());
+
+        // Boot screen
+        machine.video.text_calls.clear();
+        machine.tick(16);
+        assert!(machine.video.text_calls.is_empty());
+        assert!(machine
+            .video
+            .last_font_text_cmds
+            .iter()
+            .any(|t| t.text.contains("WILLIAMS PINBALL 2000")));
+
+        // Tilt overlay
+        assert!(machine.debug_launch_mode("tilt"));
+        machine.video.text_calls.clear();
+        machine.tick(16);
+        assert!(machine.video.text_calls.is_empty());
+        assert!(machine
+            .video
+            .last_font_text_cmds
+            .iter()
+            .any(|t| t.text == "TILT" && t.z == 240));
+
+        // High Score Entry (`DeffHSTDinitials`)
+        assert!(machine.debug_launch_mode("hstd_entry"));
+        machine.video.text_calls.clear();
+        machine.tick(16);
+        assert!(machine.video.text_calls.is_empty());
+        assert!(machine
+            .video
+            .last_font_text_cmds
+            .iter()
+            .any(|t| t.font_name == "font_starwars_19_data" && t.text.contains("HIGHEST SCORE")));
+
+        // Diagnostics (`align`, `colorbar`, `grid`, `rgb`, `switch`, `coil`, `lamp`, `fuse`)
+        assert!(machine.debug_launch_mode("diag:align"));
+        machine.tick(16);
+        assert!(machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .any(|s| s.anim_name == "system_video_test_align"));
+
+        assert!(machine.debug_launch_mode("diag:colorbar"));
+        machine.tick(16);
+        assert!(machine.video.last_rect_cmds.len() >= 8);
+
+        assert!(machine.debug_launch_mode("diag:grid"));
+        machine.tick(16);
+        assert!(machine.video.last_rect_cmds.len() >= 20);
+
+        assert!(machine.debug_launch_mode("diag:rgb"));
+        machine.tick(16);
+        assert_eq!(machine.video.last_rect_cmds.len(), 3);
+
+        for (mode, needle) in [
+            ("diag:switch", "SWITCH MATRIX"),
+            ("diag:coil", "COIL TEST"),
+            ("diag:lamp", "LAMP MATRIX"),
+            ("diag:fuse", "FUSE STATUS"),
+        ] {
+            assert!(machine.debug_launch_mode(mode), "failed {mode}");
+            machine.video.text_calls.clear();
+            machine.tick(16);
+            assert!(machine.video.text_calls.is_empty());
+            assert!(
+                machine
+                    .video
+                    .last_font_text_cmds
+                    .iter()
+                    .any(|t| t.text.contains(needle)),
+                "missing '{needle}' in {mode}"
+            );
+        }
+    }

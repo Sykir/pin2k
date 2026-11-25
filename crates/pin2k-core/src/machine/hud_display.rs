@@ -68,14 +68,21 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         });
     }
 
-    /// Renders active callout banner at the bottom of the 640×240 frame (`z=24`) when timed.
+    /// Renders active callout banner above bottom scene footer (`z=24`) when timed.
     pub fn render_ingame_banner(&mut self) {
+        let in_scene_intro = self
+            .active_scene
+            .as_ref()
+            .is_some_and(|s| s.intro_remaining_ms > 0);
+        if self.special_screen.is_some() || in_scene_intro {
+            return;
+        }
         if self.banner_timer_ms > 0 && !self.status_banner.is_empty() {
             self.video.draw_font_text(TextDrawCmd {
                 font_name: "font_shadow_11_narrow_data".into(),
                 text: self.status_banner.clone(),
                 x: 320,
-                y: 204,
+                y: 186,
                 z: 24,
                 color_rgb555: 0x7FE0,
                 shadow_rgb555: Some(0x0000),

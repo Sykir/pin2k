@@ -133,10 +133,30 @@ impl Swe1Scene {
             Swe1Scene::ProbeDroid => "anim_probe_droid_intro_movie",
             Swe1Scene::QueenFashion => "anim_queen_ship_intro_movie",
             Swe1Scene::JarJarJuggle => "anim_jarjar_juggle_intro_movie",
-            Swe1Scene::WattosChance => "anim_wattos_chance_intro_badge",
+            Swe1Scene::WattosChance => "anim_wattos_chance_intro_movie",
             Swe1Scene::MosEspaCantina => "anim_musical_chairs_intro_movie",
             Swe1Scene::R2D2 => "anim_r2d2_intro_movie",
             Swe1Scene::QuestionMark => "anim_question_mark_intro_movie",
+        }
+    }
+
+    /// Extracted intro badge animation (`Deff*SceneIntro`) paired with the intro movie.
+    pub const fn intro_badge_anim(self) -> &'static str {
+        match self {
+            Swe1Scene::BattleDroid => "anim_battle_droid_intro_badge",
+            Swe1Scene::DestroyerDroid => "anim_destroyer_droid_intro_badge",
+            Swe1Scene::FederationFighter => "anim_federation_fighter_intro_badge",
+            Swe1Scene::GunganBattle => "anim_sub_escape_intro_badge",
+            Swe1Scene::HangarEscape => "anim_hangar_escape_intro_badge",
+            Swe1Scene::HoverTank => "anim_hover_tank_intro_badge",
+            Swe1Scene::Podrace => "anim_podrace_intro_badge",
+            Swe1Scene::ProbeDroid => "anim_probe_droid_intro_badge",
+            Swe1Scene::QueenFashion => "anim_queen_ship_intro_badge",
+            Swe1Scene::JarJarJuggle => "anim_jarjar_juggle_intro_badge",
+            Swe1Scene::WattosChance => "anim_wattos_chance_intro_badge",
+            Swe1Scene::MosEspaCantina => "anim_musical_chairs_intro_badge",
+            Swe1Scene::R2D2 => "anim_r2d2_intro_badge",
+            Swe1Scene::QuestionMark => "anim_question_mark_intro_badge",
         }
     }
 
@@ -363,6 +383,22 @@ impl PlayerState {
     /// Returns this player's assigned Star Wars character name from `player_name_table_data`.
     pub fn character_name(&self) -> &'static str {
         PLAYER_CHARACTER_NAMES[self.character_idx % PLAYER_CHARACTER_NAMES.len()]
+    }
+
+    /// Returns this player's `88×76` animated portrait (`anim_bonus_character_*`) for Bonus.
+    pub fn bonus_character_anim(&self) -> &'static str {
+        const BONUS_CHARS: [&str; 9] = [
+            "anim_bonus_character_quigon",
+            "anim_bonus_character_jarjar",
+            "anim_bonus_character_anakin",
+            "anim_bonus_character_queen1",
+            "anim_bonus_character_obiwan",
+            "anim_bonus_character_r2d2",
+            "anim_bonus_character_yoda",
+            "anim_bonus_character_watto",
+            "anim_bonus_character_maul1",
+        ];
+        BONUS_CHARS[self.character_idx % BONUS_CHARS.len()]
     }
 
     /// Chooses a unique character index (`DeffScoreDisplay::is_name_unique`) not yet taken in `used`.

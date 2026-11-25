@@ -330,6 +330,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.players[self.current_player].scene_select_ready = false;
         self.set_shield_raised(false);
         self.popper_hold_ms = intro_ms;
+        self.special_screen = None;
+        self.special_screen_ms = 0;
         self.active_scene = Some(ActiveSceneState {
             scene,
             hits_remaining: scene.required_hits(),

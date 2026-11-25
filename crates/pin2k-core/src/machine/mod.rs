@@ -5,9 +5,11 @@ mod attract_render;
 mod hud_display;
 mod render;
 mod rfm_playfield;
+mod scene_render;
 mod score_display;
 mod script_exec;
 mod swe1_playfield;
+mod system_screens;
 #[cfg(test)]
 mod tests;
 mod vspinner;
@@ -65,12 +67,34 @@ impl Default for HstdEntrySession {
     }
 }
 
-/// Operator diagnostic menu page (`DiagnosticSwitchTestDeff`, `DiagnosticCoilTestDeff`, `DiagnosticSingleLampDeff`).
+/// Full-screen / overlay special SWE1 display states (`DeffBonus`, `DeffMatch`, `DeffGameOver`, ...).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpecialScreen {
+    Bonus,
+    Match,
+    GameOver,
+    GameIntro,
+    ExtraBall,
+    BallSave,
+    TiltWarning,
+    SlamTilt,
+    SubEscape,
+    BuildC3P0,
+    RampCombo,
+    JediMultiballReady,
+}
+
+/// Operator diagnostic menu page (`Diagnostic*Deff`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiagPage {
     SwitchTest,
     CoilTest { selected_drive: u8 },
     LampTest { selected_lamp: u8 },
+    ColorBarTest,
+    GridTest,
+    RgbTest,
+    FuseTest,
+    AlignTest,
 }
 
 /// Deterministic Pinball 2000 / *Star Wars Episode I* machine controller.
@@ -119,6 +143,9 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub left_saber_color: usize,
     pub right_saber_color: usize,
     pub saber_flare_ms: u32,
+    pub special_screen: Option<SpecialScreen>,
+    pub special_screen_ms: u32,
+    pub cached_switches: [u8; 12],
     pub debug_anim_override: Option<String>,
     pub status_banner: String,
     pub banner_timer_ms: u32,
@@ -151,6 +178,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     pub fn with_game(mut hw: H, video: V, mut audio: A, game_title: GameTitle) -> Self {
+        hw.sync(0);
         let initial_sw = hw.read_logical_switches();
         let mut debouncer = SwitchDebouncer::new(2);
         debouncer.seed_state(initial_sw);
@@ -196,6 +224,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             left_saber_color: 2,  // Blue (Qui-Gon / Obi-Wan)
             right_saber_color: 0, // Green
             saber_flare_ms: 0,
+            special_screen: None,
+            special_screen_ms: 0,
+            cached_switches: initial_sw,
             debug_anim_override: None,
             status_banner: banner,
             banner_timer_ms: 0,
@@ -287,6 +318,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         // Sync hardware bus (PDB parallel-port scan + drive pulse decay + lamp multiplex)
         self.hw.sync(dt_ms);
         let raw_switches = self.hw.read_logical_switches();
+        self.cached_switches = raw_switches;
         self.coin_door_closed = (raw_switches[10] & 0x02) != 0;
         let events = self.debouncer.update_logical(raw_switches);
 
@@ -483,6 +515,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.tilt_warnings = 0;
         self.active_scene = None;
         self.multiball = ActiveMultiball::None;
+        self.special_screen = None;
+        self.special_screen_ms = 0;
         self.skill_shot_ready = true;
         self.ball_save_ms = (self.adjustments.ball_save_secs as u32) * 1000;
         self.idle_ball_search_ms = 0;
@@ -731,6 +765,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         if self.saber_flare_ms > 0 {
             self.saber_flare_ms = self.saber_flare_ms.saturating_sub(dt_ms);
+        }
+        if self.special_screen.is_some() || self.multiball != ActiveMultiball::None {
+            self.special_screen_ms = self.special_screen_ms.saturating_add(dt_ms);
         }
         self.update_virtual_spinners(dt_ms);
         if self.ball_save_ms > 0 {
