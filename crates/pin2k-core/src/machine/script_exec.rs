@@ -244,6 +244,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.multiball = ActiveMultiball::None;
                 self.special_screen = Some(super::SpecialScreen::Bonus);
                 self.active_anim_hint = "anim_bonus_background".to_string();
+                self.emit_ard("ard_bonus_tune");
                 let p = &self.players[self.current_player];
                 let total = p.bonus_points.saturating_mul(p.bonus_multiplier as u64);
                 self.set_banner(format!("BONUS: {} X {} = {}", p.bonus_points, p.bonus_multiplier, total), 4_000);
@@ -279,6 +280,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.players[self.current_player].extra_balls += 1;
                 self.special_screen = Some(super::SpecialScreen::ExtraBall);
                 self.active_anim_hint = "anim_extra_ball_show".to_string();
+                self.emit_ard("ard_extra_ball_fanfare");
                 self.set_banner("EXTRA BALL!", 3_500);
                 return true;
             }
@@ -286,12 +288,14 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.ensure_ingame_swe1();
                 self.ball_save_ms = 15_000;
                 self.special_screen = Some(super::SpecialScreen::BallSave);
+                self.emit_ard("ard_ball_saved");
                 self.set_banner("SHOOT AGAIN! FORCE BALL SAVE!", 3_000);
                 return true;
             }
             "tilt_warning" => {
                 self.ensure_ingame_swe1();
                 self.special_screen = Some(super::SpecialScreen::TiltWarning);
+                self.emit_ard("ard_tilt_warning_speech");
                 self.set_banner("DANGER! TILT WARNING!", 3_000);
                 return true;
             }
@@ -395,6 +399,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.ensure_ingame_swe1();
                 self.cut_all_holds();
                 self.state = MachineState::Tilt;
+                self.emit_ard("ard_tilt_random_speech");
                 self.set_banner("DEBUG: TILT", 3_000);
                 return true;
             }

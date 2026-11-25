@@ -143,6 +143,7 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub left_saber_color: usize,
     pub right_saber_color: usize,
     pub saber_flare_ms: u32,
+    pub ard_seq: usize,
     pub special_screen: Option<SpecialScreen>,
     pub special_screen_ms: u32,
     pub cached_switches: [u8; 12],
@@ -224,6 +225,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             left_saber_color: 2,  // Blue (Qui-Gon / Obi-Wan)
             right_saber_color: 0, // Green
             saber_flare_ms: 0,
+            ard_seq: 0,
             special_screen: None,
             special_screen_ms: 0,
             cached_switches: initial_sw,
@@ -289,6 +291,18 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             sound_id: id.0,
             looping,
         });
+    }
+
+    /// Resolves and triggers an `ard_*` Audio Request Descriptor from SWE1's sound pool table.
+    pub fn emit_ard(&mut self, ard_name: &str) -> bool {
+        let idx = self.ard_seq;
+        self.ard_seq = self.ard_seq.wrapping_add(1);
+        if let Some(sid) = crate::swe1_audio::resolve_ard(ard_name, idx) {
+            self.emit_sound(sid, false);
+            true
+        } else {
+            false
+        }
     }
 
     pub(super) fn set_banner(&mut self, msg: impl Into<String>, duration_ms: u32) {
@@ -359,6 +373,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         if matches!(id, sw::LEFT_COIN | sw::CENTER_COIN | sw::RIGHT_COIN | sw::FOURTH_COIN) {
             self.credits = self.credits.saturating_add(1);
             self.audits.total_credits = self.audits.total_credits.saturating_add(1);
+            if self.game_title == GameTitle::Swe1 {
+                self.emit_ard("ard_attract_mode_full_credit");
+            }
             self.emit_sound(sound::COIN_CREDIT, false);
             self.emit_event(GameEvent::CreditAdded { credits: self.credits });
             self.set_banner(format!("CREDITS: {}", self.credits), 3_000);
@@ -398,11 +415,19 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 } else if id == sw::LEFT_FLIPPER_BUTTON {
                     // Lifted AttractMode::left_hit (`0x00100358`)
                     self.attract.advance(-1);
-                    self.emit_sound(sound::LASER_SFX_OR_CLICK(), false);
+                    if self.game_title == GameTitle::Swe1 {
+                        self.emit_ard("ard_attract_mode_flipper_sounds");
+                    } else {
+                        self.emit_sound(sound::LASER_SFX_OR_CLICK(), false);
+                    }
                 } else if id == sw::RIGHT_FLIPPER_BUTTON {
                     // Lifted AttractMode::right_hit (`0x001003e0`)
                     self.attract.advance(1);
-                    self.emit_sound(sound::LASER_SFX_OR_CLICK(), false);
+                    if self.game_title == GameTitle::Swe1 {
+                        self.emit_ard("ard_attract_mode_flipper_sounds");
+                    } else {
+                        self.emit_sound(sound::LASER_SFX_OR_CLICK(), false);
+                    }
                 }
             }
             MachineState::Diagnostics => self.handle_diagnostics_switch(id),
@@ -563,6 +588,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             // Ball Saver (`BallSaver`): re-serve immediately without losing ball!
             self.pending_eject_balls = self.pending_eject_balls.saturating_add(1);
             self.balls_in_play = self.balls_in_play.saturating_sub(1);
+            if self.game_title == GameTitle::Swe1 {
+                self.emit_ard("ard_ball_saved");
+            }
             self.emit_event(GameEvent::BallSaved {
                 player: self.current_player + 1,
             });
@@ -592,6 +620,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 let p = &self.players[self.current_player];
                 p.bonus_points.saturating_mul(p.bonus_multiplier as u64)
             };
+            if self.game_title == GameTitle::Swe1 {
+                self.emit_ard("ard_bonus_countdown");
+            }
             self.add_score(bonus);
             self.emit_event(GameEvent::BallEnded {
                 player: self.current_player + 1,

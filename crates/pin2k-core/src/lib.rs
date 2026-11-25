@@ -9,6 +9,7 @@ pub mod rfm_rules;
 pub mod rfm_tables;
 pub mod script_engine;
 pub mod storage;
+pub mod swe1_audio;
 pub mod swe1_rules;
 pub mod swe1_tables;
 pub mod switch_matrix;

@@ -40,9 +40,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 if self.tilt_warnings >= self.adjustments.tilt_warnings_max {
                     self.cut_all_holds();
                     self.state = MachineState::Tilt;
+                    self.emit_ard("ard_tilt_random_speech");
                     self.emit_event(GameEvent::Tilted);
                     self.set_banner("TILT! BONUS LOST", 4_000);
                 } else {
+                    self.emit_ard("ard_tilt_warning_speech");
                     self.emit_event(GameEvent::TiltWarning {
                         warnings: self.tilt_warnings,
                     });
