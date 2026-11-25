@@ -41,7 +41,7 @@ pub enum MachineState {
 const HSTD_ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct HstdEntrySession {
+pub struct HstdEntrySession {
     pub queue: Vec<(usize, u64, JediRank)>,
     pub initials: [char; 3],
     pub cursor: usize,
