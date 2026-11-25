@@ -54,10 +54,11 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 - [x] **Toutes les 14 scènes SWE1** (intros bezel `anim_jedi_scene_intro_frame` + 14 arrière-plans actifs incluant `R2D2` et `QuestionMark`), `DeffObiHolo`, `HangarMultiball`, `DarthMaulDuel`, `Super Skill Shot`
 - [x] **Tous les écrans spéciaux & Diagnostics** : `Boot` (`PowerupTestingDeff`), 12 `SpecialScreen` (`Bonus`, `Match`, `GameOver`, `GameIntro`, `ExtraBall`, `BallSave`, `TiltWarning`, `SlamTilt`, `SubEscape`, `BuildC3P0`, `RampCombo`, `JediMultiballReady`), `DeffTilt`, `DeffHSTDinitials`, et `DiagPage` (`Align`, `ColorBar`, `Grid`, `Rgb`, `Fuse`, `Switch`, `Coil`, `Lamp`, menus Opérateur)
 - [x] VM de scripts `ScriptRuntime` + persistance `pin2k_db.json`
+- [x] **Cohabitation natif / `game_script.json`** : `game_script.json` ne court-circuite plus les switchs SWE1/RFM natifs tant que `--strict-script` n'est pas activé (modes `Homebrew` et `mod.json` inchangés)
+- [x] **Séparation stricte Intro de scène / Scène active** : fond opaque `z=0`, vidéo `220×160` étirée `2×` centrée dans le cadre ovale `anim_jedi_scene_intro_frame`, badge centré sur le rebord inférieur, HUD masqué pendant les intros & écrans plein écran puis affiché dès l'entrée en scène active
 - [ ] **Finaliser le câblage de `ScriptRuntime` dans `Pin2kMachine`** :
   - Déclencher `OnBallStart`, `OnBallEnd`, `OnTick` et décrémenter `rt.timers` (`OnTimer`) ainsi que `rt.active_modes` (`OnModeExit`) dans `update_timers()`, et brancher `tick_attract()` lorsque le script pilote l'Attract
   - Isoler les variables par joueur (`player_vars` vs `global_vars`) pour le support multijoueur 1–4 joueurs dans `ScriptRuntime`
-  - Clarifier la cohabitation natif/script par défaut : éviter que `game_script.json` court-circuite silencieusement les switchs SWE1 natifs (ex. rampes `36`/`37`, bouclier `39`) tant que `--strict-script` (ou un mode explicite) n'est pas activé
 - [ ] **Unifier le compositing des scènes dans `pin2k-core`** : rapatrier `render_podrace_scene` dans `crates/pin2k-core/src/machine/scene_render.rs` et supprimer le doublon historique `crates/pin2k-desktop/src/scenes_compositor.rs`
 - [ ] **Passage en 100 % Data-Driven** : déplacer toutes les descriptions visuelles et règles restantes vers `game_script.json` / `rom_layout_db.json` / manifestes JSON et activer `--strict-script` par défaut
 
@@ -99,6 +100,7 @@ Suivi de l'avancement du portage natif Rust **Pinball 2000** (*Star Wars Episode
 
 ## 7. Documentation & Qualité — **100 %**
 - [x] `RUSTFLAGS="-D warnings" cargo check --workspace --all-targets` (**0 avertissement**), **42 / 42 tests unitaires** verts et `cargo build --release --workspace` OK
+- [x] Validation fonctionnelle **End-to-End 14 / 14 étapes** enregistrée en vidéo MP4 (`work/e2e_validation.mp4`, 1 455 frames, 48,5 s @ 30 fps) : Attract, 2 joueurs + sabres + lasers, Skill Shot, Rampes + Spinners + Combo, G-U-N-G-A-N Super Jets, tirs Laser, Intros complètes → Scènes actives (*Battle Droid* & *Podrace 3D*), Multiballs, Bonus/Match/HSTD, et Diagnostics
 - [x] Validation visuelle sur **11 captures PNG** (`attract:0`, `ingame`, `spinner_left`, `scene:6`, `scene:0`, `scene:12`, `bonus`, `match`, `hstd_entry`, `diag:colorbar`, `diag:switch`)
 - [x] [README.md](../README.md) & [SCREEN_LAYOUT_REFERENCE.md](SCREEN_LAYOUT_REFERENCE.md)
 - [x] [ARCHITECTURE_GUIDE.md](ARCHITECTURE_GUIDE.md) & [HARDWARE_NOTES.md](HARDWARE_NOTES.md)

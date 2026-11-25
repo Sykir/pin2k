@@ -20,24 +20,24 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 2 | `anim_battle_droid_intro_badge` | 1 | 60 | 304x79 | Oui | `crates/pin2k-core/src/attract.rs:78`, `crates/pin2k-core/src/machine/attract_render.rs:370`, `crates/pin2k-core/src/swe1_rules.rs:146`, `crates/pin2k-rom-tool/src/gamecode_extractor.rs:547`, `crates/pin2k-rom-tool/src/gamecode_extractor.rs:572` |
 | 3 | `anim_bdroid_explosion` | 20 | 60 | 245x129 | Non | - |
 | 4 | `anim_bdroid_laser_explosion` | 20 | 60 | 230x131 | Non | - |
-| 5 | `anim_bdroid_on_stap` | 26 | 60 | 163x76 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:83`, `crates/pin2k-core/src/swe1_rules.rs:186`, `crates/pin2k-desktop/src/scenes_compositor.rs:27`, `crates/pin2k-desktop/src/scenes_compositor.rs:31` |
+| 5 | `anim_bdroid_on_stap` | 26 | 60 | 163x76 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:99`, `crates/pin2k-core/src/swe1_rules.rs:207`, `crates/pin2k-desktop/src/scenes_compositor.rs:27`, `crates/pin2k-desktop/src/scenes_compositor.rs:31` |
 | 6 | `anim_bdroid_tank_explosion` | 25 | 60 | 580x220 | Non | - |
-| 7 | `anim_bdroid_stap_zap` | 22 | 60 | 56x19 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:86`, `crates/pin2k-desktop/src/scenes_compositor.rs:34` |
+| 7 | `anim_bdroid_stap_zap` | 22 | 60 | 56x19 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:102`, `crates/pin2k-desktop/src/scenes_compositor.rs:34` |
 | 8 | `anim_bdroid_stap_explosion` | 19 | 60 | 574x213 | Non | - |
-| 9 | `anim_bdroid_background` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:80`, `crates/pin2k-desktop/src/scenes_compositor.rs:28` |
+| 9 | `anim_bdroid_background` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:96`, `crates/pin2k-desktop/src/scenes_compositor.rs:28` |
 | 10 | `anim_bdroid_zap` | 44 | 60 | 28x9 | Non | - |
-| 11 | `anim_bonus_background` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:246`, `crates/pin2k-core/src/machine/system_screens.rs:123`, `crates/pin2k-core/src/machine/tests.rs:589` |
+| 11 | `anim_bonus_background` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:246`, `crates/pin2k-core/src/machine/system_screens.rs:123`, `crates/pin2k-core/src/machine/tests.rs:617` |
 | 12 | `anim_explosion_2` | 30 | 60 | 150x63 | Oui | `crates/pin2k-desktop/src/scenes_compositor.rs:67` |
 | 13 | `anim_explosion_3` | 21 | 60 | 640x240 | Non | - |
 | 14 | `anim_explosion_4` | 30 | 60 | 160x53 | Non | - |
 | 15 | `anim_explosion_5` | 30 | 60 | 160x53 | Non | - |
 | 16 | `anim_explosion_6` | 30 | 60 | 160x53 | Non | - |
-| 17 | `anim_extra_ball_show` | 31 | 15 | 320x240 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:283`, `crates/pin2k-core/src/machine/system_screens.rs:258`, `crates/pin2k-core/src/machine/tests.rs:593` |
+| 17 | `anim_extra_ball_show` | 31 | 15 | 320x240 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:283`, `crates/pin2k-core/src/machine/system_screens.rs:258`, `crates/pin2k-core/src/machine/tests.rs:621` |
 | 18 | `anim_fashion_flash` | 12 | 60 | 190x121 | Non | - |
-| 19 | `anim_fashion_wheel` | 10 | 60 | 497x152 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:176`, `crates/pin2k-desktop/src/scenes_compositor.rs:81` |
-| 20 | `anim_fashion_base` | 2 | 60 | 220x30 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:173`, `crates/pin2k-desktop/src/scenes_compositor.rs:78` |
-| 21 | `anim_fashion_queen` | 1 | 60 | 198x174 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:175`, `crates/pin2k-core/src/swe1_rules.rs:194`, `crates/pin2k-desktop/src/scenes_compositor.rs:77`, `crates/pin2k-desktop/src/scenes_compositor.rs:80` |
-| 22 | `anim_fashion_throne` | 1 | 60 | 597x196 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:174`, `crates/pin2k-desktop/src/scenes_compositor.rs:79` |
+| 19 | `anim_fashion_wheel` | 10 | 60 | 497x152 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:192`, `crates/pin2k-desktop/src/scenes_compositor.rs:81` |
+| 20 | `anim_fashion_base` | 2 | 60 | 220x30 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:189`, `crates/pin2k-desktop/src/scenes_compositor.rs:78` |
+| 21 | `anim_fashion_queen` | 1 | 60 | 198x174 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:191`, `crates/pin2k-core/src/swe1_rules.rs:215`, `crates/pin2k-desktop/src/scenes_compositor.rs:77`, `crates/pin2k-desktop/src/scenes_compositor.rs:80` |
+| 22 | `anim_fashion_throne` | 1 | 60 | 597x196 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:190`, `crates/pin2k-desktop/src/scenes_compositor.rs:79` |
 | 23 | `anim_fashion_icon_black` | 60 | 60 | 127x63 | Non | - |
 | 24 | `anim_fashion_icon_fanhead` | 60 | 60 | 127x63 | Non | - |
 | 25 | `anim_fashion_icon_hornhead` | 60 | 60 | 127x63 | Non | - |
@@ -48,42 +48,42 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 30 | `anim_federation_fighter_laser_explosion_2` | 30 | 60 | 324x150 | Non | - |
 | 31 | `anim_federation_fighter_intro_badge` | 1 | 60 | 295x58 | Oui | `crates/pin2k-core/src/swe1_rules.rs:148` |
 | 32 | `anim_federation_fighter_intro_battle` | 59 | 12 | 220x160 | Oui | `crates/pin2k-core/src/swe1_rules.rs:128` |
-| 33 | `anim_federation_fighter_cockpit` | 10 | 60 | 550x40 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:123` |
-| 34 | `anim_federation_fighter` | 7 | 60 | 143x38 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:101`, `crates/pin2k-core/src/swe1_rules.rs:188`, `crates/pin2k-desktop/src/scenes_compositor.rs:45`, `crates/pin2k-desktop/src/scenes_compositor.rs:48` |
+| 33 | `anim_federation_fighter_cockpit` | 10 | 60 | 550x40 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:139` |
+| 34 | `anim_federation_fighter` | 7 | 60 | 143x38 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:117`, `crates/pin2k-core/src/swe1_rules.rs:209`, `crates/pin2k-desktop/src/scenes_compositor.rs:45`, `crates/pin2k-desktop/src/scenes_compositor.rs:48` |
 | 35 | `anim_federation_fighter_flyby` | 27 | 60 | 208x170 | Non | - |
 | 36 | `anim_federation_fighter_explosion` | 16 | 60 | 324x150 | Non | - |
 | 37 | `anim_federation_fighter_explosion_2` | 36 | 60 | 360x150 | Non | - |
 | 38 | `anim_federation_fighter_explosion_3` | 40 | 60 | 324x150 | Non | - |
 | 39 | `anim_federation_fighter_laser_explosion` | 16 | 60 | 324x150 | Non | - |
 | 40 | `anim_federation_fighter_side` | 1 | 60 | 127x280 | Non | - |
-| 41 | `anim_federation_fighter_background` | 1 | 60 | 900x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:99`, `crates/pin2k-desktop/src/scenes_compositor.rs:46` |
+| 41 | `anim_federation_fighter_background` | 1 | 60 | 900x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:115`, `crates/pin2k-desktop/src/scenes_compositor.rs:46` |
 | 42 | `anim_federation_fighter_zap` | 58 | 60 | 88x19 | Non | - |
-| 43 | `anim_gungan_sub_sub` | 80 | 60 | 464x122 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:108`, `crates/pin2k-core/src/machine/system_screens.rs:322`, `crates/pin2k-desktop/src/scenes_compositor.rs:55` |
-| 44 | `anim_gungan_sub_opee` | 150 | 60 | 415x163 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:109` |
-| 45 | `anim_gungan_sub_chomp` | 75 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:213`, `crates/pin2k-core/src/machine/system_screens.rs:323`, `crates/pin2k-core/src/machine/tests.rs:597`, `crates/pin2k-core/src/swe1_rules.rs:189`, `crates/pin2k-desktop/src/scenes_compositor.rs:52` (+1) |
+| 43 | `anim_gungan_sub_sub` | 80 | 60 | 464x122 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:124`, `crates/pin2k-core/src/machine/system_screens.rs:322`, `crates/pin2k-desktop/src/scenes_compositor.rs:55` |
+| 44 | `anim_gungan_sub_opee` | 150 | 60 | 415x163 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:125` |
+| 45 | `anim_gungan_sub_chomp` | 75 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:213`, `crates/pin2k-core/src/machine/system_screens.rs:323`, `crates/pin2k-core/src/machine/tests.rs:625`, `crates/pin2k-core/src/swe1_rules.rs:210`, `crates/pin2k-desktop/src/scenes_compositor.rs:52` (+1) |
 | 46 | `anim_gungan_sub_bubbles` | 54 | 60 | 146x215 | Non | - |
-| 47 | `anim_hangar_droid_run` | 90 | 60 | 85x127 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:124`, `crates/pin2k-core/src/swe1_rules.rs:190`, `crates/pin2k-desktop/src/scenes_compositor.rs:59`, `crates/pin2k-desktop/src/scenes_compositor.rs:60` |
-| 48 | `anim_hangar_droid_explosion` | 30 | 60 | 251x145 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:126`, `crates/pin2k-core/src/machine/swe1_playfield.rs:342`, `crates/pin2k-desktop/src/scenes_compositor.rs:61` |
+| 47 | `anim_hangar_droid_run` | 90 | 60 | 85x127 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:140`, `crates/pin2k-core/src/swe1_rules.rs:211`, `crates/pin2k-desktop/src/scenes_compositor.rs:59`, `crates/pin2k-desktop/src/scenes_compositor.rs:60` |
+| 48 | `anim_hangar_droid_explosion` | 30 | 60 | 251x145 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:142`, `crates/pin2k-core/src/machine/swe1_playfield.rs:342`, `crates/pin2k-desktop/src/scenes_compositor.rs:61` |
 | 49 | `anim_hangar_droid_explosion_2` | 30 | 60 | 238x145 | Non | - |
 | 50 | `anim_hangar_droid_explosion_3` | 30 | 60 | 306x127 | Non | - |
 | 51 | `anim_hangar_droid_explosion_4` | 30 | 60 | 262x145 | Non | - |
-| 52 | `anim_hangar_droid_laser_explosion` | 30 | 60 | 255x149 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:127`, `crates/pin2k-desktop/src/scenes_compositor.rs:62` |
+| 52 | `anim_hangar_droid_laser_explosion` | 30 | 60 | 255x149 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:143`, `crates/pin2k-desktop/src/scenes_compositor.rs:62` |
 | 53 | `anim_hangar_droid_laser_explosion_2` | 30 | 60 | 268x131 | Non | - |
 | 54 | `anim_hangar_escape_intro_movie` | 74 | 15 | 220x160 | Oui | `crates/pin2k-core/src/swe1_rules.rs:130`, `crates/pin2k-rom-tool/src/gamecode_extractor.rs:582` |
 | 55 | `anim_hangar_escape_intro_badge` | 1 | 60 | 299x78 | Oui | `crates/pin2k-core/src/swe1_rules.rs:150` |
 | 56 | `anim_hangar_escape_exit_movie` | 47 | 15 | 320x240 | Non | - |
-| 57 | `anim_hangar_escape_torpedo` | 181 | 60 | 200x91 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:125` |
-| 58 | `anim_jackpot_icon_idle` | 60 | 60 | 161x61 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:301` |
+| 57 | `anim_hangar_escape_torpedo` | 181 | 60 | 200x91 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:141` |
+| 58 | `anim_jackpot_icon_idle` | 60 | 60 | 161x61 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:317` |
 | 59 | `anim_jackpot_icon_boom` | 9 | 60 | 354x110 | Non | - |
 | 60 | `anim_jarjar_juggle_intro_movie` | 67 | 15 | 220x160 | Oui | `crates/pin2k-core/src/swe1_rules.rs:135` |
 | 61 | `anim_jarjar_juggle_intro_badge` | 1 | 60 | 330x79 | Oui | `crates/pin2k-core/src/swe1_rules.rs:155` |
 | 62 | `anim_jarjar_frog_fountain` | 46 | 60 | 200x129 | Non | - |
 | 63 | `anim_jarjar_appear` | 28 | 60 | 141x161 | Non | - |
-| 64 | `anim_jarjar_juggle` | 19 | 60 | 407x191 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:184`, `crates/pin2k-core/src/swe1_rules.rs:195`, `crates/pin2k-desktop/src/scenes_compositor.rs:85`, `crates/pin2k-desktop/src/scenes_compositor.rs:87` |
+| 64 | `anim_jarjar_juggle` | 19 | 60 | 407x191 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:200`, `crates/pin2k-core/src/swe1_rules.rs:216`, `crates/pin2k-desktop/src/scenes_compositor.rs:85`, `crates/pin2k-desktop/src/scenes_compositor.rs:87` |
 | 65 | `anim_jarjar_fall` | 20 | 60 | 470x240 | Non | - |
 | 66 | `anim_jarjar_jumpup` | 40 | 60 | 400x213 | Non | - |
 | 67 | `anim_jarjar_switch` | 4 | 60 | 189x209 | Non | - |
-| 68 | `anim_jarjar_stare` | 11 | 60 | 189x209 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:183`, `crates/pin2k-desktop/src/scenes_compositor.rs:86` |
+| 68 | `anim_jarjar_stare` | 11 | 60 | 189x209 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:199`, `crates/pin2k-desktop/src/scenes_compositor.rs:86` |
 | 69 | `anim_jarjar_junk1` | 20 | 60 | 96x46 | Non | - |
 | 70 | `anim_jarjar_junk2` | 20 | 60 | 126x60 | Non | - |
 | 71 | `anim_jarjar_junk3` | 20 | 60 | 112x44 | Non | - |
@@ -96,26 +96,26 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 78 | `anim_jarjar_juggle_2` | 32 | 60 | 466x213 | Non | - |
 | 79 | `anim_jarjar_fall_2` | 18 | 60 | 318x220 | Non | - |
 | 80 | `anim_jarjar_tongue` | 35 | 60 | 202x141 | Non | - |
-| 81 | `anim_jarjar_juggle_backdrop` | 1 | 60 | 629x141 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:182` |
+| 81 | `anim_jarjar_juggle_backdrop` | 1 | 60 | 629x141 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:198` |
 | 82 | `anim_jedi_battle_intro_movie` | 63 | 15 | 220x160 | Oui | `crates/pin2k-core/src/machine/swe1_playfield.rs:460`, `crates/pin2k-rom-tool/src/gamecode_extractor.rs:595` |
 | 83 | `anim_jedi_battle_intro_badge` | 1 | 60 | 445x108 | Non | - |
 | 84 | `anim_jedi_battle_intro_frame` | 1 | 60 | 594x216 | Non | - |
 | 85 | `anim_jedi_battle_background_center` | 1 | 60 | 340x240 | Non | - |
 | 86 | `anim_jedi_battle_background_left` | 10 | 60 | 150x240 | Non | - |
 | 87 | `anim_jedi_battle_background_right` | 10 | 60 | 150x240 | Non | - |
-| 88 | `anim_jedi_council_mace` | 1 | 60 | 93x58 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:214`, `crates/pin2k-desktop/src/scenes_compositor.rs:99` |
-| 89 | `anim_jedi_council_background` | 1 | 60 | 593x234 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:213` |
-| 90 | `anim_jedi_council_neck` | 12 | 60 | 90x58 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:218` |
-| 91 | `anim_jedi_council_yoda` | 6 | 60 | 93x46 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:215`, `crates/pin2k-desktop/src/scenes_compositor.rs:100` |
-| 92 | `anim_jedi_council_member_1` | 6 | 60 | 86x60 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:216` |
-| 93 | `anim_jedi_council_member_2` | 5 | 60 | 96x58 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:217` |
+| 88 | `anim_jedi_council_mace` | 1 | 60 | 93x58 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:230`, `crates/pin2k-desktop/src/scenes_compositor.rs:99` |
+| 89 | `anim_jedi_council_background` | 1 | 60 | 593x234 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:229` |
+| 90 | `anim_jedi_council_neck` | 12 | 60 | 90x58 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:234` |
+| 91 | `anim_jedi_council_yoda` | 6 | 60 | 93x46 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:231`, `crates/pin2k-desktop/src/scenes_compositor.rs:100` |
+| 92 | `anim_jedi_council_member_1` | 6 | 60 | 86x60 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:232` |
+| 93 | `anim_jedi_council_member_2` | 5 | 60 | 96x58 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:233` |
 | 94 | `anim_jedi_letters_loop` | 80 | 60 | 54x18 | Non | - |
 | 95 | `anim_jedi_letters_shrink` | 88 | 60 | 247x82 | Non | - |
-| 96 | `anim_jedi_scene_intro_frame` | 1 | 60 | 522x195 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:52`, `crates/pin2k-core/src/machine/tests.rs:547` |
+| 96 | `anim_jedi_scene_intro_frame` | 1 | 60 | 522x195 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:60`, `crates/pin2k-core/src/machine/scene_render.rs:74`, `crates/pin2k-core/src/machine/tests.rs:562`, `crates/pin2k-core/src/swe1_rules.rs:164` |
 | 97 | `anim_kahuna_logo_flare` | 17 | 60 | 595x226 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:5`, `crates/pin2k-core/src/machine/attract_render.rs:53`, `crates/pin2k-core/src/machine/tests.rs:459` |
 | 98 | `anim_kahuna_logo_spinning` | 1 | 60 | 267x81 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:4`, `crates/pin2k-core/src/machine/attract_render.rs:57`, `crates/pin2k-core/src/machine/attract_render.rs:59`, `crates/pin2k-core/src/machine/tests.rs:466` |
 | 99 | `anim_left_bdroid_shooting` | 10 | 60 | 55x91 | Non | - |
-| 100 | `anim_left_bdroid_standing` | 26 | 60 | 67x96 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:81`, `crates/pin2k-desktop/src/scenes_compositor.rs:29` |
+| 100 | `anim_left_bdroid_standing` | 26 | 60 | 67x96 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:97`, `crates/pin2k-desktop/src/scenes_compositor.rs:29` |
 | 101 | `anim_left_bdroid_unpacking` | 15 | 60 | 189x96 | Non | - |
 | 102 | `anim_mtt_frame` | 1 | 60 | 242x135 | Non | - |
 | 103 | `anim_mtt_doors_clean_anim` | 19 | 60 | 138x152 | Non | - |
@@ -137,51 +137,51 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 119 | `anim_mos_espa_jarjar_eat_3` | 14 | 60 | 329x203 | Non | - |
 | 120 | `anim_mos_espa_jarjar_eat_4` | 14 | 60 | 379x205 | Non | - |
 | 121 | `anim_mos_espa_jarjar_swallow` | 26 | 60 | 217x205 | Non | - |
-| 122 | `anim_multiball_start_movie` | 90 | 15 | 320x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:282`, `crates/pin2k-core/src/machine/script_exec.rs:179` |
-| 123 | `anim_naboo_flyby_single` | 1 | 60 | 225x40 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:229`, `crates/pin2k-core/src/machine/system_screens.rs:360`, `crates/pin2k-core/src/machine/tests.rs:599` |
+| 122 | `anim_multiball_start_movie` | 90 | 15 | 320x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:298`, `crates/pin2k-core/src/machine/script_exec.rs:179` |
+| 123 | `anim_naboo_flyby_single` | 1 | 60 | 225x40 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:229`, `crates/pin2k-core/src/machine/system_screens.rs:360`, `crates/pin2k-core/src/machine/tests.rs:627` |
 | 124 | `anim_naboo_fighter_tiny_rotate` | 60 | 60 | 100x50 | Oui | `crates/pin2k-core/src/machine/hud_display.rs:2`, `crates/pin2k-core/src/machine/hud_display.rs:25`, `crates/pin2k-core/src/machine/tests.rs:370`, `crates/pin2k-core/src/machine/tests.rs:386` |
 | 125 | `anim_naboo_flyby_frame` | 1 | 60 | 640x134 | Non | - |
 | 126 | `anim_naboo_flyby` | 64 | 15 | 276x120 | Non | - |
-| 127 | `anim_naboo_xhair` | 1 | 60 | 150x75 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:102`, `crates/pin2k-desktop/src/scenes_compositor.rs:49` |
+| 127 | `anim_naboo_xhair` | 1 | 60 | 150x75 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:118`, `crates/pin2k-desktop/src/scenes_compositor.rs:49` |
 | 128 | `anim_naboo_xhair_blue` | 1 | 60 | 136x68 | Non | - |
-| 129 | `anim_obiwan_holo` | 60 | 60 | 320x160 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:375`, `crates/pin2k-desktop/src/scenes_compositor.rs:118` |
-| 130 | `anim_obiwan_holo_glow` | 60 | 60 | 320x160 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:374`, `crates/pin2k-desktop/src/scenes_compositor.rs:117` |
+| 129 | `anim_obiwan_holo` | 60 | 60 | 320x160 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:391`, `crates/pin2k-desktop/src/scenes_compositor.rs:118` |
+| 130 | `anim_obiwan_holo_glow` | 60 | 60 | 320x160 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:390`, `crates/pin2k-desktop/src/scenes_compositor.rs:117` |
 | 131 | `anim_obiwan_holo_activate` | 18 | 60 | 255x81 | Non | - |
-| 132 | `anim_obiwan_holo_anakin_pod` | 69 | 60 | 289x63 | Oui | `crates/pin2k-core/src/swe1_rules.rs:172` |
-| 133 | `anim_obiwan_holo_battle_droid` | 71 | 60 | 198x138 | Oui | `crates/pin2k-core/src/swe1_rules.rs:166` |
+| 132 | `anim_obiwan_holo_anakin_pod` | 69 | 60 | 289x63 | Oui | `crates/pin2k-core/src/swe1_rules.rs:193` |
+| 133 | `anim_obiwan_holo_battle_droid` | 71 | 60 | 198x138 | Oui | `crates/pin2k-core/src/swe1_rules.rs:187` |
 | 134 | `anim_holo_burst` | 18 | 60 | 450x225 | Non | - |
-| 135 | `anim_obiwan_holo_federation_fighter` | 72 | 60 | 400x75 | Oui | `crates/pin2k-core/src/swe1_rules.rs:168` |
+| 135 | `anim_obiwan_holo_federation_fighter` | 72 | 60 | 400x75 | Oui | `crates/pin2k-core/src/swe1_rules.rs:189` |
 | 136 | `anim_obiwan_holo_flatten` | 30 | 60 | 320x160 | Non | - |
-| 137 | `anim_obiwan_holo_glow_loop` | 15 | 60 | 222x78 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:376`, `crates/pin2k-desktop/src/scenes_compositor.rs:119` |
-| 138 | `anim_obiwan_holo_gungan_sub` | 72 | 60 | 400x64 | Oui | `crates/pin2k-core/src/swe1_rules.rs:169` |
-| 139 | `anim_obiwan_holo_jarjar` | 71 | 60 | 174x138 | Oui | `crates/pin2k-core/src/swe1_rules.rs:175` |
-| 140 | `anim_obiwan_holo_naboo_fighter` | 72 | 60 | 282x54 | Oui | `crates/pin2k-core/src/swe1_rules.rs:170` |
+| 137 | `anim_obiwan_holo_glow_loop` | 15 | 60 | 222x78 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:392`, `crates/pin2k-desktop/src/scenes_compositor.rs:119` |
+| 138 | `anim_obiwan_holo_gungan_sub` | 72 | 60 | 400x64 | Oui | `crates/pin2k-core/src/swe1_rules.rs:190` |
+| 139 | `anim_obiwan_holo_jarjar` | 71 | 60 | 174x138 | Oui | `crates/pin2k-core/src/swe1_rules.rs:196` |
+| 140 | `anim_obiwan_holo_naboo_fighter` | 72 | 60 | 282x54 | Oui | `crates/pin2k-core/src/swe1_rules.rs:191` |
 | 141 | `anim_obiwan_holo_queens_gun` | 71 | 60 | 213x75 | Non | - |
-| 142 | `anim_obiwan_holo_r2d2` | 73 | 60 | 202x113 | Oui | `crates/pin2k-core/src/swe1_rules.rs:173`, `crates/pin2k-core/src/swe1_rules.rs:178` |
-| 143 | `anim_obiwan_holo_yoda` | 72 | 60 | 204x100 | Oui | `crates/pin2k-core/src/swe1_rules.rs:177` |
+| 142 | `anim_obiwan_holo_r2d2` | 73 | 60 | 202x113 | Oui | `crates/pin2k-core/src/swe1_rules.rs:194`, `crates/pin2k-core/src/swe1_rules.rs:199` |
+| 143 | `anim_obiwan_holo_yoda` | 72 | 60 | 204x100 | Oui | `crates/pin2k-core/src/swe1_rules.rs:198` |
 | 144 | `anim_p2k_logo_animated` | 90 | 15 | 200x200 | Oui | `crates/pin2k-core/src/attract.rs:20`, `crates/pin2k-core/src/attract.rs:75`, `crates/pin2k-core/src/machine/attract_render.rs:192`, `crates/pin2k-core/src/script_engine.rs:341`, `crates/pin2k-desktop/src/compositor.rs:243` (+1) |
 | 145 | `anim_podrace_ground_slow` | 11 | 60 | 640x128 | Non | - |
-| 146 | `anim_podrace_sky` | 1 | 60 | 640x99 | Oui | `crates/pin2k-desktop/src/compositor.rs:565` |
-| 147 | `anim_podrace_horizon` | 1 | 60 | 800x112 | Oui | `crates/pin2k-desktop/src/compositor.rs:567` |
-| 148 | `anim_podrace_intro_badge` | 1 | 60 | 266x66 | Oui | `crates/pin2k-core/src/swe1_rules.rs:152`, `crates/pin2k-desktop/src/compositor.rs:560` |
+| 146 | `anim_podrace_sky` | 1 | 60 | 640x99 | Oui | `crates/pin2k-desktop/src/compositor.rs:564` |
+| 147 | `anim_podrace_horizon` | 1 | 60 | 800x112 | Oui | `crates/pin2k-desktop/src/compositor.rs:566` |
+| 148 | `anim_podrace_intro_badge` | 1 | 60 | 266x66 | Oui | `crates/pin2k-core/src/swe1_rules.rs:152` |
 | 149 | `anim_probe_droid_intro_movie` | 83 | 15 | 220x160 | Oui | `crates/pin2k-core/src/swe1_rules.rs:133` |
 | 150 | `anim_probe_droid_intro_badge` | 1 | 60 | 327x77 | Oui | `crates/pin2k-core/src/swe1_rules.rs:153` |
 | 151 | `anim_queen_ship_intro_badge` | 1 | 60 | 304x74 | Oui | `crates/pin2k-core/src/swe1_rules.rs:154` |
 | 152 | `anim_r2d2_intro_movie` | 53 | 15 | 220x160 | Oui | `crates/pin2k-core/src/swe1_rules.rs:138` |
 | 153 | `anim_r2d2_intro_badge` | 1 | 60 | 355x70 | Oui | `crates/pin2k-core/src/swe1_rules.rs:158` |
-| 154 | `anim_r2d2_scene_background_upper` | 1 | 60 | 640x135 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:231` |
-| 155 | `anim_r2d2_scene_background_lower` | 1 | 60 | 640x131 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:232` |
-| 156 | `anim_r2d2_scene_r2d2_unit` | 80 | 60 | 190x78 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:233`, `crates/pin2k-core/src/swe1_rules.rs:198` |
+| 154 | `anim_r2d2_scene_background_upper` | 1 | 60 | 640x135 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:247` |
+| 155 | `anim_r2d2_scene_background_lower` | 1 | 60 | 640x131 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:248` |
+| 156 | `anim_r2d2_scene_r2d2_unit` | 80 | 60 | 190x78 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:249`, `crates/pin2k-core/src/swe1_rules.rs:219` |
 | 157 | `anim_r2d2_scene_dark_blue_r2_unit` | 60 | 60 | 222x60 | Non | - |
 | 158 | `anim_r2d2_scene_yellow_r2_unit` | 60 | 60 | 278x90 | Non | - |
-| 159 | `anim_r2d2_scene_blue_yellow_r2_unit` | 60 | 60 | 175x47 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:234` |
-| 160 | `anim_r2d2_scene_red_r2_unit` | 60 | 60 | 214x59 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:235` |
+| 159 | `anim_r2d2_scene_blue_yellow_r2_unit` | 60 | 60 | 175x47 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:250` |
+| 160 | `anim_r2d2_scene_red_r2_unit` | 60 | 60 | 214x59 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:251` |
 | 161 | `anim_r2d2_scene_red_white_r2_unit` | 60 | 60 | 276x72 | Non | - |
-| 162 | `anim_republic_cruiser_intro` | 60 | 15 | 320x140 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:275`, `crates/pin2k-core/src/machine/system_screens.rs:235`, `crates/pin2k-core/src/machine/tests.rs:592` |
+| 162 | `anim_republic_cruiser_intro` | 60 | 15 | 320x140 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:275`, `crates/pin2k-core/src/machine/system_screens.rs:235`, `crates/pin2k-core/src/machine/tests.rs:620` |
 | 163 | `anim_right_bdroid_shooting` | 10 | 60 | 52x89 | Non | - |
-| 164 | `anim_right_bdroid_standing` | 26 | 60 | 64x96 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:82`, `crates/pin2k-desktop/src/scenes_compositor.rs:30` |
+| 164 | `anim_right_bdroid_standing` | 26 | 60 | 64x96 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:98`, `crates/pin2k-desktop/src/scenes_compositor.rs:30` |
 | 165 | `anim_right_bdroid_unpacking` | 15 | 60 | 186x96 | Non | - |
-| 166 | `anim_saber_handle` | 1 | 60 | 39x32 | Oui | `crates/pin2k-core/src/machine/score_display.rs:64`, `crates/pin2k-core/src/machine/tests.rs:351`, `crates/pin2k-rom-tool/src/layout_extractor.rs:749` |
+| 166 | `anim_saber_handle` | 1 | 60 | 39x32 | Oui | `crates/pin2k-core/src/machine/score_display.rs:64`, `crates/pin2k-core/src/machine/tests.rs:351`, `crates/pin2k-core/src/machine/tests.rs:582`, `crates/pin2k-rom-tool/src/layout_extractor.rs:749` |
 | 167 | `anim_saber_blue_loop` | 10 | 60 | 245x32 | Oui | `crates/pin2k-core/src/machine/score_display.rs:26`, `crates/pin2k-rom-tool/src/layout_extractor.rs:816` |
 | 168 | `anim_saber_blue_flare` | 10 | 60 | 245x32 | Oui | `crates/pin2k-core/src/machine/score_display.rs:26`, `crates/pin2k-rom-tool/src/layout_extractor.rs:817` |
 | 169 | `anim_saber_blue_start` | 4 | 60 | 245x32 | Oui | `crates/pin2k-core/src/machine/score_display.rs:26`, `crates/pin2k-rom-tool/src/layout_extractor.rs:815` |
@@ -199,16 +199,16 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 181 | `anim_sith_probe_fly_1` | 36 | 60 | 110x103 | Non | - |
 | 182 | `anim_sith_probe_fly_2` | 12 | 60 | 108x89 | Non | - |
 | 183 | `anim_sith_probe_fly_3` | 12 | 60 | 114x92 | Non | - |
-| 184 | `anim_sith_probe_hover` | 24 | 60 | 135x99 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:167`, `crates/pin2k-desktop/src/scenes_compositor.rs:72` |
+| 184 | `anim_sith_probe_hover` | 24 | 60 | 135x99 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:183`, `crates/pin2k-desktop/src/scenes_compositor.rs:72` |
 | 185 | `anim_sith_probe_hover_far` | 24 | 60 | 81x61 | Non | - |
 | 186 | `anim_sith_probe_miss_explosion` | 25 | 60 | 125x65 | Non | - |
 | 187 | `anim_sith_probe_queen` | 41 | 60 | 280x175 | Non | - |
-| 188 | `anim_sith_probe_queen_shoot_1` | 21 | 60 | 348x175 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:168`, `crates/pin2k-core/src/swe1_rules.rs:193`, `crates/pin2k-desktop/src/scenes_compositor.rs:70`, `crates/pin2k-desktop/src/scenes_compositor.rs:73` |
+| 188 | `anim_sith_probe_queen_shoot_1` | 21 | 60 | 348x175 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:184`, `crates/pin2k-core/src/swe1_rules.rs:214`, `crates/pin2k-desktop/src/scenes_compositor.rs:70`, `crates/pin2k-desktop/src/scenes_compositor.rs:73` |
 | 189 | `anim_sith_probe_queen_shoot_2` | 21 | 60 | 285x177 | Non | - |
 | 190 | `anim_sith_probe_queen_shoot_3` | 21 | 60 | 298x176 | Non | - |
 | 191 | `anim_sith_probe_target` | 20 | 60 | 125x65 | Non | - |
-| 192 | `anim_sith_probe_xhair` | 29 | 60 | 144x77 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:169`, `crates/pin2k-desktop/src/scenes_compositor.rs:74` |
-| 193 | `anim_stap_xhair` | 11 | 60 | 39x21 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:84`, `crates/pin2k-desktop/src/scenes_compositor.rs:32` |
+| 192 | `anim_sith_probe_xhair` | 29 | 60 | 144x77 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:185`, `crates/pin2k-desktop/src/scenes_compositor.rs:74` |
+| 193 | `anim_stap_xhair` | 11 | 60 | 39x21 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:100`, `crates/pin2k-desktop/src/scenes_compositor.rs:32` |
 | 194 | `anim_starwars_banner_1` | 1 | 60 | 720x240 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:64` |
 | 195 | `anim_starwars_banner_2` | 1 | 60 | 720x240 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:65` |
 | 196 | `anim_starwars_banner_3` | 1 | 60 | 720x240 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:66` |
@@ -216,15 +216,15 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 198 | `anim_sub_escape_intro_movie` | 55 | 15 | 220x160 | Oui | `crates/pin2k-core/src/swe1_rules.rs:129` |
 | 199 | `anim_sub_escape_intro_badge` | 1 | 60 | 386x66 | Oui | `crates/pin2k-core/src/swe1_rules.rs:149` |
 | 200 | `anim_watto_cube_cube` | 22 | 60 | 269x133 | Non | - |
-| 201 | `anim_watto_cube` | 70 | 60 | 572x240 | Oui | `crates/pin2k-core/src/swe1_rules.rs:196`, `crates/pin2k-desktop/src/scenes_compositor.rs:90`, `crates/pin2k-desktop/src/scenes_compositor.rs:94` |
+| 201 | `anim_watto_cube` | 70 | 60 | 572x240 | Oui | `crates/pin2k-core/src/swe1_rules.rs:217`, `crates/pin2k-desktop/src/scenes_compositor.rs:90`, `crates/pin2k-desktop/src/scenes_compositor.rs:94` |
 | 202 | `anim_watto_cube_flare` | 16 | 60 | 640x240 | Oui | `crates/pin2k-desktop/src/scenes_compositor.rs:95` |
 | 203 | `anim_watto_junkshop_background` | 1 | 60 | 640x166 | Oui | `crates/pin2k-desktop/src/scenes_compositor.rs:92` |
 | 204 | `anim_watto_junkshop_sky` | 1 | 60 | 640x125 | Oui | `crates/pin2k-desktop/src/scenes_compositor.rs:91` |
 | 205 | `anim_watto_fly` | 30 | 60 | 121x63 | Oui | `crates/pin2k-desktop/src/scenes_compositor.rs:93` |
 | 206 | `menu_background_map_playfield` | 1 | 60 | 220x208 | Non | - |
-| 207 | `anim_jedi_battle_idle` | 10 | 60 | 396x178 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:329`, `crates/pin2k-desktop/src/scenes_compositor.rs:104` |
-| 208 | `anim_jedi_battle_icon_quigon` | 11 | 60 | 92x55 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:324`, `crates/pin2k-desktop/src/scenes_compositor.rs:125` |
-| 209 | `anim_jedi_battle_icon_maul` | 11 | 60 | 92x55 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:325`, `crates/pin2k-desktop/src/scenes_compositor.rs:126` |
+| 207 | `anim_jedi_battle_idle` | 10 | 60 | 396x178 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:345`, `crates/pin2k-desktop/src/scenes_compositor.rs:104` |
+| 208 | `anim_jedi_battle_icon_quigon` | 11 | 60 | 92x55 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:340`, `crates/pin2k-desktop/src/scenes_compositor.rs:125` |
+| 209 | `anim_jedi_battle_icon_maul` | 11 | 60 | 92x55 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:341`, `crates/pin2k-desktop/src/scenes_compositor.rs:126` |
 | 210 | `anim_jedi_battle_quigon_high_right_single` | 17 | 60 | 396x178 | Oui | `crates/pin2k-core/src/machine/swe1_playfield.rs:674`, `crates/pin2k-desktop/src/scenes_compositor.rs:106` |
 | 211 | `anim_jedi_battle_quigon_low_left_single` | 13 | 60 | 396x178 | Non | - |
 | 212 | `anim_jedi_battle_quigon_low_right_single` | 17 | 60 | 396x178 | Non | - |
@@ -235,25 +235,25 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 217 | `anim_jedi_battle_quigon_death` | 55 | 60 | 396x178 | Non | - |
 | 218 | `anim_jedi_battle_maul_death_1` | 56 | 60 | 396x178 | Oui | `crates/pin2k-core/src/machine/swe1_playfield.rs:662`, `crates/pin2k-desktop/src/scenes_compositor.rs:108` |
 | 219 | `anim_jedi_battle_maul_death_2` | 28 | 60 | 396x178 | Non | - |
-| 220 | `anim_jedi_battle_saber_sparks` | 11 | 60 | 264x148 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:333`, `crates/pin2k-desktop/src/scenes_compositor.rs:129` |
-| 221 | `anim_jedi_battle_clash` | 42 | 60 | 396x178 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:332`, `crates/pin2k-core/src/machine/swe1_playfield.rs:673`, `crates/pin2k-desktop/src/scenes_compositor.rs:105`, `crates/pin2k-desktop/src/scenes_compositor.rs:128` |
-| 222 | `anim_jedi_battle_background_hangar` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:323`, `crates/pin2k-desktop/src/scenes_compositor.rs:124` |
+| 220 | `anim_jedi_battle_saber_sparks` | 11 | 60 | 264x148 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:349`, `crates/pin2k-desktop/src/scenes_compositor.rs:129` |
+| 221 | `anim_jedi_battle_clash` | 42 | 60 | 396x178 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:348`, `crates/pin2k-core/src/machine/swe1_playfield.rs:673`, `crates/pin2k-desktop/src/scenes_compositor.rs:105`, `crates/pin2k-desktop/src/scenes_compositor.rs:128` |
+| 222 | `anim_jedi_battle_background_hangar` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:339`, `crates/pin2k-desktop/src/scenes_compositor.rs:124` |
 | 223 | `anim_jedi_battle_background_power` | 1 | 60 | 640x240 | Non | - |
 | 224 | `anim_jedi_battle_background_dessert` | 1 | 60 | 640x240 | Non | - |
-| 225 | `anim_sith_probe_background` | 1 | 60 | 800x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:166`, `crates/pin2k-desktop/src/scenes_compositor.rs:71` |
+| 225 | `anim_sith_probe_background` | 1 | 60 | 800x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:182`, `crates/pin2k-desktop/src/scenes_compositor.rs:71` |
 | 226 | `anim_sith_probe_background_2` | 1 | 60 | 800x240 | Non | - |
 | 227 | `anim_spinner_1` | 56 | 60 | 150x57 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:166`, `crates/pin2k-core/src/machine/tests.rs:426`, `crates/pin2k-core/src/machine/vspinner.rs:2`, `crates/pin2k-core/src/machine/vspinner.rs:119` |
 | 228 | `anim_spinner_2` | 56 | 60 | 150x57 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:168`, `crates/pin2k-core/src/machine/tests.rs:442`, `crates/pin2k-core/src/machine/vspinner.rs:3`, `crates/pin2k-core/src/machine/vspinner.rs:121` |
 | 229 | `anim_sparks_1` | 15 | 60 | 200x100 | Non | - |
 | 230 | `anim_textbox_300` | 30 | 60 | 300x31 | Non | - |
-| 231 | `anim_build_c3p0` | 57 | 60 | 115x160 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:222`, `crates/pin2k-core/src/machine/system_screens.rs:336`, `crates/pin2k-core/src/machine/tests.rs:598` |
-| 232 | `anim_fashion_sparkle_left` | 30 | 60 | 146x64 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:177` |
-| 233 | `anim_fashion_sparkle_right` | 30 | 60 | 146x64 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:178` |
-| 234 | `anim_saber_ball_loop` | 79 | 60 | 304x147 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:237`, `crates/pin2k-core/src/machine/system_screens.rs:373`, `crates/pin2k-core/src/machine/tests.rs:600` |
+| 231 | `anim_build_c3p0` | 57 | 60 | 115x160 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:222`, `crates/pin2k-core/src/machine/system_screens.rs:336`, `crates/pin2k-core/src/machine/tests.rs:626` |
+| 232 | `anim_fashion_sparkle_left` | 30 | 60 | 146x64 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:193` |
+| 233 | `anim_fashion_sparkle_right` | 30 | 60 | 146x64 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:194` |
+| 234 | `anim_saber_ball_loop` | 79 | 60 | 304x147 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:237`, `crates/pin2k-core/src/machine/system_screens.rs:373`, `crates/pin2k-core/src/machine/tests.rs:628` |
 | 235 | `anim_saber_ball_ignite` | 73 | 60 | 640x205 | Non | - |
 | 236 | `anim_podrace_intro_movie` | 55 | 15 | 220x160 | Oui | `crates/pin2k-core/src/swe1_rules.rs:132` |
-| 237 | `anim_podrace_1` | 100 | 60 | 353x119 | Oui | `crates/pin2k-core/src/swe1_rules.rs:192`, `crates/pin2k-desktop/src/compositor.rs:589`, `crates/pin2k-desktop/src/scenes_compositor.rs:19` |
-| 238 | `anim_podrace_2` | 40 | 60 | 147x43 | Oui | `crates/pin2k-desktop/src/compositor.rs:580` |
+| 237 | `anim_podrace_1` | 100 | 60 | 353x119 | Oui | `crates/pin2k-core/src/swe1_rules.rs:213`, `crates/pin2k-desktop/src/compositor.rs:588`, `crates/pin2k-desktop/src/scenes_compositor.rs:19` |
+| 238 | `anim_podrace_2` | 40 | 60 | 147x43 | Oui | `crates/pin2k-desktop/src/compositor.rs:579` |
 | 239 | `anim_podrace_icon1` | 21 | 60 | 70x30 | Non | - |
 | 240 | `anim_podrace_icon2` | 21 | 60 | 70x30 | Non | - |
 | 241 | `anim_podrace_icon3` | 20 | 60 | 70x30 | Non | - |
@@ -262,32 +262,32 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 244 | `anim_podrace_icon2_blur` | 5 | 60 | 70x30 | Non | - |
 | 245 | `anim_podrace_icon3_blur` | 5 | 60 | 70x30 | Non | - |
 | 246 | `anim_podrace_icon4_blur` | 4 | 60 | 87x52 | Non | - |
-| 247 | `anim_podrace_checkpoint` | 1 | 60 | 191x58 | Oui | `crates/pin2k-desktop/src/compositor.rs:592` |
-| 248 | `anim_podrace_ground` | 21 | 60 | 640x128 | Oui | `crates/pin2k-desktop/src/compositor.rs:568` |
-| 249 | `anim_podrace_closeup` | 31 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/swe1_playfield.rs:630`, `crates/pin2k-desktop/src/compositor.rs:554`, `crates/pin2k-desktop/src/compositor.rs:571`, `crates/pin2k-desktop/src/scenes_compositor.rs:23` |
-| 250 | `anim_droid_control_ship` | 1 | 60 | 400x81 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:100`, `crates/pin2k-desktop/src/scenes_compositor.rs:47` |
+| 247 | `anim_podrace_checkpoint` | 1 | 60 | 191x58 | Oui | `crates/pin2k-desktop/src/compositor.rs:591` |
+| 248 | `anim_podrace_ground` | 21 | 60 | 640x128 | Oui | `crates/pin2k-desktop/src/compositor.rs:567` |
+| 249 | `anim_podrace_closeup` | 31 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/swe1_playfield.rs:630`, `crates/pin2k-desktop/src/compositor.rs:554`, `crates/pin2k-desktop/src/compositor.rs:570`, `crates/pin2k-desktop/src/scenes_compositor.rs:23` |
+| 250 | `anim_droid_control_ship` | 1 | 60 | 400x81 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:116`, `crates/pin2k-desktop/src/scenes_compositor.rs:47` |
 | 251 | `anim_droid_control_ship2` | 1 | 60 | 150x30 | Non | - |
-| 252 | `anim_bonus_character_anakin` | 50 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:513` |
-| 253 | `anim_bonus_character_jarjar` | 93 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:512` |
-| 254 | `anim_bonus_character_maul1` | 57 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:519` |
-| 255 | `anim_bonus_character_obiwan` | 39 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:515` |
-| 256 | `anim_bonus_character_queen1` | 45 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:514` |
-| 257 | `anim_bonus_character_quigon` | 57 | 15 | 88x76 | Oui | `crates/pin2k-core/src/machine/system_screens.rs:120`, `crates/pin2k-core/src/swe1_rules.rs:511` |
-| 258 | `anim_bonus_character_r2d2` | 51 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:516` |
-| 259 | `anim_bonus_character_watto` | 53 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:518` |
-| 260 | `anim_bonus_character_yoda` | 77 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:517` |
+| 252 | `anim_bonus_character_anakin` | 50 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:534` |
+| 253 | `anim_bonus_character_jarjar` | 93 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:533` |
+| 254 | `anim_bonus_character_maul1` | 57 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:540` |
+| 255 | `anim_bonus_character_obiwan` | 39 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:536` |
+| 256 | `anim_bonus_character_queen1` | 45 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:535` |
+| 257 | `anim_bonus_character_quigon` | 57 | 15 | 88x76 | Oui | `crates/pin2k-core/src/machine/system_screens.rs:120`, `crates/pin2k-core/src/swe1_rules.rs:532` |
+| 258 | `anim_bonus_character_r2d2` | 51 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:537` |
+| 259 | `anim_bonus_character_watto` | 53 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:539` |
+| 260 | `anim_bonus_character_yoda` | 77 | 15 | 88x76 | Oui | `crates/pin2k-core/src/swe1_rules.rs:538` |
 | 261 | `anim_attract_anakin_web` | 1 | 60 | 202x101 | Oui | `crates/pin2k-core/src/attract.rs:24`, `crates/pin2k-core/src/attract.rs:77`, `crates/pin2k-core/src/machine/attract_render.rs:259`, `crates/pin2k-rom-tool/src/gamecode_extractor.rs:541` |
 | 262 | `anim_klogo_zoom_back` | 41 | 60 | 640x240 | Oui | `crates/pin2k-core/src/attract.rs:12`, `crates/pin2k-core/src/attract.rs:73`, `crates/pin2k-desktop/src/compositor.rs:244`, `crates/pin2k-rom-tool/src/gamecode_extractor.rs:529` |
 | 263 | `anim_queen_ship_intro_movie` | 55 | 15 | 220x160 | Oui | `crates/pin2k-core/src/swe1_rules.rs:134` |
-| 264 | `anim_darth_maul_game_over` | 30 | 15 | 320x240 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:266`, `crates/pin2k-core/src/machine/system_screens.rs:212`, `crates/pin2k-core/src/machine/tests.rs:591` |
-| 265 | `anim_gungan_seaweed` | 40 | 60 | 139x90 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:106`, `crates/pin2k-core/src/machine/system_screens.rs:320`, `crates/pin2k-desktop/src/scenes_compositor.rs:53` |
+| 264 | `anim_darth_maul_game_over` | 30 | 15 | 320x240 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:266`, `crates/pin2k-core/src/machine/system_screens.rs:212`, `crates/pin2k-core/src/machine/tests.rs:619` |
+| 265 | `anim_gungan_seaweed` | 40 | 60 | 139x90 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:122`, `crates/pin2k-core/src/machine/system_screens.rs:320`, `crates/pin2k-desktop/src/scenes_compositor.rs:53` |
 | 266 | `anim_gungan_bubbles` | 3 | 60 | 17x9 | Oui | `crates/pin2k-desktop/src/scenes_compositor.rs:54` |
 | 267 | `anim_jedi_council_chic` | 1 | 60 | 93x60 | Non | - |
 | 268 | `anim_attract_hasbro_ad` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/attract.rs:21`, `crates/pin2k-core/src/attract.rs:76`, `crates/pin2k-core/src/machine/attract_render.rs:201`, `crates/pin2k-desktop/src/compositor.rs:245`, `crates/pin2k-rom-tool/src/gamecode_extractor.rs:538` |
-| 269 | `anim_gungan_sub_bubbles_2` | 29 | 60 | 571x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:107`, `crates/pin2k-core/src/machine/system_screens.rs:321` |
+| 269 | `anim_gungan_sub_bubbles_2` | 29 | 60 | 571x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:123`, `crates/pin2k-core/src/machine/system_screens.rs:321` |
 | 270 | `anim_gungan_sub_sando` | 85 | 60 | 397x156 | Non | - |
 | 271 | `anim_spinner_lightning` | 22 | 60 | 137x76 | Oui | `crates/pin2k-core/src/machine/vspinner.rs:137` |
-| 272 | `anim_podrace_2_explosion` | 26 | 60 | 350x200 | Oui | `crates/pin2k-desktop/src/compositor.rs:577` |
+| 272 | `anim_podrace_2_explosion` | 26 | 60 | 350x200 | Oui | `crates/pin2k-desktop/src/compositor.rs:576` |
 | 273 | `anim_podrace_3` | 11 | 60 | 60x21 | Non | - |
 | 274 | `anim_podrace_3_explosion` | 26 | 60 | 115x51 | Non | - |
 | 275 | `anim_podrace_4` | 11 | 60 | 65x22 | Non | - |
@@ -299,7 +299,7 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 281 | `anim_bonus_icon_jedi_spirit` | 47 | 60 | 140x70 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:116`, `crates/pin2k-core/src/machine/system_screens.rs:116` |
 | 282 | `anim_jedi_battle_win_icon_maul` | 1 | 60 | 370x175 | Non | - |
 | 283 | `anim_jedi_battle_win_icon_quigon` | 1 | 60 | 384x198 | Non | - |
-| 284 | `anim_obiwan_holo_queens_logo` | 72 | 60 | 216x98 | Oui | `crates/pin2k-core/src/swe1_rules.rs:174` |
+| 284 | `anim_obiwan_holo_queens_logo` | 72 | 60 | 216x98 | Oui | `crates/pin2k-core/src/swe1_rules.rs:195` |
 | 285 | `anim_bonus_character_anakin2` | 50 | 15 | 88x76 | Non | - |
 | 286 | `anim_bonus_character_maul2` | 67 | 15 | 88x76 | Non | - |
 | 287 | `anim_bonus_character_queen2` | 50 | 15 | 88x76 | Non | - |
@@ -307,12 +307,12 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 289 | `anim_shield` | 2 | 60 | 196x185 | Oui | `crates/pin2k-core/src/machine/swe1_playfield.rs:214` |
 | 290 | `anim_action_button` | 1 | 60 | 211x100 | Non | - |
 | 291 | `anim_federation_fighter_redeye` | 7 | 60 | 143x38 | Non | - |
-| 292 | `anim_destroyer_droid_background` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:91`, `crates/pin2k-desktop/src/scenes_compositor.rs:39` |
+| 292 | `anim_destroyer_droid_background` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:107`, `crates/pin2k-desktop/src/scenes_compositor.rs:39` |
 | 293 | `anim_destroyer_droid_s_roll` | 65 | 60 | 341x77 | Non | - |
 | 294 | `anim_destroyer_droid_m_roll` | 65 | 60 | 405x88 | Non | - |
-| 295 | `anim_destroyer_droid_l_roll` | 61 | 60 | 609x136 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:94`, `crates/pin2k-core/src/swe1_rules.rs:187`, `crates/pin2k-desktop/src/scenes_compositor.rs:38`, `crates/pin2k-desktop/src/scenes_compositor.rs:42` |
-| 296 | `anim_destroyer_droid_s_idle` | 20 | 60 | 115x74 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:92`, `crates/pin2k-desktop/src/scenes_compositor.rs:40` |
-| 297 | `anim_destroyer_droid_m_idle` | 19 | 60 | 136x85 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:93`, `crates/pin2k-desktop/src/scenes_compositor.rs:41` |
+| 295 | `anim_destroyer_droid_l_roll` | 61 | 60 | 609x136 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:110`, `crates/pin2k-core/src/swe1_rules.rs:208`, `crates/pin2k-desktop/src/scenes_compositor.rs:38`, `crates/pin2k-desktop/src/scenes_compositor.rs:42` |
+| 296 | `anim_destroyer_droid_s_idle` | 20 | 60 | 115x74 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:108`, `crates/pin2k-desktop/src/scenes_compositor.rs:40` |
+| 297 | `anim_destroyer_droid_m_idle` | 19 | 60 | 136x85 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:109`, `crates/pin2k-desktop/src/scenes_compositor.rs:41` |
 | 298 | `anim_destroyer_droid_l_idle` | 20 | 60 | 209x132 | Non | - |
 | 299 | `anim_destroyer_droid_s_explosion` | 33 | 60 | 284x119 | Non | - |
 | 300 | `anim_destroyer_droid_m_explosion` | 34 | 60 | 308x171 | Non | - |
@@ -325,25 +325,25 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 307 | `anim_jedi_battle_quigon_6_move` | 57 | 60 | 396x178 | Non | - |
 | 308 | `anim_jedi_battle_maul_5_move` | 43 | 60 | 396x178 | Non | - |
 | 309 | `anim_jedi_battle_maul_back_block_3` | 36 | 60 | 396x178 | Non | - |
-| 310 | `anim_match_movie` | 175 | 15 | 320x200 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:258`, `crates/pin2k-core/src/machine/system_screens.rs:168`, `crates/pin2k-core/src/machine/tests.rs:590` |
+| 310 | `anim_match_movie` | 175 | 15 | 320x200 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:258`, `crates/pin2k-core/src/machine/system_screens.rs:168`, `crates/pin2k-core/src/machine/tests.rs:618` |
 | 311 | `anim_hover_tank_intro_badge` | 1 | 60 | 407x53 | Oui | `crates/pin2k-core/src/swe1_rules.rs:151` |
 | 312 | `anim_hover_tank_intro_movie` | 69 | 15 | 220x160 | Oui | `crates/pin2k-core/src/swe1_rules.rs:131` |
-| 313 | `anim_hover_tank_background` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:131` |
+| 313 | `anim_hover_tank_background` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:147` |
 | 314 | `anim_hover_tank_l_enter` | 25 | 60 | 288x120 | Non | - |
-| 315 | `anim_hover_tank_l_float` | 10 | 60 | 126x56 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:132` |
+| 315 | `anim_hover_tank_l_float` | 10 | 60 | 126x56 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:148` |
 | 316 | `anim_hover_tank_l_explode` | 18 | 60 | 400x150 | Non | - |
 | 317 | `anim_hover_tank_l_shoot` | 10 | 60 | 288x117 | Non | - |
 | 318 | `anim_hover_tank_c_enter` | 25 | 60 | 246x162 | Non | - |
-| 319 | `anim_hover_tank_c_float` | 10 | 60 | 174x79 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:134` |
+| 319 | `anim_hover_tank_c_float` | 10 | 60 | 174x79 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:150` |
 | 320 | `anim_hover_tank_c_explode` | 29 | 60 | 400x150 | Non | - |
 | 321 | `anim_hover_tank_c_shoot` | 10 | 60 | 200x102 | Non | - |
 | 322 | `anim_hover_tank_r_enter` | 25 | 60 | 267x122 | Non | - |
-| 323 | `anim_hover_tank_r_float` | 10 | 60 | 134x57 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:133` |
+| 323 | `anim_hover_tank_r_float` | 10 | 60 | 134x57 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:149` |
 | 324 | `anim_hover_tank_r_explode` | 30 | 60 | 400x150 | Non | - |
 | 325 | `anim_hover_tank_r_shoot` | 10 | 60 | 399x116 | Non | - |
-| 326 | `anim_hover_tank_catapult_idle` | 26 | 60 | 175x87 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:135` |
+| 326 | `anim_hover_tank_catapult_idle` | 26 | 60 | 175x87 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:151` |
 | 327 | `anim_hover_tank_catapult_shoot` | 26 | 60 | 175x87 | Non | - |
-| 328 | `anim_hover_tank_boomer_ball` | 16 | 60 | 70x35 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:136` |
+| 328 | `anim_hover_tank_boomer_ball` | 16 | 60 | 70x35 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:152` |
 | 329 | `anim_jedi_spirit_sidious` | 40 | 60 | 246x110 | Non | - |
 | 330 | `anim_jedi_spirit_jedi` | 110 | 60 | 640x221 | Non | - |
 | 331 | `anim_jedi_spirit_electro1` | 17 | 60 | 191x147 | Non | - |
@@ -355,26 +355,26 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 337 | `anim_question_mark_intro_badge` | 1 | 60 | 446x97 | Oui | `crates/pin2k-core/src/swe1_rules.rs:159` |
 | 338 | `anim_question_mark_intro_movie` | 77 | 15 | 220x160 | Oui | `crates/pin2k-core/src/swe1_rules.rs:139` |
 | 339 | `anim_firework_2` | 60 | 60 | 284x240 | Non | - |
-| 340 | `anim_jackpot_icon_double` | 60 | 60 | 161x62 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:299` |
-| 341 | `anim_jackpot_icon_super` | 60 | 60 | 161x62 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:297` |
-| 342 | `anim_question_mark_green` | 60 | 60 | 122x62 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:249`, `crates/pin2k-core/src/swe1_rules.rs:199` |
-| 343 | `anim_question_mark_blue` | 60 | 60 | 122x62 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:248` |
-| 344 | `anim_watto_scene_background` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:197` |
+| 340 | `anim_jackpot_icon_double` | 60 | 60 | 161x62 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:315` |
+| 341 | `anim_jackpot_icon_super` | 60 | 60 | 161x62 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:313` |
+| 342 | `anim_question_mark_green` | 60 | 60 | 122x62 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:265`, `crates/pin2k-core/src/swe1_rules.rs:220` |
+| 343 | `anim_question_mark_blue` | 60 | 60 | 122x62 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:264` |
+| 344 | `anim_watto_scene_background` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:213` |
 | 345 | `anim_watto_scene_left_loop` | 30 | 60 | 203x147 | Non | - |
 | 346 | `anim_watto_scene_left_to_middle` | 10 | 60 | 384x160 | Non | - |
 | 347 | `anim_watto_scene_hand_to_chin_middle` | 15 | 60 | 169x164 | Non | - |
-| 348 | `anim_watto_scene_chin_loop_middle` | 31 | 60 | 173x162 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:198` |
+| 348 | `anim_watto_scene_chin_loop_middle` | 31 | 60 | 173x162 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:214` |
 | 349 | `anim_watto_scene_hand_down_middle` | 14 | 60 | 170x166 | Non | - |
 | 350 | `anim_watto_scene_middle_to_right` | 14 | 60 | 396x153 | Non | - |
 | 351 | `anim_watto_scene_right_loop` | 32 | 60 | 184x158 | Non | - |
-| 352 | `anim_watto_scene_cube` | 30 | 60 | 126x64 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:199` |
-| 353 | `anim_watto_scene_cube_flash` | 13 | 60 | 188x89 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:200` |
+| 352 | `anim_watto_scene_cube` | 30 | 60 | 126x64 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:215` |
+| 353 | `anim_watto_scene_cube_flash` | 13 | 60 | 188x89 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:216` |
 | 354 | `anim_watto_scene_cube_explode` | 30 | 60 | 256x118 | Non | - |
 | 355 | `anim_yoda_big` | 57 | 15 | 288x236 | Non | - |
-| 356 | `anim_obiwan_holo_destroyer` | 71 | 60 | 199x109 | Oui | `crates/pin2k-core/src/swe1_rules.rs:167` |
-| 357 | `anim_obiwan_holo_hovertank` | 71 | 60 | 325x95 | Oui | `crates/pin2k-core/src/swe1_rules.rs:171` |
-| 358 | `anim_obiwan_holo_question` | 72 | 60 | 200x100 | Oui | `crates/pin2k-core/src/swe1_rules.rs:179` |
-| 359 | `anim_obiwan_holo_watto` | 71 | 60 | 178x104 | Oui | `crates/pin2k-core/src/swe1_rules.rs:176` |
+| 356 | `anim_obiwan_holo_destroyer` | 71 | 60 | 199x109 | Oui | `crates/pin2k-core/src/swe1_rules.rs:188` |
+| 357 | `anim_obiwan_holo_hovertank` | 71 | 60 | 325x95 | Oui | `crates/pin2k-core/src/swe1_rules.rs:192` |
+| 358 | `anim_obiwan_holo_question` | 72 | 60 | 200x100 | Oui | `crates/pin2k-core/src/swe1_rules.rs:200` |
+| 359 | `anim_obiwan_holo_watto` | 71 | 60 | 178x104 | Oui | `crates/pin2k-core/src/swe1_rules.rs:197` |
 | 360 | `anim_jedi_battle_background_hangar_movie` | 29 | 15 | 320x240 | Non | - |
 | 361 | `anim_arrow_down` | 15 | 60 | 150x75 | Non | - |
 | 362 | `anim_arrow_hard_right` | 10 | 60 | 100x50 | Non | - |
@@ -382,7 +382,7 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 364 | `anim_shield_block` | 15 | 60 | 200x25 | Non | - |
 | 365 | `anim_shield_block_wipe` | 9 | 60 | 200x25 | Non | - |
 | 366 | `anim_jedi_battle_quigon_force` | 39 | 60 | 396x178 | Non | - |
-| 367 | `anim_super_skill_shot_icon` | 60 | 60 | 61x31 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:401`, `crates/pin2k-core/src/machine/scene_render.rs:404`, `crates/pin2k-core/src/machine/scene_render.rs:406`, `crates/pin2k-core/src/machine/script_exec.rs:165` |
+| 367 | `anim_super_skill_shot_icon` | 60 | 60 | 61x31 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:417`, `crates/pin2k-core/src/machine/scene_render.rs:420`, `crates/pin2k-core/src/machine/scene_render.rs:422`, `crates/pin2k-core/src/machine/script_exec.rs:165` |
 | 368 | `anim_super_mystery_icon` | 60 | 60 | 91x31 | Non | - |
 | 369 | `anim_bonus_icon` | 60 | 60 | 91x32 | Non | - |
 | 370 | `anim_green_icon_boom_big` | 9 | 60 | 354x110 | Non | - |
@@ -401,7 +401,7 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 383 | `anim_jedi_battle_background_dessert_maul` | 1 | 60 | 640x240 | Non | - |
 | 384 | `anim_flipinfo_d` | 1 | 60 | 180x142 | Non | - |
 | 385 | `anim_flipinfo_e` | 1 | 60 | 640x240 | Non | - |
-| 386 | `system_video_test_align` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:359`, `crates/pin2k-core/src/machine/system_screens.rs:518`, `crates/pin2k-core/src/machine/tests.rs:668` |
+| 386 | `system_video_test_align` | 1 | 60 | 640x240 | Oui | `crates/pin2k-core/src/machine/script_exec.rs:359`, `crates/pin2k-core/src/machine/system_screens.rs:518`, `crates/pin2k-core/src/machine/tests.rs:696` |
 | 387 | `menu_background_script_bally` | 1 | 60 | 640x100 | Non | - |
 | 388 | `menu_background_logo_bally` | 1 | 60 | 640x32 | Non | - |
 | 389 | `menu_background_logo_williams` | 1 | 60 | 640x32 | Non | - |
@@ -415,25 +415,25 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 
 | # | Police | Glyphes | Utilise | Emplacement(s) dans le code |
 |---:|---|---:|---|---|
-| 1 | `font_basic_19` | 94 | Oui | `crates/pin2k-desktop/src/compositor.rs:626` |
+| 1 | `font_basic_19` | 94 | Oui | `crates/pin2k-desktop/src/compositor.rs:625` |
 | 2 | `font_kahuna_shadow_9` | 95 | Oui | `crates/pin2k-core/src/machine/score_display.rs:4`, `crates/pin2k-core/src/machine/score_display.rs:82`, `crates/pin2k-core/src/machine/score_display.rs:95`, `crates/pin2k-core/src/machine/score_display.rs:119`, `crates/pin2k-core/src/machine/system_screens.rs:325` (+1) |
-| 3 | `font_shadow_7` | 95 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:202`, `crates/pin2k-desktop/src/compositor.rs:628` |
-| 4 | `font_shadow_7_narrow` | 95 | Oui | `crates/pin2k-core/src/machine/system_screens.rs:348`, `crates/pin2k-desktop/src/compositor.rs:629` |
-| 5 | `font_shadow_9` | 95 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:220`, `crates/pin2k-core/src/machine/system_screens.rs:137`, `crates/pin2k-core/src/machine/system_screens.rs:147`, `crates/pin2k-core/src/machine/system_screens.rs:247`, `crates/pin2k-desktop/src/compositor.rs:617` (+1) |
-| 6 | `font_shadow_9_narrow` | 95 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:111`, `crates/pin2k-core/src/machine/scene_render.rs:356`, `crates/pin2k-core/src/machine/scene_render.rs:422`, `crates/pin2k-desktop/src/compositor.rs:631` |
-| 7 | `font_shadow_11` | 95 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:64`, `crates/pin2k-core/src/machine/scene_render.rs:144`, `crates/pin2k-core/src/machine/scene_render.rs:154`, `crates/pin2k-core/src/machine/scene_render.rs:261`, `crates/pin2k-core/src/machine/scene_render.rs:408` (+4) |
+| 3 | `font_shadow_7` | 95 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:218`, `crates/pin2k-desktop/src/compositor.rs:627` |
+| 4 | `font_shadow_7_narrow` | 95 | Oui | `crates/pin2k-core/src/machine/system_screens.rs:348`, `crates/pin2k-desktop/src/compositor.rs:628` |
+| 5 | `font_shadow_9` | 95 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:236`, `crates/pin2k-core/src/machine/system_screens.rs:137`, `crates/pin2k-core/src/machine/system_screens.rs:147`, `crates/pin2k-core/src/machine/system_screens.rs:247`, `crates/pin2k-desktop/src/compositor.rs:616` (+1) |
+| 6 | `font_shadow_9_narrow` | 95 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:127`, `crates/pin2k-core/src/machine/scene_render.rs:372`, `crates/pin2k-core/src/machine/scene_render.rs:438`, `crates/pin2k-desktop/src/compositor.rs:630` |
+| 7 | `font_shadow_11` | 95 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:80`, `crates/pin2k-core/src/machine/scene_render.rs:160`, `crates/pin2k-core/src/machine/scene_render.rs:170`, `crates/pin2k-core/src/machine/scene_render.rs:277`, `crates/pin2k-core/src/machine/scene_render.rs:424` (+4) |
 | 8 | `font_shadow_11_narrow` | 95 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:141`, `crates/pin2k-core/src/machine/attract_render.rs:153`, `crates/pin2k-core/src/machine/attract_render.rs:225`, `crates/pin2k-core/src/machine/attract_render.rs:247`, `crates/pin2k-core/src/machine/attract_render.rs:266` (+13) |
-| 9 | `font_shadow_15` | 95 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:87`, `crates/pin2k-core/src/machine/attract_render.rs:97`, `crates/pin2k-core/src/machine/attract_render.rs:170`, `crates/pin2k-core/src/machine/attract_render.rs:205`, `crates/pin2k-core/src/machine/attract_render.rs:215` (+13) |
-| 10 | `font_shadow_15_narrow` | 95 | Oui | `crates/pin2k-core/src/machine/system_screens.rs:375`, `crates/pin2k-desktop/src/compositor.rs:612`, `crates/pin2k-desktop/src/compositor.rs:635` |
-| 11 | `font_shadow_22` | 95 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:286`, `crates/pin2k-desktop/src/compositor.rs:636` |
+| 9 | `font_shadow_15` | 95 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:87`, `crates/pin2k-core/src/machine/attract_render.rs:97`, `crates/pin2k-core/src/machine/attract_render.rs:170`, `crates/pin2k-core/src/machine/attract_render.rs:205`, `crates/pin2k-core/src/machine/attract_render.rs:215` (+12) |
+| 10 | `font_shadow_15_narrow` | 95 | Oui | `crates/pin2k-core/src/machine/system_screens.rs:375`, `crates/pin2k-desktop/src/compositor.rs:611`, `crates/pin2k-desktop/src/compositor.rs:634` |
+| 11 | `font_shadow_22` | 95 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:302`, `crates/pin2k-desktop/src/compositor.rs:635` |
 | 12 | `font_starwars_19` | 94 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:74`, `crates/pin2k-core/src/machine/attract_render.rs:123`, `crates/pin2k-core/src/machine/attract_render.rs:180`, `crates/pin2k-core/src/machine/attract_render.rs:237`, `crates/pin2k-core/src/machine/system_screens.rs:185` (+8) |
-| 13 | `font_system_7` | 95 | Oui | `crates/pin2k-core/src/machine/hud_display.rs:4`, `crates/pin2k-core/src/machine/hud_display.rs:50`, `crates/pin2k-core/src/machine/hud_display.rs:60`, `crates/pin2k-core/src/machine/scene_render.rs:379`, `crates/pin2k-core/src/machine/scene_render.rs:389` (+17) |
+| 13 | `font_system_7` | 95 | Oui | `crates/pin2k-core/src/machine/hud_display.rs:4`, `crates/pin2k-core/src/machine/hud_display.rs:50`, `crates/pin2k-core/src/machine/hud_display.rs:60`, `crates/pin2k-core/src/machine/scene_render.rs:395`, `crates/pin2k-core/src/machine/scene_render.rs:405` (+17) |
 | 14 | `font_system_9` | 95 | Oui | `crates/pin2k-core/src/machine/attract_render.rs:6`, `crates/pin2k-core/src/machine/attract_render.rs:399`, `crates/pin2k-core/src/machine/attract_render.rs:415`, `crates/pin2k-core/src/machine/attract_render.rs:425`, `crates/pin2k-core/src/machine/attract_render.rs:441` (+8) |
-| 15 | `font_system_10` | 95 | Oui | `crates/pin2k-desktop/src/compositor.rs:640` |
-| 16 | `font_system_11` | 105 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:186`, `crates/pin2k-core/src/machine/system_screens.rs:68`, `crates/pin2k-core/src/machine/system_screens.rs:283`, `crates/pin2k-core/src/machine/system_screens.rs:647`, `crates/pin2k-core/src/machine/system_screens.rs:681` (+2) |
-| 17 | `font_system_15` | 95 | Oui | `crates/pin2k-core/src/machine/system_screens.rs:58`, `crates/pin2k-desktop/src/compositor.rs:642` |
-| 18 | `font_system_20` | 95 | Oui | `crates/pin2k-desktop/src/compositor.rs:643` |
-| 19 | `font_system_fxd6x7` | 95 | Oui | `crates/pin2k-desktop/src/compositor.rs:644` |
+| 15 | `font_system_10` | 95 | Oui | `crates/pin2k-desktop/src/compositor.rs:639` |
+| 16 | `font_system_11` | 105 | Oui | `crates/pin2k-core/src/machine/scene_render.rs:202`, `crates/pin2k-core/src/machine/system_screens.rs:68`, `crates/pin2k-core/src/machine/system_screens.rs:283`, `crates/pin2k-core/src/machine/system_screens.rs:647`, `crates/pin2k-core/src/machine/system_screens.rs:681` (+2) |
+| 17 | `font_system_15` | 95 | Oui | `crates/pin2k-core/src/machine/system_screens.rs:58`, `crates/pin2k-desktop/src/compositor.rs:641` |
+| 18 | `font_system_20` | 95 | Oui | `crates/pin2k-desktop/src/compositor.rs:642` |
+| 19 | `font_system_fxd6x7` | 95 | Oui | `crates/pin2k-desktop/src/compositor.rs:643` |
 
 ---
 
@@ -470,8 +470,8 @@ Ce document recense **100 % des assets extraits** de *Star Wars Episode I* (`#50
 | 27 | `S001A` | `0x001A` | OneShot | `S001A.ogg` | Oui | `crates/pin2k-core/src/swe1_audio.rs:27`, `crates/pin2k-core/src/swe1_audio.rs:636` |
 | 28 | `S001C` | `0x001C` | OneShot | `S001C.ogg` | Oui | `crates/pin2k-core/src/swe1_audio.rs:49`, `crates/pin2k-core/src/swe1_audio.rs:616` |
 | 29 | `S001E-LP` | `0x001E` | SingleLoop | `S001E-LP.ogg` | Oui | `crates/pin2k-core/src/swe1_audio.rs:368`, `crates/pin2k-core/src/swe1_audio.rs:537` |
-| 30 | `S001F-LP1` | `0x001F` | LoopIntro | `S001F-LP1.ogg` | Oui | `crates/pin2k-core/src/machine/attract_render.rs:18`, `crates/pin2k-core/src/machine/scene_render.rs:257`, `crates/pin2k-core/src/machine/system_screens.rs:266`, `crates/pin2k-core/src/machine/system_screens.rs:523`, `crates/pin2k-core/src/machine/system_screens.rs:569` (+5) |
-| 31 | `S001F-LP2` | `0x001F` | LoopBody | `S001F-LP2.ogg` | Oui | `crates/pin2k-core/src/machine/attract_render.rs:18`, `crates/pin2k-core/src/machine/scene_render.rs:257`, `crates/pin2k-core/src/machine/system_screens.rs:266`, `crates/pin2k-core/src/machine/system_screens.rs:523`, `crates/pin2k-core/src/machine/system_screens.rs:569` (+5) |
+| 30 | `S001F-LP1` | `0x001F` | LoopIntro | `S001F-LP1.ogg` | Oui | `crates/pin2k-core/src/machine/attract_render.rs:18`, `crates/pin2k-core/src/machine/scene_render.rs:273`, `crates/pin2k-core/src/machine/system_screens.rs:266`, `crates/pin2k-core/src/machine/system_screens.rs:523`, `crates/pin2k-core/src/machine/system_screens.rs:569` (+5) |
+| 31 | `S001F-LP2` | `0x001F` | LoopBody | `S001F-LP2.ogg` | Oui | `crates/pin2k-core/src/machine/attract_render.rs:18`, `crates/pin2k-core/src/machine/scene_render.rs:273`, `crates/pin2k-core/src/machine/system_screens.rs:266`, `crates/pin2k-core/src/machine/system_screens.rs:523`, `crates/pin2k-core/src/machine/system_screens.rs:569` (+5) |
 | 32 | `S0021-LP` | `0x0021` | SingleLoop | `S0021-LP.ogg` | Oui | `crates/pin2k-core/src/swe1_audio.rs:318`, `crates/pin2k-core/src/swe1_audio.rs:920`, `crates/pin2k-rom-tool/src/gamecode_extractor.rs:634` |
 | 33 | `S0022-LP` | `0x0022` | SingleLoop | `S0022-LP.ogg` | Oui | `crates/pin2k-core/src/admin.rs:143`, `crates/pin2k-core/src/swe1_audio.rs:137`, `crates/pin2k-core/src/swe1_audio.rs:160`, `crates/pin2k-core/src/swe1_audio.rs:607`, `crates/pin2k-core/src/swe1_tables.rs:171` |
 | 34 | `S0023-LP` | `0x0023` | SingleLoop | `S0023-LP.ogg` | Oui | `crates/pin2k-core/src/swe1_audio.rs:298`, `crates/pin2k-core/src/swe1_audio.rs:901` |

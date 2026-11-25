@@ -77,11 +77,12 @@ Implémenté dans `crates/pin2k-core/src/attract.rs` et `crates/pin2k-core/src/m
 
 Implémenté dans `crates/pin2k-core/src/swe1_rules.rs` et `crates/pin2k-core/src/machine/scene_render.rs`.
 
-- **Intro de scène (`Deff*SceneIntro`, tant que `intro_remaining_ms > 0`)** :
-  - Film 15 fps (`anim_*_intro_{movie,battle}`) en `(76, 40, z=200)` derrière le cadre,
-  - Badge de scène (`intro_badge_anim()`) en `(290, 74, z=201)`,
-  - Cadre double ovale `anim_jedi_scene_intro_frame` en `(59, 22, z=202)` masquant les bords rectangulaires,
-  - Titre (`z=203, font_shadow_15_data`) et consigne (`z=203, font_shadow_11_data`).
+- **Intro de scène (`Deff*SceneIntro`, tant que `intro_remaining_ms > 0`) — isolée du HUD gameplay** :
+  - Fond noir opaque plein écran (`RectDrawCmd`, `640×240`, `z=0`) empêchant tout mélange avec un autre mode ou le fond étoilé,
+  - Film 15 fps (`anim_*_intro_{movie,battle}`, `220×160` étiré `scale_x = 2` → `440×160`) centré dans l'ouverture ovale en `(100, 31, z=200)`, démarrant à la frame `0`,
+  - Cadre ovale métallique `anim_jedi_scene_intro_frame` (`522×195`) centré en `(59, 14, z=202)`,
+  - Badge de scène (`intro_badge_anim()`) centré horizontalement (`320 - intro_badge_width()/2`, `y=136`, `z=203`) sur le rebord inférieur (conforme à `DeffDestroyerDroidSceneIntro::Run()`),
+  - Consigne inférieure (`z=204`, `font_shadow_11_data`, `(320, 224)`). Dès `intro_remaining_ms == 0`, transition nette vers la **scène active** + HUD (`DeffScoreDisplay`, `DeffLaserStatusBackground`, `VirtualSpinners`).
 
 | Index | Debug Mode | Titre | Badge Intro (`z=201`) | Arrière-plan actif (`z=1..8`) |
 |---:|---|---|---|---|
