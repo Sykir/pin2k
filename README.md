@@ -3,6 +3,8 @@
 Clean-room native 64-bit Rust rewrite of the **Williams Pinball 2000** platform (*Star Wars Episode I* [`#50069`, 1999] and *Revenge From Mars* [`#50070`, 1999]), designed to run on **Linux and Windows** with zero external C library dependencies.
 
 > **Legal / Clean-Room Boundary:** This repository contains no proprietary ROMs, images, fonts, animations, or audio tracks. All assets and gamecode scripts are extracted locally by the user from their own legitimate dumps (`swe1`, `rfm`, official/community `.exe`/`.zip` update packages, and `{game}_sound.bin`).
+>
+> **AI Transparency Notice (EU AI Act):** In accordance with the transparency obligations of the European Union Artificial Intelligence Act (Regulation (EU) 2024/1689), please note that the majority of the code, reverse-engineering ports, scripts, and documentation in this repository were generated and/or assisted using generative AI tools under human supervision and verification.
 
 ---
 
