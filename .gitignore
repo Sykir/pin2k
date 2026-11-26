@@ -15,6 +15,7 @@
 *.zip
 *.ogg
 *.png
+!docs/screenshots/*.png
 *.gif
 *.mp4
 *.trace

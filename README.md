@@ -30,6 +30,20 @@ Clean-room native 64-bit Rust rewrite of the **Williams Pinball 2000** platform 
 
 ---
 
+## Screenshots (`640×480` Native Compositor Output)
+
+| Attract Mode (`attract:0`) | Nominal Gameplay HUD (`ingame`) |
+|---|---|
+| ![Attract Mode Kahuna Logo](docs/screenshots/attract_kahuna.png) | ![Nominal Gameplay HUD](docs/screenshots/ingame_nominal.png) |
+| **Virtual Spinner (`spinner_left`)** | **Scene Intro Bezel (`scene:6` Intro)** |
+| ![Left Virtual Spinner](docs/screenshots/spinner_left.png) | ![Scene Intro Bezel](docs/screenshots/scene_intro.png) |
+| **Boonta Eve Podrace (`scene:6`)** | **Jar Jar Juggle (`scene:9`)** |
+| ![Boonta Eve Podrace](docs/screenshots/scene_podrace.png) | ![Jar Jar Juggle](docs/screenshots/scene_jarjar_juggle.png) |
+| **End-of-Ball Bonus (`bonus`)** | **Diagnostic Color Bar (`diag:colorbar`)** |
+| ![End-of-Ball Bonus](docs/screenshots/bonus.png) | ![Diagnostic Color Bar](docs/screenshots/diag_colorbar.png) |
+
+---
+
 ## Workspace Architecture
 
 | Crate | Role | Documentation |
