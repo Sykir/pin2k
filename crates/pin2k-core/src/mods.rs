@@ -64,6 +64,12 @@ pub struct ModManifest {
     /// Maps animation hint (e.g. `"anim_battle_droid_intro_battle"`) to a custom folder inside `<mod>/gfx/`.
     #[serde(default)]
     pub anim_overrides: HashMap<String, String>,
+    /// Relative path to a custom Rhai script inside the mod directory (e.g. `"main.rhai"`).
+    #[serde(default)]
+    pub script: Option<String>,
+    /// Loaded Rhai source code (populated by `load_from_dir` or set directly in tests).
+    #[serde(default, skip_serializing)]
+    pub script_source: Option<String>,
     /// Custom or override switch rules evaluated on switch closure.
     #[serde(default)]
     pub switch_rules: Vec<HomebrewSwitchRule>,
@@ -73,7 +79,12 @@ impl ModManifest {
     pub fn load_from_dir(dir: &Path) -> Result<Self, std::io::Error> {
         let p = dir.join("mod.json");
         let raw = fs::read_to_string(p)?;
-        serde_json::from_str(&raw)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        let mut manifest: Self = serde_json::from_str(&raw)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        if let Some(ref script_rel) = manifest.script {
+            let script_path = dir.join(script_rel);
+            manifest.script_source = Some(fs::read_to_string(script_path)?);
+        }
+        Ok(manifest)
     }
 }

@@ -1154,3 +1154,40 @@
         machine.add_score(100_000);
         assert_eq!(machine.score, tilt_score);
     }
+
+    #[test]
+    fn rhai_custom_code_mod_drives_modes_timers_and_switch_overrides() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        let mod_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../mods/example_droid_hurry_up");
+        let manifest = ModManifest::load_from_dir(&mod_dir)
+            .expect("example_droid_hurry_up mod should load from disk");
+        assert!(manifest.script_source.is_some());
+
+        machine.apply_mod(&manifest);
+        assert!(machine.mod_script.is_some());
+
+        assert!(machine.debug_launch_mode("ingame"));
+
+        // Sneaky Lane starts "droid_hurry_up" mode AND still awards base Skill Shot (return false)
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SNEAKY_LANE);
+        assert!(machine.score >= 1_000_000);
+        assert!(machine.mod_lit_lamps.contains(&79));
+
+        // Tick 1 second -> hurry_up_value decays by 10_000 (from 500_000 to ~490_000)
+        for _ in 0..60 {
+            machine.tick(16);
+        }
+
+        // Captive Ball during mode collects Hurry Up and overrides base Captive Ball (return true)
+        let pre_cb = machine.score;
+        let pre_hits = machine.players[0].captive_ball_hits;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::CAPTIVE_BALL);
+        assert_eq!(machine.players[0].captive_ball_hits, pre_hits); // base handler was suppressed!
+        assert!(machine.score >= pre_cb + 480_000);
+        assert!(!machine.mod_lit_lamps.contains(&79));
+    }

@@ -183,6 +183,7 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub score_multiplier: u64,
     pub mod_switch_rules: Vec<HomebrewSwitchRule>,
     pub mod_lit_lamps: Vec<u8>,
+    pub mod_script: Option<crate::mod_script::ModScriptRuntime>,
     pub script_runtime: Option<ScriptRuntime>,
     pub strict_script_mode: bool,
 
@@ -275,6 +276,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             score_multiplier: 1,
             mod_switch_rules: Vec::new(),
             mod_lit_lamps: Vec::new(),
+            mod_script: None,
             script_runtime: None,
             strict_script_mode: false,
             debouncer,
@@ -476,8 +478,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 }
             }
             MachineState::InGame => {
-                // Evaluate mod / homebrew switch rules first
+                // Evaluate mod / homebrew switch rules & custom Rhai mod script first
                 let matched_mod = self.apply_mod_switch_rules(id);
+                if self.eval_mod_script_switch(id) {
+                    return;
+                }
                 if self.game_title == GameTitle::Homebrew {
                     let matched_script =
                         self.eval_script_trigger(ScriptTrigger::OnSwitch { sw_id: id });
@@ -611,6 +616,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             rt.active_player = self.current_player.min(3);
         }
         self.eval_script_trigger(ScriptTrigger::OnBallStart);
+        self.eval_mod_script_hook("on_ball_start", ());
 
         // Eject 1 ball to shooter lane (spinners remain inactive until a ramp shot!)
         self.pending_eject_balls = 1;
@@ -709,6 +715,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             p.bonus_multiplier = 1;
         }
         self.eval_script_trigger(ScriptTrigger::OnBallEnd);
+        self.eval_mod_script_hook("on_ball_end", ());
         self.state = MachineState::InGame;
 
         // Extra ball check
@@ -923,6 +930,20 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.eval_script_trigger(ScriptTrigger::OnModeExit { mode });
             }
             self.eval_script_trigger(ScriptTrigger::OnTick);
+        }
+        if self.state == MachineState::InGame && self.mod_script.is_some() {
+            let (expired_timers, expired_modes) = self
+                .mod_script
+                .as_mut()
+                .unwrap()
+                .tick_timers_and_modes(dt_ms);
+            for timer in expired_timers {
+                self.eval_mod_script_hook("on_timer", (timer,));
+            }
+            for mode in expired_modes {
+                self.eval_mod_script_hook("on_mode_exit", (mode,));
+            }
+            self.eval_mod_script_hook("on_tick", (dt_ms as i64,));
         }
         if self.game_title == GameTitle::Swe1 && self.state == MachineState::InGame {
             if let Some(p) = self.players.get_mut(self.current_player) {

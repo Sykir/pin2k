@@ -1,0 +1,9 @@
+{
+  "id": "example_droid_hurry_up",
+  "name": "Droid Hurry Up (Rhai Mod Example)",
+  "author": "pin2k",
+  "version": "1.0.0",
+  "description": "Adds a custom Droid Hurry Up mode on Sneaky Lane -> Captive Ball using a sandboxed Rhai script.",
+  "base_game": "swe1",
+  "script": "main.rhai"
+}

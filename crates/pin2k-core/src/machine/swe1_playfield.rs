@@ -120,6 +120,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.state = MachineState::Tilt;
                     self.emit_ard("ard_tilt_random_speech");
                     self.emit_event(GameEvent::Tilted);
+                    self.eval_mod_script_hook("on_tilt", ());
                     self.set_banner("TILT! BONUS LOST", 4_000);
                 } else {
                     self.emit_ard("ard_tilt_warning_speech");

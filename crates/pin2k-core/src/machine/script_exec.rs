@@ -28,6 +28,86 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         for rule in &manifest.switch_rules {
             self.mod_switch_rules.push(rule.clone());
         }
+        if let Some(ref src) = manifest.script_source {
+            match crate::mod_script::ModScriptRuntime::compile(src) {
+                Ok(rt) => {
+                    self.mod_script = Some(rt);
+                    self.eval_mod_script_hook("on_init", ());
+                }
+                Err(err) => {
+                    eprintln!("[pin2k-mod] Rhai script compile error: {err}");
+                    self.set_banner(format!("MOD SCRIPT ERROR: {err}"), 5_000);
+                }
+            }
+        }
+    }
+
+    pub(super) fn mod_snapshot(&self) -> crate::mod_script::ModSnapshot {
+        crate::mod_script::ModSnapshot {
+            current_player: self.current_player,
+            current_ball: self.current_ball,
+            score: self.score,
+            balls_in_play: self.balls_in_play,
+            playfield_valid: self.playfield_valid,
+            in_scene: self.active_scene.is_some(),
+            in_multiball: !matches!(self.multiball, ActiveMultiball::None),
+        }
+    }
+
+    fn execute_mod_commands(&mut self, cmds: Vec<crate::mod_script::ModCommand>) {
+        use crate::mod_script::ModCommand;
+        for cmd in cmds {
+            match cmd {
+                ModCommand::AddScore(pts) => self.add_score(pts),
+                ModCommand::FireCoil { id, pulse_ms } => self.emit_coil(id, pulse_ms),
+                ModCommand::SetHold { id, on } => self.hw.set_drive_hold(id, on),
+                ModCommand::SetLamp { id, on } => {
+                    if on {
+                        if !self.mod_lit_lamps.contains(&id) {
+                            self.mod_lit_lamps.push(id);
+                        }
+                    } else {
+                        self.mod_lit_lamps.retain(|&l| l != id);
+                    }
+                }
+                ModCommand::PlaySound(sid) => self.emit_sound(SoundId(sid), false),
+                ModCommand::PlayArd(pool) => {
+                    let _ = self.emit_ard(&pool);
+                }
+                ModCommand::SetBanner { text, ms } => self.set_banner(text, ms),
+                ModCommand::ShowAnim(anim) => self.active_anim_hint = anim,
+                ModCommand::EjectBall => {
+                    self.pending_eject_balls = self.pending_eject_balls.saturating_add(1);
+                }
+            }
+        }
+    }
+
+    pub(super) fn eval_mod_script_hook(&mut self, fn_name: &str, args: impl rhai::FuncArgs) {
+        if self.mod_script.is_none() {
+            return;
+        }
+        let snap = self.mod_snapshot();
+        let (_, cmds) = self
+            .mod_script
+            .as_mut()
+            .unwrap()
+            .call_hook(fn_name, args, snap);
+        self.execute_mod_commands(cmds);
+    }
+
+    pub(super) fn eval_mod_script_switch(&mut self, sw_id: u8) -> bool {
+        if self.mod_script.is_none() {
+            return false;
+        }
+        let snap = self.mod_snapshot();
+        let (override_default, cmds) = self
+            .mod_script
+            .as_mut()
+            .unwrap()
+            .call_hook("on_switch", (sw_id as i64,), snap);
+        self.execute_mod_commands(cmds);
+        override_default
     }
 
     /// Loads an extracted `GameScript` (`game_script.json`) and activates script-driven execution.
