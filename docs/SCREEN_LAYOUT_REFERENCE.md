@@ -15,7 +15,7 @@ Williams Pinball 2000 hardware (MediaGX + PRISM) composites each logical frame a
   - `RectDrawCmd`: `{ x, y, w, h, z, color_rgb555, alpha }`.
 - **Rendering (`crates/pin2k-desktop/src/compositor.rs`, `raster.rs`)**:
   - All sprites, rectangles, and bitmap texts are merged and sorted by ascending `z` priority on each `present()`.
-  - All 14 SWE1 scenes (including *Boonta Eve Podrace* via `fx/scene_extras.rs::render_podrace_layers`) render uniformly through `VideoBackend`.
+  - All 14 SWE1 scenes (including *Boonta Eve Podrace* via `scenes/podrace_render.rs`) render uniformly through `VideoBackend`.
 
 ---
 
@@ -105,7 +105,7 @@ Implemented in `crates/pin2k-core/src/swe1_rules.rs`, `crates/pin2k-core/src/mac
 | 3 | `scene:3` | Gungan Energy Battle | `anim_sub_escape_intro_badge` | `anim_gungan_seaweed` + bubbles + sub + opee + sando + `G U N G A N` |
 | 4 | `scene:4` | Theed Hangar Escape | `anim_hangar_escape_intro_badge` | `anim_federation_fighter_cockpit` + `hangar_droid_run` + torpedo + explosions + exit movie |
 | 5 | `scene:5` | AAT Hover Tank | `anim_hover_tank_intro_badge` | `anim_hover_tank_background` + `l/r/c` enter/float/shoot/explode + catapult + boomer ball |
-| 6 | `scene:6` | Boonta Eve Podrace | `anim_podrace_intro_badge` | Unified `render_podrace_layers` (`starting`, sky, horizon, ground, rivals, Anakin) + race icons + `LAP`/`SPEED` HUD |
+| 6 | `scene:6` | Boonta Eve Podrace | `anim_podrace_intro_badge` | `DeffPodRaceSceneBackground`: `StartingGate → Closeup → Racing → ZoomOut`, sky/horizon/ground, Anakin & opponent pods, 3-lane icons, `CHECKPOINT` badge & `SPEED` HUD |
 | 7 | `scene:7` | Sith Probe Droids | `anim_probe_droid_intro_badge` | `anim_sith_probe_background` (scroll) + hover/fly + Queen shooting + blasts/explosions |
 | 8 | `scene:8` | Queen Amidala Wardrobe | `anim_queen_ship_intro_badge` | `anim_fashion_base` + throne + queen + wheel + sparkles + outfit icons + flash |
 | 9 | `scene:9` | Jar Jar Juggle | `anim_jarjar_juggle_intro_badge` | `anim_jarjar_juggle_backdrop` `(0,50)` + `Juggle1/2 → Fall1/2 → JumpUp → Switch → Stare` + 5 lane rewards (`anim_jarjar_junk1..6`/`_eb`) + ballistic fly-off & `showoff_award_text` |
