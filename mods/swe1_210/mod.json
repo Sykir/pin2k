@@ -1,0 +1,10 @@
+{
+  "id": "swe1_210",
+  "name": "Star Wars Episode I — Edition 2.10",
+  "author": "pin2k",
+  "version": "2.10.0",
+  "description": "Implements SWE1 v2.10 ruleset additions on top of v1.4: Quick Multiball, Droid Hurry Up, Double Scoring (2X), Midnight Madness, C-3PO Build Champion, and Darth Maul Sudden Death.",
+  "base_game": "swe1",
+  "attract_banner": "STAR WARS EPISODE I (v2.10 MOD) - PRESS START",
+  "script": "main.rhai"
+}

@@ -1209,3 +1209,50 @@
         assert!(machine.score >= pre_cb + 480_000);
         assert!(!machine.mod_lit_lamps.contains(&79));
     }
+
+    #[test]
+    fn swe1_210_mod_implements_quick_mb_droid_hurry_up_and_double_scoring() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        let mod_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../mods/swe1_210");
+        let manifest = ModManifest::load_from_dir(&mod_dir)
+            .expect("swe1_210 mod should load from disk");
+        machine.apply_mod(&manifest);
+        assert!(machine.debug_launch_mode("ingame"));
+
+        // 1. Quick Multiball: 4 Captive Ball hits -> 15,010 each, then 500,000 + 2nd ball ejected!
+        let pre_qmb = machine.score;
+        for _ in 0..3 {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::CAPTIVE_BALL);
+        }
+        assert_eq!(machine.score, pre_qmb + 3 * 15_010);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::CAPTIVE_BALL);
+        assert_eq!(machine.score, pre_qmb + 4 * 15_010 + 500_000);
+        // Tick to eject the 2nd ball -> balls_in_play == 2 -> next Captive Ball scores 1,000,000 Jackpot!
+        machine.eject_cooldown_ms = 0;
+        machine.tick(16);
+        assert!(machine.balls_in_play >= 2);
+        let pre_jp = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::CAPTIVE_BALL);
+        assert_eq!(machine.score, pre_jp + 1_000_000);
+
+        // 2. Droid Hurry Up: 5 Sneaky Lane hits -> raises Left Drop Target & starts 1,000,000 hurry-up
+        machine.left_drop_down = true;
+        for _ in 0..5 {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SNEAKY_LANE);
+        }
+        assert!(!machine.left_drop_down);
+        let pre_dhu = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_DROP_TARGET);
+        assert!(machine.score >= pre_dhu + 900_000);
+
+        // 3. Double Scoring (X2): 4th saucer visit activates 2X multiplier for 25s
+        for _ in 0..4 {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_SAUCER);
+        }
+        assert_eq!(machine.score_multiplier, 2);
+    }

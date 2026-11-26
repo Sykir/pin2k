@@ -79,6 +79,24 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 ModCommand::EjectBall => {
                     self.pending_eject_balls = self.pending_eject_balls.saturating_add(1);
                 }
+                ModCommand::SetScoreMultiplier(mult) => {
+                    self.score_multiplier = mult.max(1);
+                }
+                ModCommand::SetDropTarget { right, up } => {
+                    if right {
+                        self.right_drop_down = !up;
+                        self.emit_coil(
+                            if up { drive::RIGHT_DROP_UP } else { drive::RIGHT_DROP_DOWN },
+                            64,
+                        );
+                    } else {
+                        self.left_drop_down = !up;
+                        self.emit_coil(
+                            if up { drive::LEFT_DROP_UP } else { drive::LEFT_DROP_DOWN },
+                            64,
+                        );
+                    }
+                }
             }
         }
     }

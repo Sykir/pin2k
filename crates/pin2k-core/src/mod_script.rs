@@ -28,6 +28,8 @@ pub enum ModCommand {
     SetBanner { text: String, ms: u32 },
     ShowAnim(String),
     EjectBall,
+    SetScoreMultiplier(u64),
+    SetDropTarget { right: bool, up: bool },
 }
 
 /// Read-only machine state snapshot visible to Rhai mod scripts.
@@ -72,8 +74,10 @@ impl ModScriptRuntime {
     pub fn compile(source: &str) -> Result<Self, String> {
         let state = Arc::new(Mutex::new(ModScriptState::default()));
         let mut engine = Engine::new();
-        // Prevent infinite loops in mod scripts from stalling the 60 Hz machine loop.
+        // Prevent infinite loops in mod scripts from stalling the 60 Hz machine loop,
+        // while allowing realistic mod functions with multiple conditions.
         engine.set_max_operations(50_000);
+        engine.set_max_expr_depths(128, 128);
 
         register_mod_api(&mut engine, &state);
 
@@ -213,6 +217,22 @@ fn register_mod_api(engine: &mut Engine, state: &Arc<Mutex<ModScriptState>>) {
     let s = Arc::clone(state);
     engine.register_fn("eject_ball", move || {
         s.lock().unwrap().pending_cmds.push(ModCommand::EjectBall);
+    });
+
+    let s = Arc::clone(state);
+    engine.register_fn("set_score_multiplier", move |mult: i64| {
+        s.lock()
+            .unwrap()
+            .pending_cmds
+            .push(ModCommand::SetScoreMultiplier(mult.max(1) as u64));
+    });
+
+    let s = Arc::clone(state);
+    engine.register_fn("set_drop_target", move |right: bool, up: bool| {
+        s.lock()
+            .unwrap()
+            .pending_cmds
+            .push(ModCommand::SetDropTarget { right, up });
     });
 
     let s = Arc::clone(state);
