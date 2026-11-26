@@ -36,6 +36,37 @@ const fn default_pulse_ms() -> u8 {
     48
 }
 
+/// One sprite layer inside a composite mod animation (`anim_layers` in `mod.json`).
+///
+/// Allows a mod to replace a single ROM animation hint with multiple independent
+/// animations placed side-by-side (e.g. two characters fighting).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModAnimLayer {
+    /// Animation name or relative path (e.g. `"custom_assets/jarjar_kenobi_combat"`).
+    pub anim: String,
+    /// Optional absolute X coordinate on the 640x240 logical screen (overrides base sprite `x`).
+    #[serde(default)]
+    pub x: Option<i32>,
+    /// Optional absolute Y coordinate on the 640x240 logical screen (overrides base sprite `y`).
+    #[serde(default)]
+    pub y: Option<i32>,
+    /// Relative X offset added to `x` (or the base sprite's `x`).
+    #[serde(default)]
+    pub dx: i32,
+    /// Relative Y offset added to `y` (or the base sprite's `y`).
+    #[serde(default)]
+    pub dy: i32,
+    /// Horizontal flip toggle (XORed with the base sprite's `flip_x`).
+    #[serde(default)]
+    pub flip_x: bool,
+    /// Optional horizontal scale override (defaults to inheriting the base sprite's `scale_x`).
+    #[serde(default)]
+    pub scale_x: Option<u32>,
+    /// Optional vertical scale override (defaults to inheriting the base sprite's `scale_y`).
+    #[serde(default)]
+    pub scale_y: Option<u32>,
+}
+
 /// Manifest (`mod.json`) describing a Pinball 2000 Mod or Homebrew game package.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ModManifest {
@@ -64,6 +95,9 @@ pub struct ModManifest {
     /// Maps animation hint (e.g. `"anim_battle_droid_intro_battle"`) to a custom folder inside `<mod>/gfx/`.
     #[serde(default)]
     pub anim_overrides: HashMap<String, String>,
+    /// Maps animation hint to multiple layered/positioned animations (e.g. two combatants side-by-side).
+    #[serde(default)]
+    pub anim_layers: HashMap<String, Vec<ModAnimLayer>>,
     /// Relative path to a custom Rhai script inside the mod directory (e.g. `"main.rhai"`).
     #[serde(default)]
     pub script: Option<String>,

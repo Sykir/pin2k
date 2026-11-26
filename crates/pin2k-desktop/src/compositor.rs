@@ -82,6 +82,7 @@ pub struct SoftwareCompositor {
     pub frames_presented: u64,
     anims: Vec<LoadedAnim>,
     anim_lookup: HashMap<String, usize>,
+    anim_layers: HashMap<String, Vec<pin2k_core::mods::ModAnimLayer>>,
     cache_bytes: usize,
     cache_lru: VecDeque<(usize, usize)>,
     fonts: HashMap<String, LoadedFont>,
@@ -111,6 +112,7 @@ impl SoftwareCompositor {
             frames_presented: 0,
             anims: Vec::new(),
             anim_lookup: HashMap::new(),
+            anim_layers: HashMap::new(),
             cache_bytes: 0,
             cache_lru: VecDeque::new(),
             fonts: HashMap::new(),
@@ -321,6 +323,18 @@ impl SoftwareCompositor {
             self.active_anim_idx = Some(0);
         }
         Ok(loaded)
+    }
+
+    /// Registers composite multi-layer animation overrides from `mod.json` (`anim_layers`).
+    pub fn set_anim_layers(
+        &mut self,
+        layers: &HashMap<String, Vec<pin2k_core::mods::ModAnimLayer>>,
+    ) {
+        for (hint, list) in layers {
+            if !list.is_empty() {
+                self.anim_layers.insert(hint.clone(), list.clone());
+            }
+        }
     }
 
     /// Advances the compositor's animation clock by `dt_ms` (e.g. 16 ms per 60 Hz frame).
@@ -711,6 +725,53 @@ impl SoftwareCompositor {
         flip_x: bool,
         monochrome_rgb555: Option<u16>,
     ) -> bool {
+        if let Some(layers) = self.anim_layers.get(name).cloned() {
+            let mut any_drawn = false;
+            for layer in layers {
+                let lx = layer.x.unwrap_or(ox) + layer.dx;
+                let ly = layer.y.unwrap_or(oy) + layer.dy;
+                let lsx = layer.scale_x.unwrap_or(scale_x).max(1);
+                let lsy = layer.scale_y.unwrap_or(scale_y).max(1);
+                let lflip = flip_x ^ layer.flip_x;
+                if self.blit_single_named_ex(
+                    &layer.anim,
+                    frame_idx,
+                    lx,
+                    ly,
+                    lsx,
+                    lsy,
+                    lflip,
+                    monochrome_rgb555,
+                ) {
+                    any_drawn = true;
+                }
+            }
+            return any_drawn;
+        }
+        self.blit_single_named_ex(
+            name,
+            frame_idx,
+            ox,
+            oy,
+            scale_x,
+            scale_y,
+            flip_x,
+            monochrome_rgb555,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn blit_single_named_ex(
+        &mut self,
+        name: &str,
+        frame_idx: usize,
+        ox: i32,
+        oy: i32,
+        scale_x: u32,
+        scale_y: u32,
+        flip_x: bool,
+        monochrome_rgb555: Option<u16>,
+    ) -> bool {
         let out_s = self.output_scale.max(1);
         let Some(&idx) = self.anim_lookup.get(name) else {
             return false;
@@ -904,6 +965,55 @@ mod tests {
         assert!(comp.anim_lookup.contains_key("custom_assets/darth_jarjar.png"));
         assert!(comp.anim_lookup.contains_key("anim_jedi_battle_maul_5_move"));
         assert!(comp.anim_lookup.contains_key("anim_jedi_battle_icon_maul"));
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn anim_layers_composites_two_animations_at_independent_positions() {
+        let tmp = std::env::temp_dir().join("pin2k_test_anim_layers");
+        let _ = fs::remove_dir_all(&tmp);
+        let custom_dir = tmp.join("custom_assets");
+        fs::create_dir_all(&custom_dir).unwrap();
+
+        let blue = RgbaImage::from_pixel(8, 8, Rgba([0, 128, 255, 255]));
+        let red = RgbaImage::from_pixel(8, 8, Rgba([255, 20, 20, 255]));
+        blue.save(custom_dir.join("left.png")).unwrap();
+        red.save(custom_dir.join("right.png")).unwrap();
+
+        let mut comp = SoftwareCompositor::new();
+        comp.load_mod_assets(&tmp, &HashMap::new()).unwrap();
+        let mut layers = HashMap::new();
+        layers.insert(
+            "anim_jedi_battle_idle".to_string(),
+            vec![
+                pin2k_core::mods::ModAnimLayer {
+                    anim: "custom_assets/left.png".to_string(),
+                    x: Some(40),
+                    y: Some(60),
+                    dx: 0,
+                    dy: 0,
+                    flip_x: false,
+                    scale_x: None,
+                    scale_y: None,
+                },
+                pin2k_core::mods::ModAnimLayer {
+                    anim: "custom_assets/right.png".to_string(),
+                    x: Some(200),
+                    y: Some(60),
+                    dx: 0,
+                    dy: 0,
+                    flip_x: false,
+                    scale_x: None,
+                    scale_y: None,
+                },
+            ],
+        );
+        comp.set_anim_layers(&layers);
+
+        assert!(comp.blit_named_ex("anim_jedi_battle_idle", 0, 122, 42, 1, 1, false, None));
+        assert_eq!(comp.native_240.get_pixel(42, 62), &Rgba([0, 128, 255, 255]));
+        assert_eq!(comp.native_240.get_pixel(202, 62), &Rgba([255, 20, 20, 255]));
 
         let _ = fs::remove_dir_all(&tmp);
     }

@@ -136,6 +136,7 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
 
     for (mod_dir, manifest) in &loaded_mods {
         loaded_anims += compositor.load_mod_assets(mod_dir, &manifest.anim_overrides)?;
+        compositor.set_anim_layers(&manifest.anim_layers);
         audio.apply_mod_audio(mod_dir, &manifest.sound_overrides);
     }
 

@@ -6,16 +6,43 @@
   "description": "Replaces every enemy in Star Wars Episode I (Battle Droids, Droidekas, Vulture Fighters, Hangar Droids, Hover Tanks, Probe Droids, Opee, Watto) with Jar Jar Binks, and replaces Darth Maul with custom Darth Jar Jar wielding a double-bladed red lightsaber!",
   "base_game": "swe1",
   "script": "main.rhai",
+  "anim_layers": {
+    "anim_jedi_battle_intro_movie": [
+      { "anim": "custom_assets/jarjar_kenobi_combat", "x": 85, "y": 48, "scale_x": 1, "scale_y": 1 },
+      { "anim": "custom_assets/darth_jarjar_combat", "x": 270, "y": 48, "scale_x": 1, "scale_y": 1 }
+    ],
+    "anim_jedi_battle_idle": [
+      { "anim": "custom_assets/jarjar_kenobi_combat", "x": 75, "y": 58 },
+      { "anim": "custom_assets/darth_jarjar_combat", "x": 270, "y": 58 }
+    ],
+    "anim_jedi_battle_clash": [
+      { "anim": "custom_assets/jarjar_kenobi_combat", "x": 95, "y": 58 },
+      { "anim": "custom_assets/darth_jarjar_combat", "x": 250, "y": 58 }
+    ],
+    "anim_jedi_battle_quigon_high_right_single": [
+      { "anim": "custom_assets/jarjar_kenobi_combat", "x": 100, "y": 58 },
+      { "anim": "custom_assets/darth_jarjar_combat", "x": 275, "y": 58 }
+    ],
+    "anim_jedi_battle_maul_chop_single": [
+      { "anim": "custom_assets/jarjar_kenobi_combat", "x": 70, "y": 58 },
+      { "anim": "custom_assets/darth_jarjar_combat", "x": 245, "y": 58 }
+    ],
+    "anim_jedi_battle_maul_5_move": [
+      { "anim": "custom_assets/jarjar_kenobi_combat", "x": 75, "y": 58 },
+      { "anim": "custom_assets/darth_jarjar_combat", "x": 265, "y": 58 }
+    ],
+    "anim_jedi_battle_maul_back_block_3": [
+      { "anim": "custom_assets/jarjar_kenobi_combat", "x": 75, "y": 58 },
+      { "anim": "custom_assets/darth_jarjar_combat", "x": 275, "y": 58 }
+    ],
+    "anim_jedi_battle_maul_low_right_single": [
+      { "anim": "custom_assets/jarjar_kenobi_combat", "x": 75, "y": 58 },
+      { "anim": "custom_assets/darth_jarjar_combat", "x": 255, "y": 58 }
+    ]
+  },
   "anim_overrides": {
-    "anim_jedi_battle_intro_movie": "custom_assets/darth_jarjar_vs_kenobi.png",
-    "anim_jedi_battle_idle": "custom_assets/darth_jarjar_vs_kenobi.png",
-    "anim_jedi_battle_clash": "custom_assets/darth_jarjar_vs_kenobi.png",
     "anim_jedi_battle_icon_quigon": "custom_assets/jarjar_kenobi_icon.png",
     "anim_jedi_battle_icon_obi": "custom_assets/jarjar_kenobi_icon.png",
-    "anim_jedi_battle_maul_5_move": "custom_assets/darth_jarjar_sith.png",
-    "anim_jedi_battle_maul_back_block_3": "custom_assets/darth_jarjar_sith.png",
-    "anim_jedi_battle_maul_chop_single": "custom_assets/darth_jarjar_sith.png",
-    "anim_jedi_battle_maul_low_right_single": "custom_assets/darth_jarjar_sith.png",
     "anim_jedi_battle_death_1": "darth_jarjar_death",
     "anim_jedi_battle_maul_death_1": "darth_jarjar_death",
     "anim_jedi_battle_maul_death_2": "darth_jarjar_death",
