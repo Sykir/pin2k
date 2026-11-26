@@ -30,8 +30,82 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
     }
 
+    pub(super) fn sync_shield_position(&mut self) {
+        if self.state != MachineState::InGame || !self.playfield_valid {
+            self.set_shield_raised(false);
+            return;
+        }
+        let p = &self.players[self.current_player];
+        let rematch_ready = matches!(
+            self.multiball,
+            ActiveMultiball::HangarMultiball {
+                jackpots_lit: true,
+                jackpots_collected
+            } if jackpots_collected >= 2
+        );
+        let should_raise = p.jedi_letters == 0x0F || p.scene_select_ready || rematch_ready;
+        self.set_shield_raised(should_raise);
+    }
+
+    pub(super) fn record_playfield_switch(&mut self, id: u8) {
+        if self.playfield_valid {
+            return;
+        }
+        let immediate = matches!(
+            id,
+            sw::RIGHT_INLANE
+                | sw::SNEAKY_LANE
+                | sw::LEFT_SAUCER
+                | sw::RIGHT_SAUCER
+                | sw::SHIELD_POPPER
+        );
+        if immediate {
+            self.playfield_valid = true;
+            self.skill_shot_grace_ms = 160;
+            self.sync_shield_position();
+            return;
+        }
+        let counted = matches!(
+            id,
+            sw::LEFT_OUTLANE
+                | sw::RIGHT_OUTLANE
+                | sw::LEFT_INLANE
+                | sw::CAPTIVE_BALL
+                | sw::LEFT_BANK_UPPER
+                | sw::LEFT_BANK_MIDDLE
+                | sw::LEFT_BANK_LOWER
+                | sw::RIGHT_BANK_UPPER
+                | sw::RIGHT_BANK_MIDDLE
+                | sw::RIGHT_BANK_LOWER
+                | sw::LEFT_RAMP_ENTER
+                | sw::RIGHT_RAMP_ENTER
+                | sw::RAMP_MADE_LEFT
+                | sw::RAMP_MADE_RIGHT
+                | sw::LEFT_SHIELD_TARGET
+                | sw::RIGHT_SHIELD_TARGET
+                | sw::SHIELD_HIT
+                | sw::LEFT_SLING
+                | sw::RIGHT_SLING
+                | sw::UPPER_JET
+                | sw::MIDDLE_JET
+                | sw::LOWER_JET
+                | sw::JETS_ROLLOVER
+                | sw::LEFT_LOOP_UPPER
+                | sw::LEFT_LOOP_ROLLOVER
+        );
+        if counted && id < 64 {
+            self.valid_playfield_switches |= 1u64 << id;
+            if self.valid_playfield_switches.count_ones() >= 3 {
+                self.playfield_valid = true;
+                self.skill_shot_grace_ms = 160;
+                self.sync_shield_position();
+            }
+        }
+    }
+
     pub(super) fn handle_ingame_switch_closed(&mut self, id: u8) {
         self.idle_ball_search_ms = 0;
+        self.record_playfield_switch(id);
 
         match id {
             sw::START_BUTTON => {
@@ -41,6 +115,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.tilt_warnings += 1;
                 if self.tilt_warnings >= self.adjustments.tilt_warnings_max {
                     self.cut_all_holds();
+                    self.set_shield_raised(false);
+                    self.active_scene = None;
                     self.state = MachineState::Tilt;
                     self.emit_ard("ard_tilt_random_speech");
                     self.emit_event(GameEvent::Tilted);
@@ -99,12 +175,12 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             sw::LEFT_SLING => {
                 self.hw.fire_coil(drive::LEFT_SLING, 48);
                 self.hw.fire_coil(drive::LOWER_LEFT_HOTDOG_FL, 24);
-                self.add_score(5_110);
+                self.add_score(scoring::SWITCH_BASE);
             }
             sw::RIGHT_SLING => {
                 self.hw.fire_coil(drive::RIGHT_SLING, 48);
                 self.hw.fire_coil(drive::LOWER_RIGHT_HOTDOG_FL, 24);
-                self.add_score(5_110);
+                self.add_score(scoring::SWITCH_BASE);
             }
             sw::UPPER_JET | sw::MIDDLE_JET | sw::LOWER_JET => {
                 let coil = match id {
@@ -116,19 +192,24 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.hw.fire_coil(drive::JET_FLASHER, 24);
                 self.audio.play_sound(sound::JET_BUMPER_SFX, false);
                 self.emit_ard("ard_jet_hit");
+                let gungan_blocked = self.active_scene.is_some()
+                    || matches!(self.multiball, ActiveMultiball::DarthMaulDuel { .. })
+                    || self.players[self.current_player].jedi_letters == 0x0F;
                 let (pts, started_super_jets, gungan_step) = {
                     let p = &mut self.players[self.current_player];
                     p.jet_hits += 1;
                     if p.super_jets_ms > 0 {
-                        (scoring::JET_SUPER, false, 6u8)
+                        (scoring::SWITCH_BASE + scoring::JET_SUPER, false, 6u8)
+                    } else if gungan_blocked {
+                        (scoring::SWITCH_BASE + scoring::JET_NORMAL, false, p.gungan_letters)
                     } else {
                         p.gungan_letters += 1;
                         if p.gungan_letters >= 6 {
                             p.gungan_letters = 0;
                             p.super_jets_ms = 20_000;
-                            (scoring::JET_NORMAL, true, 6u8)
+                            (scoring::SWITCH_BASE + scoring::JET_NORMAL, true, 6u8)
                         } else {
-                            (scoring::JET_NORMAL, false, p.gungan_letters)
+                            (scoring::SWITCH_BASE + scoring::JET_NORMAL, false, p.gungan_letters)
                         }
                     }
                 };
@@ -143,35 +224,22 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 } else if gungan_step < 6 {
                     self.emit_ard("ard_gungan_letter_earn");
                 } else {
-                    self.set_banner(format!("SUPER JETS! +{}", scoring::JET_SUPER), 1_500);
+                    self.set_banner(
+                        format!("SUPER JETS! +{}", scoring::SWITCH_BASE + scoring::JET_SUPER),
+                        1_500,
+                    );
                 }
             }
             sw::JETS_ROLLOVER => {
-                if self.skill_shot_ready {
-                    self.award_skill_shot();
-                } else {
-                    let p = &mut self.players[self.current_player];
-                    if p.bonus_multiplier < scoring::BONUS_MAX_MULTIPLIER {
-                        p.bonus_multiplier += 1;
-                    }
-                    let bm = p.bonus_multiplier;
-                    self.add_score(50_000);
-                    self.set_banner(format!("BONUS {}X!", bm), 1_800);
-                }
+                self.add_score(scoring::SWITCH_BASE);
             }
-            // Standup Banks charge Lasers
-            sw::LEFT_BANK_UPPER | sw::LEFT_BANK_MIDDLE | sw::LEFT_BANK_LOWER
-            | sw::RIGHT_BANK_UPPER | sw::RIGHT_BANK_MIDDLE | sw::RIGHT_BANK_LOWER => {
-                self.skill_shot_ready = false;
-                let p = &mut self.players[self.current_player];
-                p.laser_shots = (p.laser_shots + 1).min(9);
-                let ls = p.laser_shots;
-                self.add_score(35_000);
-                if ls == 1 {
-                    self.laser_instruction_fx();
-                }
-                self.set_banner(format!("LASERS CHARGED: {ls}"), 1_500);
-            }
+            // Standup Banks charge Lasers, light Naboo Ship Bonus & Hotdogs (`Bonus X + 1`)
+            sw::LEFT_BANK_UPPER => self.handle_standup_target(false, 0),
+            sw::LEFT_BANK_MIDDLE => self.handle_standup_target(false, 1),
+            sw::LEFT_BANK_LOWER => self.handle_standup_target(false, 2),
+            sw::RIGHT_BANK_UPPER => self.handle_standup_target(true, 0),
+            sw::RIGHT_BANK_MIDDLE => self.handle_standup_target(true, 1),
+            sw::RIGHT_BANK_LOWER => self.handle_standup_target(true, 2),
             // Drop Targets (`Drop::hook_drop_target_hit`) & Saucers
             sw::LEFT_DROP_TARGET => {
                 self.left_drop_down = true;
@@ -190,11 +258,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             sw::LEFT_SAUCER | sw::RIGHT_SAUCER => {
                 let idx = if id == sw::LEFT_SAUCER { 0 } else { 1 };
                 self.saucer_hold_ms[idx] = 800;
+                self.add_score(scoring::SAUCER_ARRIVAL);
                 self.on_saucer_entered();
             }
             // Deflector Shield Targets & Center Shield Popper (`Scenes::start_valid_scene`)
             sw::LEFT_SHIELD_TARGET | sw::RIGHT_SHIELD_TARGET | sw::SHIELD_HIT => {
-                self.skill_shot_ready = false;
                 if self.handle_jarjar_juggle_switch(id) || self.handle_podrace_switch(id) {
                     return;
                 }
@@ -204,13 +272,17 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.advance_active_scene("SHIELD BLAST!");
                 } else if let ActiveMultiball::DarthMaulDuel { .. } = self.multiball {
                     self.damage_darth_maul(20, false, "SABER STRIKE!");
+                } else if !matches!(self.multiball, ActiveMultiball::None)
+                    || self.players[self.current_player].jedi_letters == 0x0F
+                {
+                    self.add_score(scoring::SWITCH_BASE);
                 } else {
                     let rem = {
                         let p = &mut self.players[self.current_player];
                         p.shield_health = p.shield_health.saturating_sub(2);
                         p.shield_health
                     };
-                    self.add_score(50_000);
+                    self.add_score(scoring::SWITCH_BASE);
                     if rem == 0 {
                         let (was_ready, selected) = {
                             let p = &mut self.players[self.current_player];
@@ -222,7 +294,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                             self.holo_transition_ms = 0;
                             self.emit_ard("ard_obi_holo_watch_descends");
                         }
-                        self.set_shield_raised(true);
+                        self.sync_shield_position();
                         self.emit_sound(sound::SHIELD_GONE_CALLOUT, false);
                         self.active_anim_hint = selected.holo_anim_hint().to_string();
                         self.set_banner(
@@ -238,28 +310,27 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
             sw::SHIELD_POPPER => {
                 self.popper_hold_ms = 900;
+                self.add_score(scoring::SAUCER_ARRIVAL);
                 self.on_shield_popper_entered();
             }
-            // Left & Right Ramps + Left Loop -> Virtual Spinners + Combos + JEDI + Scene/Multiball
+            // Left & Right Ramps + Left Loop -> Virtual Spinners + Combos + C-3PO + JEDI + Scene/Multiball
             sw::LEFT_RAMP_ENTER => {
-                self.skill_shot_ready = false;
                 self.trigger_virtual_spinner(false, true);
                 if self.handle_jarjar_juggle_switch(id) || self.handle_podrace_switch(id) {
                     return;
                 }
-                self.add_score(25_000);
+                self.add_score(scoring::SWITCH_BASE);
             }
             sw::RIGHT_RAMP_ENTER => {
-                self.skill_shot_ready = false;
                 self.trigger_virtual_spinner(true, true);
                 self.jarjar_saucer_event(true, 0);
                 if self.handle_jarjar_juggle_switch(id) || self.handle_podrace_switch(id) {
                     return;
                 }
-                self.add_score(25_000);
+                self.add_score(scoring::SWITCH_BASE);
             }
             sw::RAMP_MADE_LEFT | sw::RAMP_MADE_RIGHT | sw::LEFT_LOOP_UPPER | sw::LEFT_LOOP_ROLLOVER => {
-                self.skill_shot_ready = false;
+                self.add_score(scoring::SWITCH_BASE);
                 if id == sw::RAMP_MADE_LEFT {
                     self.trigger_virtual_spinner(false, true);
                 } else if id == sw::RAMP_MADE_RIGHT {
@@ -267,13 +338,13 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 }
                 self.on_major_shot_made(id);
             }
-            // Inlanes, Sneaky Lane Skill Shot & Captive Ball (Build C-3PO)
+            // Inlanes, Sneaky Lane Skill Shot & Captive Ball
             sw::SNEAKY_LANE => {
-                if self.skill_shot_ready {
+                self.add_score(scoring::SWITCH_BASE);
+                if self.skill_shot_ready || self.skill_shot_grace_ms > 0 {
                     self.award_skill_shot();
                 } else {
                     self.hw.fire_coil(drive::RIGHT_INLANE_FL, 24);
-                    self.add_score(25_000);
                 }
             }
             sw::LEFT_INLANE | sw::RIGHT_INLANE => {
@@ -283,18 +354,21 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     drive::RIGHT_INLANE_FL
                 };
                 self.hw.fire_coil(fl, 24);
-                self.add_score(25_000);
-                if self.active_scene.is_none() {
-                    self.advance_c3p0();
-                }
+                self.add_score(scoring::SWITCH_BASE);
             }
             sw::CAPTIVE_BALL => {
                 self.audio.play_sound(sound::EXPLOSION, false);
-                self.add_score(100_000);
-                self.advance_c3p0();
+                let pts = {
+                    let p = &mut self.players[self.current_player];
+                    let val = scoring::captive_ball_score(p.captive_ball_hits);
+                    p.captive_ball_hits = p.captive_ball_hits.saturating_add(1);
+                    val
+                };
+                self.add_score(pts);
+                self.set_banner(format!("CAPTIVE BALL! +{pts}"), 1_500);
             }
             sw::LEFT_OUTLANE | sw::RIGHT_OUTLANE => {
-                self.add_score(50_000);
+                self.add_score(scoring::SWITCH_BASE);
                 if self.ball_save_ms > 0 {
                     self.set_banner("FORCE SAVE READY!", 1_800);
                 }
@@ -309,12 +383,112 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
     }
 
+    fn light_naboo_ship_lamp(&mut self, count: u8) {
+        let p = &mut self.players[self.current_player];
+        p.naboo_ship_lamps = (p.naboo_ship_lamps + count).min(10);
+        p.bonus_points = (p.naboo_ship_lamps as u64) * scoring::BONUS_PER_SHIP;
+    }
+
+    fn handle_standup_target(&mut self, is_right: bool, bit_idx: u8) {
+        let bit = 1u8 << bit_idx;
+        let (was_lit, completed_bank, hotdog_bonus_x) = {
+            let p = &mut self.players[self.current_player];
+            let mask = if is_right {
+                &mut p.right_bank_mask
+            } else {
+                &mut p.left_bank_mask
+            };
+            let was_lit = (*mask & bit) != 0;
+            *mask |= bit;
+            let completed = *mask == 0b111;
+            let mut hotdog_bonus_x = false;
+            if completed {
+                *mask = 0;
+                p.laser_shots = (p.laser_shots + 1).min(scoring::MAX_LASER_SHOTS);
+                if is_right {
+                    p.right_hotdog_lit = true;
+                } else {
+                    p.left_hotdog_lit = true;
+                }
+                if p.left_hotdog_lit && p.right_hotdog_lit {
+                    p.left_hotdog_lit = false;
+                    p.right_hotdog_lit = false;
+                    if p.bonus_multiplier < scoring::BONUS_MAX_MULTIPLIER {
+                        p.bonus_multiplier += 1;
+                        hotdog_bonus_x = true;
+                    }
+                }
+            }
+            (was_lit, completed, hotdog_bonus_x)
+        };
+        if completed_bank {
+            self.light_naboo_ship_lamp(1);
+            self.add_score(
+                scoring::SWITCH_BASE + scoring::STANDUP_BANK_COMPLETE + scoring::STANDUP_LASER_AWARD,
+            );
+            let ls = self.players[self.current_player].laser_shots;
+            if ls == 1 {
+                self.laser_instruction_fx();
+            }
+            if hotdog_bonus_x {
+                let bm = self.players[self.current_player].bonus_multiplier;
+                self.set_banner(format!("BANK + HOTDOGS! LASER {ls} & BONUS {bm}X!"), 2_200);
+            } else {
+                self.set_banner(format!("BANK COMPLETE! LASERS: {ls}"), 1_800);
+            }
+        } else if !was_lit {
+            self.light_naboo_ship_lamp(1);
+            self.add_score(scoring::SWITCH_BASE + scoring::STANDUP_NEW);
+        } else {
+            self.add_score(scoring::SWITCH_BASE + scoring::STANDUP_LIT);
+        }
+    }
+
+    fn award_jedi_letter_with_score(&mut self) {
+        let (completed_jedi, letter_pts) = {
+            let p = &mut self.players[self.current_player];
+            let pts = scoring::JEDI_LETTER_BASE
+                + scoring::JEDI_LETTER_STEP * ((p.jedi_letters_total % 3) as u64);
+            p.jedi_letters_total = p.jedi_letters_total.saturating_add(1);
+            (p.award_jedi_letter(), pts)
+        };
+        if completed_jedi {
+            self.add_score(scoring::JEDI_LETTERS_COMPLETE);
+            self.emit_ard("ard_jedi_multiball_ready_tune");
+            if self.active_scene.is_none() && matches!(self.multiball, ActiveMultiball::None) {
+                self.start_darth_maul_duel();
+            } else {
+                self.sync_shield_position();
+                self.set_banner("JEDI MULTIBALL READY! SHOOT SHIELD POPPER!", 3_000);
+            }
+        } else {
+            self.add_score(letter_pts);
+            let mask = self.players[self.current_player].jedi_letters;
+            let spelled: String = ['J', 'E', 'D', 'I']
+                .iter()
+                .enumerate()
+                .map(|(i, &c)| if (mask & (1 << i)) != 0 { c } else { '-' })
+                .collect();
+            self.set_banner(format!("JEDI SPIRIT: [{spelled}]"), 2_000);
+        }
+    }
+
     fn award_skill_shot(&mut self) {
         self.skill_shot_ready = false;
-        let pts = {
+        self.skill_shot_grace_ms = 0;
+        let (pts, award_jedi) = {
             let p = &mut self.players[self.current_player];
             p.skill_shots_made = p.skill_shots_made.saturating_add(1);
-            (500_000 * (p.skill_shots_made as u64)).min(scoring::SKILL_SHOT_CAP)
+            let pts = match p.skill_shots_made {
+                1 => scoring::SKILL_SHOT_FIRST,
+                2 => scoring::SKILL_SHOT_SECOND,
+                _ => scoring::SKILL_SHOT_CAP,
+            };
+            let award_jedi = p.skill_shots_made >= 3 && !p.skill_shot_jedi_awarded;
+            if award_jedi {
+                p.skill_shot_jedi_awarded = true;
+            }
+            (pts, award_jedi)
         };
         self.add_score(pts);
         self.emit_ard("ard_skill_shot_speech");
@@ -322,28 +496,88 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.trigger_leff(LeffKind::SkillShotAward);
         self.emit_event(GameEvent::SkillShotAwarded { points: pts });
         self.set_banner(format!("SKILL SHOT! +{}", pts), 2_500);
+        if award_jedi {
+            self.award_jedi_letter_with_score();
+        }
     }
 
     fn advance_c3p0(&mut self) {
-        let completed = {
+        if matches!(self.multiball, ActiveMultiball::DarthMaulDuel { .. }) {
+            self.add_score(100_000);
+            return;
+        }
+        let (part, completed_reward_idx) = {
             let p = &mut self.players[self.current_player];
             p.c3p0_parts = p.c3p0_parts.saturating_add(1);
-            if p.c3p0_parts >= 6 {
+            let part = p.c3p0_parts;
+            if part >= 8 {
                 p.c3p0_parts = 0;
-                p.extra_balls = p.extra_balls.saturating_add(1);
-                true
+                let r_idx = p.c3p0_reward_idx % 11;
+                p.c3p0_reward_idx = (r_idx + 1) % 11;
+                (part, Some(r_idx))
             } else {
-                false
+                (part, None)
             }
         };
-        if completed {
-            self.add_score(1_000_000);
-            self.emit_ard("ard_extra_ball_lit_speech");
+        self.add_score((part as u64) * 100_000);
+        if let Some(r_idx) = completed_reward_idx {
             self.trigger_leff(LeffKind::C3P0Complete);
-            self.set_banner("C-3PO COMPLETE! EXTRA BALL +1,000,000!", 3_500);
+            match r_idx {
+                0 | 5 => {
+                    self.players[self.current_player].extra_balls =
+                        self.players[self.current_player].extra_balls.saturating_add(1);
+                    self.emit_ard("ard_extra_ball_lit_speech");
+                    self.set_banner("C-3PO COMPLETE! EXTRA BALL!", 3_500);
+                }
+                1 | 7 => {
+                    self.award_jedi_letter_with_score();
+                }
+                2 => {
+                    self.add_score(2_000_000);
+                    self.set_banner("C-3PO COMPLETE! +2,000,000!", 3_500);
+                }
+                3 => {
+                    let p = &mut self.players[self.current_player];
+                    if p.hold_bonus {
+                        self.add_score(scoring::C3P0_FALLBACK_AWARD);
+                        self.set_banner("C-3PO COMPLETE! +1,000,000!", 3_500);
+                    } else {
+                        p.hold_bonus = true;
+                        self.set_banner("C-3PO COMPLETE! HOLD BONUS!", 3_500);
+                    }
+                }
+                4 => {
+                    self.add_score(1_000_000);
+                    self.set_banner("C-3PO COMPLETE! +1,000,000!", 3_500);
+                }
+                6 => {
+                    let p = &mut self.players[self.current_player];
+                    if p.bonus_multiplier < scoring::BONUS_MAX_MULTIPLIER {
+                        p.bonus_multiplier += 1;
+                        let bm = p.bonus_multiplier;
+                        self.set_banner(format!("C-3PO COMPLETE! BONUS {bm}X!"), 3_500);
+                    } else {
+                        self.add_score(scoring::C3P0_FALLBACK_AWARD);
+                        self.set_banner("C-3PO COMPLETE! +1,000,000!", 3_500);
+                    }
+                }
+                8 => {
+                    self.add_score(500_000);
+                    self.set_banner("C-3PO COMPLETE! +500,000!", 3_500);
+                }
+                9 => {
+                    let p = &mut self.players[self.current_player];
+                    p.laser_shots = (p.laser_shots + 20).min(scoring::MAX_LASER_SHOTS);
+                    self.add_score(1_000_000);
+                    self.set_banner("C-3PO COMPLETE! 20 LASERS +1,000,000!", 3_500);
+                }
+                _ => {
+                    self.add_score(10);
+                    self.set_banner("C-3PO COMPLETE! +10!", 3_500);
+                }
+            }
         } else {
-            let parts = self.players[self.current_player].c3p0_parts;
-            self.set_banner(format!("BUILD C-3PO: PART {parts}/6"), 1_800);
+            self.set_banner(format!("BUILD C-3PO: PART {part}/8"), 1_800);
         }
     }
 
@@ -351,6 +585,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         if !matches!(self.multiball, ActiveMultiball::None) {
             self.add_score(300_000);
             self.set_banner("SAUCER BONUS! +300,000", 2_000);
+            return;
+        }
+        if self.players[self.current_player].jedi_letters == 0x0F {
+            // Locks are excluded when all 4 JEDI letters are collected / Jedi MB is ready
+            self.add_score(150_000);
             return;
         }
         let p = &mut self.players[self.current_player];
@@ -418,6 +657,17 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
         if self.active_scene.is_some() {
             self.advance_active_scene("DIRECT CORE HIT!");
+            return;
+        }
+
+        if self.players[self.current_player].jedi_letters == 0x0F
+            && matches!(self.multiball, ActiveMultiball::None)
+        {
+            self.start_darth_maul_duel();
+            return;
+        }
+
+        if !matches!(self.multiball, ActiveMultiball::None) {
             return;
         }
 
@@ -585,7 +835,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
         }
 
-        // 2b. Ramp Combo progression (`Ramps.c`)
+        // 2b. Ramp Combo progression (`Ramps.c`: 6.72s window, n * 100,000 for n >= 2)
         if is_ramp {
             let combo = {
                 let p = &mut self.players[self.current_player];
@@ -594,12 +844,12 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 } else {
                     1
                 };
-                p.ramp_combo_window_ms = 6_000;
+                p.ramp_combo_window_ms = scoring::RAMP_COMBO_WINDOW_MS;
                 p.ramp_combo_best = p.ramp_combo_best.max(p.ramp_combo_count);
                 p.ramp_combo_count
             };
             if combo >= 2 {
-                let combo_pts = 250_000 * (combo as u64);
+                let combo_pts = scoring::RAMP_COMBO_STEP * (combo as u64);
                 self.add_score(combo_pts);
                 self.emit_ard("ard_ramp_combo_naboo_flyby");
                 self.spinner_combo_fx(sw_id == sw::RAMP_MADE_RIGHT);
@@ -608,27 +858,12 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
         }
 
-        // 3. Award J-E-D-I Letter -> Completing J-E-D-I starts Darth Maul Lightsaber Duel!
-        let (completed_jedi, letter_pts) = {
-            let p = &mut self.players[self.current_player];
-            let pts = 500_000 + 50_000 * (p.jedi_letters_total as u64);
-            p.jedi_letters_total = p.jedi_letters_total.saturating_add(1);
-            (p.award_jedi_letter(), pts)
-        };
-        self.add_score(letter_pts);
-        if completed_jedi {
-            self.add_score(scoring::JEDI_LETTERS_COMPLETE);
-            self.emit_ard("ard_jedi_multiball_ready_tune");
-            self.start_darth_maul_duel();
-        } else {
-            let mask = self.players[self.current_player].jedi_letters;
-            let spelled: String = ['J', 'E', 'D', 'I']
-                .iter()
-                .enumerate()
-                .map(|(i, &c)| if (mask & (1 << i)) != 0 { c } else { '-' })
-                .collect();
-            self.set_banner(format!("JEDI SPIRIT: [{spelled}]"), 2_000);
+        // 3. Left Loop builds C-3PO; Ramps award J-E-D-I Letters!
+        if !is_ramp {
+            self.advance_c3p0();
+            return;
         }
+        self.award_jedi_letter_with_score();
     }
 
     pub(super) fn advance_active_scene(&mut self, label: &str) {

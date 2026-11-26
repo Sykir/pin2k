@@ -97,8 +97,8 @@
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
         assert_eq!(machine.players.len(), 2);
 
-        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::JETS_ROLLOVER);
-        assert!(machine.score >= 500_000, "Skill shot awarded");
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SNEAKY_LANE);
+        assert!(machine.score >= 1_000_000, "Skill shot awarded");
 
         // 3. Deplete Deflector Shield & enter Shield Popper (Sw 32 active-low opto!) -> Battle Droid Scene
         for _ in 0..3 {
@@ -267,6 +267,7 @@
             }
             machine.eject_cooldown_ms = 0;
             machine.ball_save_ms = 0;
+            machine.playfield_valid = true;
             pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::TROUGH_BALL_1);
             for _ in 0..10 {
                 machine.tick(16);
@@ -1037,9 +1038,12 @@
         );
         let sj_pre = machine.score;
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::MIDDLE_JET);
-        assert_eq!(machine.score, sj_pre + crate::swe1_rules::scoring::JET_SUPER);
+        assert_eq!(
+            machine.score,
+            sj_pre + crate::swe1_rules::scoring::SWITCH_BASE + crate::swe1_rules::scoring::JET_SUPER
+        );
 
-        // 4. Ramp Combo (Left -> Right within 6s window)
+        // 4. Ramp Combo (Left -> Right within 6.72s window)
         machine.audio.played.clear();
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_RIGHT);
@@ -1052,10 +1056,10 @@
         let rc_sid = crate::swe1_audio::resolve_ard("ard_ramp_combo_naboo_flyby", 0).unwrap();
         assert!(machine.audio.played.iter().any(|(sid, _)| *sid == rc_sid));
 
-        // 5. Build C-3PO (6 Captive Ball hits -> +1_000_000 + Extra Ball + C3P0Complete Leff)
+        // 5. Build C-3PO (starts at 4/8 -> 4 Left Loop hits -> Extra Ball + C3P0Complete Leff)
         let prev_eb = machine.players[0].extra_balls;
-        for _ in 0..6 {
-            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::CAPTIVE_BALL);
+        for _ in 0..4 {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_LOOP_ROLLOVER);
         }
         assert_eq!(machine.players[0].c3p0_parts, 0);
         assert_eq!(machine.players[0].extra_balls, prev_eb + 1);
@@ -1077,4 +1081,76 @@
             machine.tick(16);
         }
         assert!(machine.active_leff.is_none());
+    }
+
+    #[test]
+    fn swe1_v14_rulebook_scoring_priorities_and_playfield_validation() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("ingame"));
+        assert!(!machine.playfield_valid);
+        assert!(machine.skill_shot_ready);
+
+        // 1. Draining before playfield is valid re-serves the ball without losing ball or Ball Saver
+        machine.ball_save_ms = 5_000;
+        machine.eject_cooldown_ms = 0;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::TROUGH_BALL_1);
+        assert_eq!(machine.current_ball, 1);
+        assert_eq!(machine.ball_save_ms, 5_000);
+        assert!(machine.skill_shot_ready);
+        machine.tick(16);
+        machine.eject_cooldown_ms = 0;
+
+        // 2. Captive ball exact 1.4 cycle (50, 40, 30, 20, 10 -> 500...) without 2,310 base
+        let pre_cb = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::CAPTIVE_BALL);
+        assert_eq!(machine.score, pre_cb + 50);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::CAPTIVE_BALL);
+        assert_eq!(machine.score, pre_cb + 90);
+
+        // 3. Standup 3-bank + Hotdogs -> Bonus X + 1 + Naboo ship lamps
+        let pre_bank = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_BANK_UPPER);
+        assert_eq!(machine.score, pre_bank + 12_310);
+        // 3rd distinct switch (CAPTIVE_BALL, LEFT_BANK_UPPER, LEFT_BANK_MIDDLE) validates playfield!
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_BANK_MIDDLE);
+        assert!(machine.playfield_valid);
+        assert!(machine.skill_shot_grace_ms > 0 && machine.skill_shot_grace_ms <= 160);
+        // SNEAKY_LANE within 160ms grace still awards Skill Shot (1,000,000 + 2,310)!
+        let pre_ss = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SNEAKY_LANE);
+        assert_eq!(machine.score, pre_ss + 1_000_000 + 2_310);
+
+        // Complete both standup banks -> both hotdogs -> Bonus X becomes 2
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_BANK_LOWER);
+        assert!(machine.players[0].left_hotdog_lit);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_BANK_UPPER);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_BANK_MIDDLE);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_BANK_LOWER);
+        assert_eq!(machine.players[0].bonus_multiplier, 2);
+        assert!(!machine.players[0].left_hotdog_lit);
+        assert!(!machine.players[0].right_hotdog_lit);
+        assert_eq!(machine.players[0].naboo_ship_lamps, 6);
+        assert_eq!(machine.players[0].bonus_points, 600_000);
+
+        // 4. 3rd Skill Shot awards 3,000,000 + 1 JEDI letter (once per game)
+        machine.players[0].skill_shots_made = 2;
+        machine.skill_shot_ready = true;
+        let pre_3rd_ss = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SNEAKY_LANE);
+        assert_eq!(machine.players[0].jedi_letters, 1);
+        assert!(machine.players[0].skill_shot_jedi_awarded);
+        assert_eq!(machine.score, pre_3rd_ss + 2_310 + 3_000_000 + 550_000);
+
+        // 5. Tilt lowers shield, blocks scoring, and loses bonus
+        machine.tilt_warnings = machine.adjustments.tilt_warnings_max - 1;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::PLUMB_TILT);
+        assert_eq!(machine.state, MachineState::Tilt);
+        assert!(!machine.shield_raised);
+        let tilt_score = machine.score;
+        machine.add_score(100_000);
+        assert_eq!(machine.score, tilt_score);
     }

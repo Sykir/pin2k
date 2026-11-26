@@ -129,7 +129,10 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     // Ball tracking & playfield mechanisms
     pub balls_in_play: u8,
     pub ball_save_ms: u32,
+    pub playfield_valid: bool,
+    pub valid_playfield_switches: u64,
     pub skill_shot_ready: bool,
+    pub skill_shot_grace_ms: u32,
     pub shield_raised: bool,
     pub left_drop_down: bool,
     pub right_drop_down: bool,
@@ -226,7 +229,10 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             high_scores: default_high_scores(),
             balls_in_play: 0,
             ball_save_ms: 0,
+            playfield_valid: false,
+            valid_playfield_switches: 0,
             skill_shot_ready: false,
+            skill_shot_grace_ms: 0,
             shield_raised: false,
             left_drop_down: false,
             right_drop_down: false,
@@ -338,13 +344,18 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     pub(super) fn add_score(&mut self, pts: u64) {
+        if self.state != MachineState::InGame {
+            return;
+        }
         let scaled = pts.saturating_mul(self.score_multiplier.max(1));
         if pts > 0 {
             self.saber_flare_ms = 350;
         }
         if let Some(p) = self.players.get_mut(self.current_player) {
             p.score = p.score.saturating_add(scaled);
-            p.bonus_points = p.bonus_points.saturating_add(scaled / 10);
+            if self.game_title != GameTitle::Swe1 {
+                p.bonus_points = p.bonus_points.saturating_add(scaled / 10);
+            }
             self.score = p.score;
             if p.score > self.audits.highest_score {
                 self.audits.highest_score = p.score;
@@ -573,22 +584,24 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.multiball = ActiveMultiball::None;
         self.special_screen = None;
         self.special_screen_ms = 0;
+        self.playfield_valid = false;
+        self.valid_playfield_switches = 0;
         self.skill_shot_ready = true;
+        self.skill_shot_grace_ms = 0;
         self.holo_transition_ms = 0;
         self.shield_hit_glow_ms = 0;
         self.ball_save_ms = (self.adjustments.ball_save_secs as u32) * 1000;
         self.idle_ball_search_ms = 0;
         self.audits.total_balls_played = self.audits.total_balls_played.saturating_add(1);
 
-        // Reset drop targets up & lower shield unless ready for scene
+        // Reset drop targets up & keep shield lowered until playfield becomes valid
         self.hw.fire_coil(drive::LEFT_DROP_UP, 64);
         self.hw.fire_coil(drive::RIGHT_DROP_UP, 64);
         self.left_drop_down = false;
         self.right_drop_down = false;
 
         if self.game_title == GameTitle::Swe1 {
-            let shield_zero = self.players[self.current_player].shield_health == 0;
-            self.set_shield_raised(shield_zero);
+            self.set_shield_raised(false);
         } else {
             self.rfm.active_wave = None;
             self.rfm.wave_hits_left = 0;
@@ -621,8 +634,18 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     pub(super) fn on_ball_drained(&mut self) {
-        if self.ball_save_ms > 0 && self.state == MachineState::InGame {
-            // Ball Saver (`BallSaver`): re-serve immediately without losing ball!
+        if self.state == MachineState::InGame && !self.playfield_valid && self.balls_in_play <= 1 {
+            // Playfield not yet valid: re-serve ball without losing ball or consuming Ball Saver.
+            self.pending_eject_balls = self.pending_eject_balls.saturating_add(1);
+            self.balls_in_play = self.balls_in_play.saturating_sub(1);
+            self.skill_shot_ready = true;
+            self.skill_shot_grace_ms = 0;
+            self.set_banner("SHOOT AGAIN!", 2_000);
+            return;
+        }
+        if self.ball_save_ms > 0 && self.state == MachineState::InGame && self.balls_in_play <= 1 {
+            // Ball Saver (`BallSaver`): re-serve immediately without losing ball; no double save on replacement!
+            self.ball_save_ms = 0;
             self.pending_eject_balls = self.pending_eject_balls.saturating_add(1);
             self.balls_in_play = self.balls_in_play.saturating_sub(1);
             if self.game_title == GameTitle::Swe1 {
@@ -631,7 +654,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.emit_event(GameEvent::BallSaved {
                 player: self.current_player + 1,
             });
-            self.set_banner("SHOOT AGAIN! FORCE BALL SAVE!", 2_500);
+            self.set_banner("BALL SAVED - KEEP SHOOTING!", 2_500);
             return;
         }
 
@@ -652,6 +675,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
         // End of ball! Award bonus if not tilted
         self.cut_all_holds();
+        self.set_shield_raised(false);
         self.active_scene = None;
         self.multiball = ActiveMultiball::None;
 
@@ -669,8 +693,20 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 ball: self.current_ball,
                 bonus,
             });
-            self.players[self.current_player].bonus_points = 10_000;
-            self.players[self.current_player].bonus_multiplier = 1;
+            let p = &mut self.players[self.current_player];
+            if p.hold_bonus {
+                p.hold_bonus = false;
+            } else {
+                p.naboo_ship_lamps = 0;
+                p.bonus_points = 0;
+                p.bonus_multiplier = 1;
+            }
+        } else {
+            let p = &mut self.players[self.current_player];
+            p.hold_bonus = false;
+            p.naboo_ship_lamps = 0;
+            p.bonus_points = 0;
+            p.bonus_multiplier = 1;
         }
         self.eval_script_trigger(ScriptTrigger::OnBallEnd);
         self.state = MachineState::InGame;
@@ -899,8 +935,14 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 }
             }
         }
-        if self.ball_save_ms > 0 {
+        if self.ball_save_ms > 0 && self.playfield_valid {
             self.ball_save_ms = self.ball_save_ms.saturating_sub(dt_ms);
+        }
+        if self.skill_shot_grace_ms > 0 {
+            self.skill_shot_grace_ms = self.skill_shot_grace_ms.saturating_sub(dt_ms);
+            if self.skill_shot_grace_ms == 0 && self.playfield_valid {
+                self.skill_shot_ready = false;
+            }
         }
         if self.eject_cooldown_ms > 0 {
             self.eject_cooldown_ms = self.eject_cooldown_ms.saturating_sub(dt_ms);

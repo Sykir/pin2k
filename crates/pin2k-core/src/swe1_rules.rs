@@ -387,15 +387,29 @@ impl Swe1Scene {
     }
 }
 
-/// Exact scoring and rule constants extracted from `swe1_0166.elf` (SWE1 v1.66).
+/// Exact scoring and rule constants extracted from `swe1_0166.elf` & SWE1 v1.4 rulebook.
 pub mod scoring {
+    pub const SWITCH_BASE: u64 = 2_310;
+    pub const SAUCER_ARRIVAL: u64 = 2_330;
+    pub const SKILL_SHOT_FIRST: u64 = 1_000_000;
+    pub const SKILL_SHOT_SECOND: u64 = 2_000_000;
     pub const SKILL_SHOT_CAP: u64 = 3_000_000;
     pub const BONUS_PER_SHIP: u64 = 100_000;
     pub const BONUS_MAX_MULTIPLIER: u8 = 5;
     pub const JET_NORMAL: u64 = 10_310;
-    pub const JET_SUPER: u64 = 51_550;
+    pub const JET_SUPER: u64 = 50_000;
     pub const DROP_TARGET: u64 = 2_310;
+    pub const STANDUP_NEW: u64 = 10_000;
+    pub const STANDUP_LIT: u64 = 5_000;
+    pub const STANDUP_BANK_COMPLETE: u64 = 500_000;
+    pub const STANDUP_LASER_AWARD: u64 = 50_000;
     pub const LASER_FIRE: u64 = 1_000;
+    pub const MAX_LASER_SHOTS: u8 = 20;
+    pub const RAMP_COMBO_STEP: u64 = 100_000;
+    pub const RAMP_COMBO_WINDOW_MS: u32 = 6_720;
+    pub const C3P0_FALLBACK_AWARD: u64 = 1_000_000;
+    pub const JEDI_LETTER_BASE: u64 = 550_000;
+    pub const JEDI_LETTER_STEP: u64 = 50_000;
     pub const JEDI_LETTERS_COMPLETE: u64 = 2_000_000;
     pub const MULTIBALL_START: u64 = 500_000;
     pub const MULTIBALL_JACKPOT: u64 = 1_000_000;
@@ -425,6 +439,20 @@ pub mod scoring {
     pub const WATTOS_CHANCE_SPIN: u64 = 20_000;
     pub const WATTOS_CHANCE_WIN: u64 = 250_000;
     pub const HANGAR_ESCAPE_HIT: u64 = 20_000;
+
+    /// Captive ball award for 0-based hit index `hit_idx` (no 2,310 base added).
+    /// Cycles `[50..10]`, `[500..100]`, `[5000..1000]`, then `[50000..10000]` forever.
+    pub const fn captive_ball_score(hit_idx: u16) -> u64 {
+        let tier = hit_idx / 5;
+        let step = (hit_idx % 5) as u64;
+        let mult = match tier {
+            0 => 10,
+            1 => 100,
+            2 => 1_000,
+            _ => 10_000,
+        };
+        (5 - step) * mult
+    }
 }
 
 /// Active running holoprojector scene state.
@@ -488,6 +516,24 @@ pub struct PlayerState {
     #[serde(default)]
     pub c3p0_parts: u8,
     #[serde(default)]
+    pub c3p0_reward_idx: u8,
+    #[serde(default)]
+    pub left_bank_mask: u8,
+    #[serde(default)]
+    pub right_bank_mask: u8,
+    #[serde(default)]
+    pub left_hotdog_lit: bool,
+    #[serde(default)]
+    pub right_hotdog_lit: bool,
+    #[serde(default)]
+    pub naboo_ship_lamps: u8,
+    #[serde(default)]
+    pub hold_bonus: bool,
+    #[serde(default)]
+    pub captive_ball_hits: u16,
+    #[serde(default)]
+    pub skill_shot_jedi_awarded: bool,
+    #[serde(default)]
     pub jedi_letters_total: u16,
     #[serde(default)]
     pub scenes_started: u32,
@@ -506,7 +552,7 @@ impl Default for PlayerState {
             scene_select_ready: false,
             laser_shots: 3,
             bonus_multiplier: 1,
-            bonus_points: 10_000,
+            bonus_points: 0,
             saucer_locks: 0,
             extra_balls: 0,
             jet_hits: 0,
@@ -516,7 +562,16 @@ impl Default for PlayerState {
             ramp_combo_count: 0,
             ramp_combo_window_ms: 0,
             ramp_combo_best: 0,
-            c3p0_parts: 0,
+            c3p0_parts: 4, // Factory "C-3P0 Game Start spot" = 4
+            c3p0_reward_idx: 0,
+            left_bank_mask: 0,
+            right_bank_mask: 0,
+            left_hotdog_lit: false,
+            right_hotdog_lit: false,
+            naboo_ship_lamps: 0,
+            hold_bonus: false,
+            captive_ball_hits: 0,
+            skill_shot_jedi_awarded: false,
             jedi_letters_total: 0,
             scenes_started: 0,
         }
@@ -622,7 +677,13 @@ mod tests {
 
         assert_eq!(scoring::BONUS_PER_SHIP * 10 * (scoring::BONUS_MAX_MULTIPLIER as u64), 5_000_000);
         assert_eq!(scoring::JET_NORMAL, 10_310);
-        assert_eq!(scoring::JET_SUPER, 51_550);
+        assert_eq!(scoring::JET_SUPER, 50_000);
         assert_eq!(scoring::MULTIBALL_SUPER_JACKPOT, 5_000_000);
+        assert_eq!(scoring::captive_ball_score(0), 50);
+        assert_eq!(scoring::captive_ball_score(4), 10);
+        assert_eq!(scoring::captive_ball_score(5), 500);
+        assert_eq!(scoring::captive_ball_score(10), 5_000);
+        assert_eq!(scoring::captive_ball_score(15), 50_000);
+        assert_eq!(scoring::captive_ball_score(20), 50_000);
     }
 }
