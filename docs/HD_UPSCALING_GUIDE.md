@@ -97,3 +97,77 @@ Captured on *Boonta Eve Podrace* (`scene:6`, frame `500`). Note: `--display-filt
 | `--hd --hd-scale 2 --aa` (soft-alpha edge blending) | `1280×960` | ![Podrace 2x AA](screenshots/hd_compare/podrace_2x_aa.png) |
 | `--hd --hd-scale 4 --aa` | `2560×1920` | ![Podrace 4x AA](screenshots/hd_compare/podrace_4x_aa.png) |
 | `--hd --hd-scale 8 --aa` | `5120×3840` | ![Podrace 8x AA](screenshots/hd_compare/podrace_8x_aa.png) |
+
+---
+
+## 6. Offline Neural Upscaling Guide (`scripts/upscale_pytorch.py`)
+
+`scripts/upscale_pytorch.py` upscales extracted `gfx/` PNG sequences using PyTorch and [`spandrel`](https://github.com/chaiNNer-org/spandrel) (supporting `.pth` and `.safetensors` checkpoints such as Real-ESRGAN, MoSR, PLKSR, SwinIR, DAT, ATD) or a built-in PyTorch `bicubic` antialias fallback when `--model` is omitted.
+
+### Prerequisites
+
+```bash
+pip install torch numpy pillow spandrel safetensors
+```
+
+### CLI Options
+
+| Flag | Default | Description |
+|---|---|---|
+| `--assets-dir <PATH>` | `work/swe1_assets` | Root assets folder containing `gfx/gfx_manifest.json`. |
+| `--output-dir <PATH>` | `<assets-dir>/gfx_hd_<model>` | Destination folder. When omitted, suffixed with the model filename stem (or `bicubic` if no `--model`). |
+| `--scale <2\|3\|4\|8>` | `2` | Target output scale factor. If the model's native scale differs (e.g. a `4×` model with `--scale 2`), the output is cleanly resampled with bicubic antialias. |
+| `--model <PATH>` | `None` | Path to a `.pth` or `.safetensors` super-resolution checkpoint. |
+| `--anim <SUBSTR>` | `None` | Case-insensitive substring filter on `symbol_name` (e.g. `--anim podrace` or `--anim kahuna`) for fast previews. |
+| `--fp16` | `False` | Enables float16 inference on CUDA (`model.half()` when `supports_half` is true, otherwise `torch.amp.autocast`). |
+| `--tile <PX>` | `256` | Tile size (with 16 px overlap) for large frames (`640×240`) to prevent CUDA OOM on 8 GiB GPUs. Set `0` to disable tiling. |
+| `--blend <0..1>` | `1.0` | Mixes AI output with bicubic antialias (`blend * AI + (1 - blend) * bicubic`, e.g. `0.65`) to curb GAN texture shimmer. |
+| `--soft-alpha` | `False` | Preserves smooth bicubic alpha edges instead of a hard 1-bit `0.5` threshold (pair with `pin2k-desktop --aa`). |
+| `--temporal-stabilize` | `False` | Enables motion-aware temporal EMA guided by `1×` source frame deltas to eliminate static-background flicker without ghosting. |
+| `--temporal-strength <0..1>` | `0.65` | Temporal blend strength applied to static regions when `--temporal-stabilize` is active. |
+| `--temporal-threshold <0..1>` | `0.03` | `1×` source delta threshold below which a region is considered static. |
+| `--resume` | `False` | Skips frames that already exist in `--output-dir` so interrupted runs can resume cleanly. |
+
+### Pipeline Details
+
+1. **RGB Edge-Padding (`edge_pad_rgb`)**: Dilates opaque RGB colors 2 passes into adjacent `alpha == 0` pixels so neural convolutions never sample black/magenta (`0x7C1F`) background values across sprite borders.
+2. **Alignment & Tiling (`infer_tiled`)**: Splits frames larger than `--tile` into overlapping tiles (`tile_pad=16`), pads each tile to a multiple of 8 with replicate border padding, runs inference, and crops back to exact target dimensions.
+3. **Temporal Consistency & Alpha**: Optional `--blend`, `--temporal-stabilize` (motion-aware EMA using `1×` source deltas), and `--soft-alpha` prevent frame-to-frame flickering and 1-bit silhouette popping.
+4. **Live Progress Bar**: Displays completion percentage, processed/total frame count, throughput (`img/s`), and ETA.
+
+### Usage Examples
+
+```powershell
+# 1. Quick preview with temporal stabilization + soft alpha + AI/bicubic blend
+python scripts/upscale_pytorch.py --scale 4 --model work/models/4xNomos2_realplksr_dysample.safetensors --anim podrace --fp16 --temporal-stabilize --blend 0.75 --soft-alpha
+
+# 2. Full 4x neural run writing directly to gfx_hd/ for pin2k-desktop --hd
+python scripts/upscale_pytorch.py --scale 4 --model work/models/4xNomos2_otf_esrgan.safetensors --output-dir work/swe1_assets/gfx_hd --fp16 --temporal-stabilize --resume
+
+# 3. Launch pin2k-desktop using the generated gfx_hd/ pack at 4x (2560x1920)
+.\target\release\pin2k-desktop.exe --assets-dir .\work\swe1_assets --hd --hd-scale 4 --aa --window
+```
+
+> [!NOTE]
+> `pin2k-desktop --hd` reads `<assets-dir>/gfx_hd/gfx_manifest.json` by default, or you can override it directly with `--hd-dir <PATH>` (which also implies `--hd`), e.g. `--hd-dir work/swe1_assets/gfx_hd_2x-DeGif_4x`.
+
+---
+
+## 7. Multi-Frame Video Super-Resolution (`scripts/upscale_vsr.py`)
+
+For maximum temporal consistency across animation sequences and pre-rendered `comp 30` movies, `scripts/upscale_vsr.py` processes each animation as a temporal sliding window `[t - r .. t + r]` in two modes:
+
+1. **Optical-Flow Temporal Fusion (default)**: Upscales each frame with an optional `spandrel` `--model` (or bicubic fallback), computes dense Farneback optical flow (`opencv-python`) between consecutive `1×` frames, warps neighboring `4×` frames onto the center frame, and performs occlusion-aware photometric fusion (`--temporal-weight`, `--sigma`).
+2. **TorchScript Multi-Frame VSR (`--vsr-model`)**: Runs a multi-frame VSR network (e.g. RealBasicVSR / BasicVSR++ / RealVSR exported as TorchScript) over `btchw`, `bcthw`, or channel-concatenated `concat` windows (`--layout`).
+3. **Automatic Single-Frame Dispatch (`--single-model`)**: Animations containing only **1 frame** (static backdrops, logos, overlays) automatically bypass optical-flow/VSR and use `--single-model` (or `--model` when omitted) directly.
+
+```powershell
+# Optical-flow VSR with a spandrel model on podrace
+python scripts/upscale_vsr.py --scale 4 --model work/models/4xNomos2_realplksr_dysample.safetensors --anim podrace --fp16 --soft-alpha
+
+# Dedicated single-frame model (MoSR) + multi-frame VSR (PLKSR + optical flow)
+python scripts/upscale_vsr.py --scale 4 --single-model work/models/4xNomos2_hq_mosr.safetensors --model work/models/4xNomos2_realplksr_dysample.safetensors --fp16 --soft-alpha --resume
+
+# Multi-frame TorchScript VSR model with single-frame fallback
+python scripts/upscale_vsr.py --scale 4 --single-model work/models/4xNomos2_hq_mosr.safetensors --vsr-model work/models/RealBasicVSR.pt --layout btchw --fp16 --soft-alpha
+```

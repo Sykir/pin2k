@@ -114,6 +114,10 @@ pub(crate) struct Cli {
     #[arg(long, default_value_t = false)]
     pub(crate) hd: bool,
 
+    /// Override the HD sprites directory (defaults to `<assets-dir>/gfx_hd/` when `--hd` is set). Implies `--hd`.
+    #[arg(long)]
+    pub(crate) hd_dir: Option<PathBuf>,
+
     /// Output framebuffer scale (`1` = 640x480, `2` = 1280x960, `4` = 2560x1920, `8` = 5120x3840). Defaults to `2` when `--hd` is enabled.
     #[arg(long)]
     pub(crate) hd_scale: Option<u32>,

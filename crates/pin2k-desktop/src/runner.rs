@@ -105,16 +105,21 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
     let mut compositor = SoftwareCompositor::new();
     compositor.native_fullscreen = !cli.telemetry_overlay;
     compositor.soft_alpha = cli.aa;
-    let out_scale = cli.hd_scale.unwrap_or(if cli.hd { 2 } else { 1 }).clamp(1, 8);
+    let use_hd = cli.hd || cli.hd_dir.is_some();
+    let out_scale = cli.hd_scale.unwrap_or(if use_hd { 2 } else { 1 }).clamp(1, 8);
     if !cli.telemetry_overlay && out_scale > 1 {
         compositor.set_output_scale(out_scale);
     }
     let mut loaded_anims = if let Some(ref dir) = cli.assets_dir {
         let n = compositor.load_assets(dir)?;
-        if cli.hd {
-            let hd_n = compositor.load_hd_assets(dir)?;
+        if use_hd {
+            let hd_path = cli.hd_dir.clone().unwrap_or_else(|| dir.join("gfx_hd"));
+            let hd_n = compositor.load_hd_assets_from_dir(&hd_path)?;
             if hd_n > 0 {
-                println!("Loaded {hd_n} HD upscaled animations from {}/gfx_hd", dir.display());
+                println!(
+                    "Loaded {hd_n} HD upscaled animations from {}",
+                    hd_path.display()
+                );
             }
         }
         n

@@ -190,8 +190,13 @@ impl SoftwareCompositor {
     }
 
     /// Overrides matching animations with upscaled HD frames from `<assets_dir>/gfx_hd/gfx_manifest.json`.
+    #[allow(dead_code)]
     pub fn load_hd_assets(&mut self, assets_dir: &Path) -> anyhow::Result<usize> {
-        let hd_dir = assets_dir.join("gfx_hd");
+        self.load_hd_assets_from_dir(&assets_dir.join("gfx_hd"))
+    }
+
+    /// Overrides matching animations with upscaled HD frames from an explicit `hd_dir` containing `gfx_manifest.json`.
+    pub fn load_hd_assets_from_dir(&mut self, hd_dir: &Path) -> anyhow::Result<usize> {
         let manifest_path = hd_dir.join("gfx_manifest.json");
         if !manifest_path.exists() {
             return Ok(0);

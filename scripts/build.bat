@@ -2,6 +2,7 @@
 setlocal EnableExtensions
 chcp 65001 >nul
 cd /d "%~dp0"
+cd ..
 
 set "DO_EXTRACT=0"
 set "NO_PAUSE=0"
@@ -14,11 +15,11 @@ shift
 goto parse_args
 :args_done
 
-echo === [1/2] Compilation release du workspace pin2k ===
+echo === [1/2] Building pin2k workspace (release) ===
 cargo build --release --workspace
 if errorlevel 1 (
     echo.
-    echo [ERREUR] Echec de la compilation Cargo.
+    echo [ERROR] Cargo build failed.
     if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
@@ -33,7 +34,7 @@ if "%DO_EXTRACT%"=="0" (
 
 if "%DO_EXTRACT%"=="1" (
     echo.
-    echo === [2/2] Reconstruction ROM, verification, extraction assets et gamecode ===
+    echo === [2/2] Reconstructing ROM, verifying, extracting assets and gamecode ===
     ".\target\release\pin2k-rom-tool.exe" reconstruct --input-dir .\roms --prefix swe1_ --output .\work\swe1_prism_flat.bin --dcs-output .\work\swe1_dcs_flat.bin
     if errorlevel 1 goto extract_err
 
@@ -48,13 +49,13 @@ if "%DO_EXTRACT%"=="1" (
 )
 
 echo.
-echo [OK] Build termine avec succes.
-echo Lancez "run.bat" pour demarrer le runtime.
+echo [OK] Build completed successfully.
+echo Run "scripts\run.bat" to start the runtime.
 if "%NO_PAUSE%"=="0" pause
 exit /b 0
 
 :extract_err
 echo.
-echo [ERREUR] Echec lors de la reconstruction ou de l'extraction des ressources.
+echo [ERROR] Failed during ROM reconstruction or asset extraction.
 if "%NO_PAUSE%"=="0" pause
 exit /b 1
