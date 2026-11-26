@@ -265,6 +265,19 @@ pub fn save_png(img: &RgbaImage, output_path: &Path) -> Result<(), image::ImageE
 // ============================================================================
 
 /// Converts an RGB555 (`u16`) framebuffer into an `RgbaImage`.
+/// Returns `true` if `px` matches the Pinball 2000 `0x7C1F` magenta transparency key
+/// (including slightly quantized near-magenta such as `0x7CDF` in `anim_watto_scene_cube`).
+#[inline]
+pub const fn is_p2k_transparent_rgb555(px: u16) -> bool {
+    if px == P2K_TRANSPARENT_KEY_RGB555 {
+        return true;
+    }
+    let r = (px >> 10) & 0x1F;
+    let g = (px >> 5) & 0x1F;
+    let b = px & 0x1F;
+    r >= 30 && g <= 6 && b >= 30
+}
+
 pub fn rgb555_canvas_to_rgba(
     canvas: &[u16],
     width: u32,
@@ -272,11 +285,17 @@ pub fn rgb555_canvas_to_rgba(
     transparent_key: Option<u16>,
 ) -> RgbaImage {
     let mut img = ImageBuffer::new(width, height);
+    let use_p2k_key = transparent_key == Some(P2K_TRANSPARENT_KEY_RGB555);
     for y in 0..height {
         let row_off = (y as usize) * (width as usize);
         for x in 0..width {
             let px = canvas[row_off + (x as usize)];
-            img.put_pixel(x, y, Rgba(decode_16bit_pixel(px, PixelFormat::Rgb555, transparent_key)));
+            let rgba = if use_p2k_key && is_p2k_transparent_rgb555(px) {
+                [0, 0, 0, 0]
+            } else {
+                decode_16bit_pixel(px, PixelFormat::Rgb555, transparent_key)
+            };
+            img.put_pixel(x, y, Rgba(rgba));
         }
     }
     img
@@ -919,5 +938,15 @@ mod tests {
         let mut canvas = [0u16; 4];
         decompress_p2k_frame_into_rgb555(21, 4, 1, None, 0, &stream, &mut canvas).unwrap();
         assert_eq!(canvas, [0x7C00, 0x7C00, 0x7C00, 0x001F]);
+    }
+
+    #[test]
+    fn rgb555_canvas_to_rgba_keys_quantized_magenta() {
+        // 0x7C1F = exact magenta (255,0,255), 0x7CDF = quantized magenta (255,49,255), 0x7C00 = red
+        let canvas = [P2K_TRANSPARENT_KEY_RGB555, 0x7CDF, 0x7C00];
+        let img = rgb555_canvas_to_rgba(&canvas, 3, 1, Some(P2K_TRANSPARENT_KEY_RGB555));
+        assert_eq!(img.get_pixel(0, 0).0, [0, 0, 0, 0]);
+        assert_eq!(img.get_pixel(1, 0).0, [0, 0, 0, 0]);
+        assert_eq!(img.get_pixel(2, 0).0, [255, 0, 0, 255]);
     }
 }
