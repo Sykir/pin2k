@@ -19,6 +19,7 @@
 *.png
 !docs/screenshots/*.png
 !docs/screenshots/hd_compare/*.png
+!mods/darth_jarjar/screenshots/*.png
 *.gif
 *.mp4
 *.trace
