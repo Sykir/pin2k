@@ -83,3 +83,17 @@ All 14 SWE1 scenes captured from `pin2k-desktop` (left: native `1×` `640×480` 
 | **11 — Mos Espa Cantina** (`scene:11`) | ![Mos Espa Cantina 1x](screenshots/hd_compare/scene_11_1x.png) | ![Mos Espa Cantina HD](screenshots/hd_compare/scene_11_hd.png) |
 | **12 — R2-D2 Repair** (`scene:12`) | ![R2-D2 Repair 1x](screenshots/hd_compare/scene_12_1x.png) | ![R2-D2 Repair HD](screenshots/hd_compare/scene_12_hd.png) |
 | **13 — Mystery (`?`)** (`scene:13`) | ![Mystery 1x](screenshots/hd_compare/scene_13_1x.png) | ![Mystery HD](screenshots/hd_compare/scene_13_hd.png) |
+
+---
+
+## 5. Output Scales (`1×`, `2×`, `4×`, `8×`) & Antialiasing (`--aa`)
+
+Captured on *Boonta Eve Podrace* (`scene:6`, frame `500`). Note: `--display-filter <nearest|bilinear|crt>` also applies real-time bilinear / CRT scanline filtering when presenting into a `--window` or `--fullscreen` viewport.
+
+| Mode / Flags | Output Resolution | Screenshot |
+|---|---|---|
+| Native (`1×`) | `640×480` | ![Podrace 1x](screenshots/hd_compare/podrace_1x.png) |
+| `--hd --hd-scale 2` (1-bit alpha, no `--aa`) | `1280×960` | ![Podrace 2x no AA](screenshots/hd_compare/podrace_2x_no_aa.png) |
+| `--hd --hd-scale 2 --aa` (soft-alpha edge blending) | `1280×960` | ![Podrace 2x AA](screenshots/hd_compare/podrace_2x_aa.png) |
+| `--hd --hd-scale 4 --aa` | `2560×1920` | ![Podrace 4x AA](screenshots/hd_compare/podrace_4x_aa.png) |
+| `--hd --hd-scale 8 --aa` | `5120×3840` | ![Podrace 8x AA](screenshots/hd_compare/podrace_8x_aa.png) |
