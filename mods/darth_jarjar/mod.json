@@ -1,0 +1,73 @@
+{
+  "id": "darth_jarjar",
+  "name": "Darth Jar Jar & The Gungan Menace",
+  "author": "pin2k",
+  "version": "1.0.0",
+  "description": "Replaces every enemy in Star Wars Episode I (Battle Droids, Droidekas, Vulture Fighters, Hangar Droids, Hover Tanks, Probe Droids, Opee, Watto) with Jar Jar Binks, and replaces Darth Maul with custom Darth Jar Jar wielding a double-bladed red lightsaber!",
+  "base_game": "swe1",
+  "script": "main.rhai",
+  "anim_overrides": {
+    "anim_jedi_battle_maul_5_move": "darth_jarjar_combat",
+    "anim_jedi_battle_maul_back_block_3": "darth_jarjar_combat",
+    "anim_jedi_battle_maul_chop_single": "darth_jarjar_attack",
+    "anim_jedi_battle_maul_low_right_single": "darth_jarjar_attack",
+    "anim_jedi_battle_maul_death_1": "darth_jarjar_death",
+    "anim_jedi_battle_maul_death_2": "darth_jarjar_death",
+    "anim_jedi_battle_icon_maul": "darth_jarjar_icon",
+    "anim_jedi_battle_win_icon_maul": "darth_jarjar_icon",
+    "anim_jedi_spirit_maul": "darth_jarjar_combat",
+    "anim_darth_maul_game_over": "darth_jarjar_gameover",
+    "anim_bonus_character_maul1": "darth_jarjar_icon",
+    "anim_bonus_character_maul2": "darth_jarjar_icon",
+
+    "anim_left_bdroid_unpacking": "jarjar_enemy_surprise",
+    "anim_right_bdroid_unpacking": "jarjar_enemy_surprise",
+    "anim_left_bdroid_standing": "jarjar_enemy_idle",
+    "anim_right_bdroid_standing": "jarjar_enemy_idle",
+    "anim_left_bdroid_shooting": "jarjar_enemy_tongue",
+    "anim_right_bdroid_shooting": "jarjar_enemy_tongue",
+    "anim_bdroid_on_stap": "jarjar_enemy_jump",
+
+    "anim_destroyer_droid_s_roll": "jarjar_enemy_jump",
+    "anim_destroyer_droid_m_roll": "jarjar_enemy_jump",
+    "anim_destroyer_droid_l_roll": "jarjar_enemy_jump",
+    "anim_destroyer_droid_s_idle": "jarjar_enemy_stare",
+    "anim_destroyer_droid_m_idle": "jarjar_enemy_stare",
+    "anim_destroyer_droid_l_idle": "jarjar_enemy_stare",
+    "anim_destroyer_droid_s_shooting": "jarjar_enemy_tongue",
+    "anim_destroyer_droid_m_shooting": "jarjar_enemy_tongue",
+    "anim_destroyer_droid_l_shooting": "jarjar_enemy_tongue",
+
+    "anim_federation_fighter": "jarjar_enemy_jump",
+    "anim_federation_fighter_redeye": "darth_jarjar_combat",
+    "anim_federation_fighter_flyby": "jarjar_enemy_fall",
+
+    "anim_gungan_sub_opee": "jarjar_enemy_tongue",
+
+    "anim_hangar_droid_run": "jarjar_enemy_jump",
+
+    "anim_hover_tank_l_enter": "jarjar_enemy_surprise",
+    "anim_hover_tank_c_enter": "jarjar_enemy_surprise",
+    "anim_hover_tank_r_enter": "jarjar_enemy_surprise",
+    "anim_hover_tank_l_float": "jarjar_enemy_idle",
+    "anim_hover_tank_c_float": "jarjar_enemy_stare",
+    "anim_hover_tank_r_float": "jarjar_enemy_idle",
+    "anim_hover_tank_l_shoot": "jarjar_enemy_tongue",
+    "anim_hover_tank_c_shoot": "jarjar_enemy_tongue",
+    "anim_hover_tank_r_shoot": "jarjar_enemy_tongue",
+
+    "anim_sith_probe_hover": "jarjar_enemy_stare",
+    "anim_sith_probe_hover_far": "jarjar_enemy_idle",
+    "anim_sith_probe_fly_1": "jarjar_enemy_jump",
+    "anim_sith_probe_fly_2": "jarjar_enemy_jump",
+    "anim_sith_probe_fly_3": "jarjar_enemy_jump",
+
+    "anim_watto_scene_left_loop": "jarjar_enemy_idle",
+    "anim_watto_scene_left_to_middle": "jarjar_enemy_jump",
+    "anim_watto_scene_hand_to_chin_middle": "jarjar_enemy_stare",
+    "anim_watto_scene_chin_loop_middle": "jarjar_enemy_stare",
+    "anim_watto_scene_hand_down_middle": "jarjar_enemy_tongue",
+    "anim_watto_scene_middle_to_right": "jarjar_enemy_jump",
+    "anim_watto_scene_right_loop": "jarjar_enemy_surprise"
+  }
+}
