@@ -47,6 +47,16 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.set_shield_raised(should_raise);
     }
 
+    fn activate_playfield_valid(&mut self) {
+        self.playfield_valid = true;
+        self.first_ball_serve = false;
+        self.skill_shot_grace_ms = 160;
+        self.sync_shield_position();
+        if self.active_scene.is_none() && matches!(self.multiball, ActiveMultiball::None) {
+            self.emit_sound(sound::MAINPLAY_LOOP, true);
+        }
+    }
+
     pub(super) fn record_playfield_switch(&mut self, id: u8) {
         if self.playfield_valid {
             return;
@@ -60,9 +70,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 | sw::SHIELD_POPPER
         );
         if immediate {
-            self.playfield_valid = true;
-            self.skill_shot_grace_ms = 160;
-            self.sync_shield_position();
+            self.activate_playfield_valid();
             return;
         }
         let counted = matches!(
@@ -96,9 +104,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         if counted && id < 64 {
             self.valid_playfield_switches |= 1u64 << id;
             if self.valid_playfield_switches.count_ones() >= 3 {
-                self.playfield_valid = true;
-                self.skill_shot_grace_ms = 160;
-                self.sync_shield_position();
+                self.activate_playfield_valid();
             }
         }
     }
@@ -1009,7 +1015,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.add_score(comp_pts);
         self.audits.scenes_completed = self.audits.scenes_completed.saturating_add(1);
         self.emit_coil(drive::LIGHTSABER_NEON, 160);
-        self.emit_sound(sound::MAIN_THEME_LOOP, true);
+        self.emit_sound(sound::MAINPLAY_LOOP, true);
         self.emit_ard(scene.complete_ard());
         self.trigger_leff(LeffKind::SceneComplete);
         self.scene_complete_fx(scene);
@@ -1044,7 +1050,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.players[self.current_player].jedi_rank = new_rank;
                 self.audits.maul_duels_won = self.audits.maul_duels_won.saturating_add(1);
                 self.add_score(5_000_000);
-                self.emit_sound(sound::MAIN_THEME_LOOP, true);
+                self.emit_sound(sound::MAINPLAY_LOOP, true);
                 self.emit_sound(sound::DARTH_MAUL_DEATH_YELL, false);
                 self.emit_ard("ard_jedi_battle_multiball_ending_speech");
                 self.trigger_leff(LeffKind::JediMultiballFinish);

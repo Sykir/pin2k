@@ -1583,3 +1583,44 @@
         }
         assert_eq!(machine.score_multiplier, 2);
     }
+
+    #[test]
+    fn swe1_authentic_shooter_and_mainplay_music_transitions() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        // Boot into attract mode, then start game (Ball 1)
+        machine.tick(1_250);
+        assert_eq!(machine.state, MachineState::Attract);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::START_BUTTON);
+        assert_eq!(machine.state, MachineState::InGame);
+        assert!(machine.first_ball_serve);
+        assert!(!machine.playfield_valid);
+        assert!(
+            machine.audio.played.iter().any(|(id, looping)| *id == sound::MAIN_THEME_LOOP && *looping),
+            "Ball 1 shooter lane should play ard_shooter_tune_theme (0x0001)"
+        );
+
+        // Ball leaves shooter lane and validates playfield -> switches to MAINPLAY_LOOP (0x0002)
+        machine.audio.played.clear();
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_INLANE);
+        assert!(machine.playfield_valid);
+        assert!(!machine.first_ball_serve);
+        assert!(
+            machine.audio.played.iter().any(|(id, looping)| *id == sound::MAINPLAY_LOOP && *looping),
+            "Valid playfield should switch to ard_mainplay_tune (0x0002)"
+        );
+
+        // Drain Ball 1 after ball save expires -> Ball 2 shooter lane plays SHOOTER_GROOVE_LOOP (0x0003)
+        machine.audio.played.clear();
+        machine.ball_save_ms = 0;
+        machine.on_ball_drained();
+        assert_eq!(machine.current_ball, 2);
+        assert!(!machine.first_ball_serve);
+        assert!(
+            machine.audio.played.iter().any(|(id, looping)| *id == sound::SHOOTER_GROOVE_LOOP && *looping),
+            "Ball 2 shooter lane should play ard_shooter_tune (0x0003)"
+        );
+    }

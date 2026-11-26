@@ -144,6 +144,7 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub balls_in_play: u8,
     pub ball_save_ms: u32,
     pub playfield_valid: bool,
+    pub first_ball_serve: bool,
     pub valid_playfield_switches: u64,
     pub skill_shot_ready: bool,
     pub skill_shot_grace_ms: u32,
@@ -269,6 +270,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             balls_in_play: 0,
             ball_save_ms: 0,
             playfield_valid: false,
+            first_ball_serve: false,
             valid_playfield_switches: 0,
             skill_shot_ready: false,
             skill_shot_grace_ms: 0,
@@ -604,8 +606,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.right_saber_color = 0;
             self.audits.total_games_played = self.audits.total_games_played.saturating_add(1);
             self.state = MachineState::InGame;
+            self.first_ball_serve = true;
             self.audio.stop_all();
-            self.emit_sound(sound::MAIN_THEME_LOOP, true);
             self.emit_event(GameEvent::GameStarted { players: 1 });
             self.start_ball();
         } else if self.state == MachineState::InGame
@@ -669,7 +671,16 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
         if self.game_title == GameTitle::Swe1 {
             self.set_shield_raised(false);
+            let shooter_tune = if self.first_ball_serve {
+                sound::MAIN_THEME_LOOP
+            } else {
+                sound::SHOOTER_GROOVE_LOOP
+            };
+            self.emit_sound(shooter_tune, true);
         } else {
+            if self.current_ball == 1 && self.current_player == 0 {
+                self.emit_sound(sound::MAIN_THEME_LOOP, true);
+            }
             self.rfm.active_wave = None;
             self.rfm.wave_hits_left = 0;
             self.rfm.multiball = RfmMultiball::None;
@@ -735,7 +746,12 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 }
                 self.multiball = ActiveMultiball::None;
                 self.hw.set_drive_hold(drive::LIGHTSABER_NEON, false);
-                self.audio.play_sound(sound::MAIN_THEME_LOOP, true);
+                let resume_tune = if self.game_title == GameTitle::Swe1 {
+                    sound::MAINPLAY_LOOP
+                } else {
+                    sound::MAIN_THEME_LOOP
+                };
+                self.audio.play_sound(resume_tune, true);
                 self.set_banner("MULTIBALL ENDED", 2_000);
             }
             return;
@@ -778,6 +794,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         self.eval_script_trigger(ScriptTrigger::OnBallEnd);
         self.eval_mod_script_hook("on_ball_end", ());
+        self.first_ball_serve = false;
         self.state = MachineState::InGame;
 
         // Extra ball check
@@ -1167,7 +1184,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.jarjar_juggle = None;
                     self.podrace = None;
                     self.active_anim_hint.clear();
-                    self.audio.play_sound(sound::MAIN_THEME_LOOP, true);
+                    self.audio.play_sound(sound::MAINPLAY_LOOP, true);
                     self.set_banner(format!("{title} TIME EXPIRED"), 2_500);
                 }
             }

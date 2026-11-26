@@ -163,6 +163,7 @@ pub mod sound {
     pub const BOOT_BONG: SoundId = SoundId(0x003A);            // dcs-bong.ogg
     pub const MAIN_THEME_LOOP: SoundId = SoundId(0x0001);      // acd_star_wars_main_theme
     pub const MAINPLAY_LOOP: SoundId = SoundId(0x0002);        // acd_mainplay_tune
+    pub const SHOOTER_GROOVE_LOOP: SoundId = SoundId(0x0003);  // acd_shooter_groove
     pub const PODRACE_MUSIC_LOOP: SoundId = SoundId(0x0009);   // acd_pod_race_music
     pub const CANTINA_MUSIC_LOOP: SoundId = SoundId(0x000A);   // acd_jedi_council_music_chairs
     pub const DUEL_OF_THE_FATES_LOOP: SoundId = SoundId(0x000E); // acd_darth_maul_battle_tune_1
