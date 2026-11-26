@@ -16,6 +16,7 @@
 *.ogg
 *.png
 !docs/screenshots/*.png
+!docs/screenshots/hd_compare/*.png
 *.gif
 *.mp4
 *.trace
