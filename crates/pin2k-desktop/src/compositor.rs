@@ -28,7 +28,7 @@ pub struct LoadedFont {
     pub glyphs: HashMap<u8, FontGlyphEntry>,
 }
 
-const MAX_CACHED_FRAMES_PER_ANIM: usize = 48;
+const MAX_CACHE_BYTES: usize = 256 * 1024 * 1024; // 256 MiB global LRU budget for 2x/4x/8x HD frames
 
 pub struct LoadedAnim {
     pub name: String,
@@ -37,7 +37,6 @@ pub struct LoadedAnim {
     pub hd_scale: u32,
     frame_paths: Vec<PathBuf>,
     decoded_frames: HashMap<usize, RgbaImage>,
-    cache_order: VecDeque<usize>,
 }
 
 impl LoadedAnim {
@@ -49,57 +48,11 @@ impl LoadedAnim {
             hd_scale,
             frame_paths,
             decoded_frames: HashMap::new(),
-            cache_order: VecDeque::new(),
         }
     }
 
     fn frame_count(&self) -> usize {
         self.frame_paths.len()
-    }
-
-    /// Lazily decodes `frame_idx` for `target_scale` with a bounded per-animation cache.
-    /// Returns `(image, extra_blit_scale)` where `extra_blit_scale` upscales 1x fallback sprites.
-    fn get_frame(&mut self, frame_idx: usize, target_scale: u32) -> Option<(RgbaImage, u32)> {
-        if self.frame_paths.is_empty() {
-            return None;
-        }
-        let idx = frame_idx % self.frame_paths.len();
-        let hd = self.hd_scale.max(1);
-        let target = target_scale.max(1);
-        let extra_scale = if hd < target && target % hd == 0 {
-            target / hd
-        } else {
-            1
-        };
-
-        if let Some(img) = self.decoded_frames.get(&idx) {
-            return Some((img.clone(), extra_scale));
-        }
-
-        let img = image::open(&self.frame_paths[idx]).ok()?.to_rgba8();
-        let prepared = if hd != target && extra_scale == 1 {
-            let lw = ((img.width() * target) / hd).max(1);
-            let lh = ((img.height() * target) / hd).max(1);
-            let mut resized =
-                image::imageops::resize(&img, lw, lh, image::imageops::FilterType::Triangle);
-            // Keep crisp 1-bit Pinball 2000 silhouette alpha so `blit_rgba_ex`
-            // never draws semi-transparent fringe pixels as solid outlines.
-            for px in resized.pixels_mut() {
-                px[3] = if px[3] >= 128 { 255 } else { 0 };
-            }
-            resized
-        } else {
-            img
-        };
-
-        if self.decoded_frames.len() >= MAX_CACHED_FRAMES_PER_ANIM {
-            if let Some(evict) = self.cache_order.pop_front() {
-                self.decoded_frames.remove(&evict);
-            }
-        }
-        self.decoded_frames.insert(idx, prepared.clone());
-        self.cache_order.push_back(idx);
-        Some((prepared, extra_scale))
     }
 }
 
@@ -124,10 +77,13 @@ pub struct SoftwareCompositor {
     pub framebuffer: RgbaImage,
     pub native_240: RgbaImage,
     pub output_scale: u32,
+    pub soft_alpha: bool,
     pub native_fullscreen: bool,
     pub frames_presented: u64,
     anims: Vec<LoadedAnim>,
     anim_lookup: HashMap<String, usize>,
+    cache_bytes: usize,
+    cache_lru: VecDeque<(usize, usize)>,
     fonts: HashMap<String, LoadedFont>,
     active_anim_idx: Option<usize>,
     pub(crate) anim_elapsed_ms: u64,
@@ -150,10 +106,13 @@ impl SoftwareCompositor {
             framebuffer: ImageBuffer::from_pixel(SCREEN_W, SCREEN_H, Rgba([6, 8, 18, 255])),
             native_240: ImageBuffer::from_pixel(SCREEN_W, 240, Rgba([5, 7, 15, 255])),
             output_scale: 1,
+            soft_alpha: false,
             native_fullscreen: true,
             frames_presented: 0,
             anims: Vec::new(),
             anim_lookup: HashMap::new(),
+            cache_bytes: 0,
+            cache_lru: VecDeque::new(),
             fonts: HashMap::new(),
             active_anim_idx: None,
             anim_elapsed_ms: 0,
@@ -255,14 +214,15 @@ impl SoftwareCompositor {
                 continue;
             }
             if let Some(anim) = self.anims.get_mut(idx) {
-                let scale = (entry.height / anim.height.max(1)).clamp(1, 4);
+                let scale = (entry.height / anim.height.max(1)).clamp(1, 8);
                 anim.frame_paths = frame_paths;
                 anim.decoded_frames.clear();
-                anim.cache_order.clear();
                 anim.hd_scale = scale;
                 upgraded += 1;
             }
         }
+        self.cache_bytes = 0;
+        self.cache_lru.clear();
         Ok(upgraded)
     }
 
@@ -368,9 +328,9 @@ impl SoftwareCompositor {
         }
     }
 
-    /// Sets the output framebuffer scale (`1` = 640x480, `2` = 1280x960, `3` = 1920x1440).
+    /// Sets the output framebuffer scale (`1` = 640x480, `2` = 1280x960, `4` = 2560x1920, `8` = 5120x3840).
     pub fn set_output_scale(&mut self, scale: u32) {
-        let s = scale.clamp(1, 4);
+        let s = scale.clamp(1, 8);
         if self.output_scale == s {
             return;
         }
@@ -379,8 +339,58 @@ impl SoftwareCompositor {
         self.native_240 = ImageBuffer::from_pixel(SCREEN_W * s, 240 * s, Rgba([5, 7, 15, 255]));
         for anim in &mut self.anims {
             anim.decoded_frames.clear();
-            anim.cache_order.clear();
         }
+        self.cache_bytes = 0;
+        self.cache_lru.clear();
+    }
+
+    fn get_cached_frame(&mut self, anim_idx: usize, frame_idx: usize) -> Option<(RgbaImage, u32)> {
+        let target = self.output_scale.max(1);
+        let (fc, hd) = {
+            let anim = self.anims.get(anim_idx)?;
+            (anim.frame_count(), anim.hd_scale.max(1))
+        };
+        if fc == 0 {
+            return None;
+        }
+        let idx = frame_idx % fc;
+        let extra_scale = if hd < target && target % hd == 0 {
+            target / hd
+        } else {
+            1
+        };
+        if let Some(img) = self.anims[anim_idx].decoded_frames.get(&idx) {
+            return Some((img.clone(), extra_scale));
+        }
+        let path = self.anims[anim_idx].frame_paths[idx].clone();
+        let img = image::open(&path).ok()?.to_rgba8();
+        let prepared = if hd != target && extra_scale == 1 {
+            let lw = ((img.width() * target) / hd).max(1);
+            let lh = ((img.height() * target) / hd).max(1);
+            let mut resized =
+                image::imageops::resize(&img, lw, lh, image::imageops::FilterType::Triangle);
+            if !self.soft_alpha {
+                for px in resized.pixels_mut() {
+                    px[3] = if px[3] >= 128 { 255 } else { 0 };
+                }
+            }
+            resized
+        } else {
+            img
+        };
+        let bytes = prepared.as_raw().len();
+        while self.cache_bytes + bytes > MAX_CACHE_BYTES {
+            let Some((ev_anim, ev_frame)) = self.cache_lru.pop_front() else {
+                break;
+            };
+            if let Some(removed) = self.anims.get_mut(ev_anim).and_then(|a| a.decoded_frames.remove(&ev_frame)) {
+                self.cache_bytes = self.cache_bytes.saturating_sub(removed.as_raw().len());
+            }
+        }
+        self.anims[anim_idx].decoded_frames.insert(idx, prepared.clone());
+        self.cache_lru.push_back((anim_idx, idx));
+        self.cache_bytes += bytes;
+        Some((prepared, extra_scale))
     }
 
     pub fn encode_png(&self) -> anyhow::Result<Vec<u8>> {
@@ -510,30 +520,33 @@ impl VideoBackend for SoftwareCompositor {
             if let Some(idx) = self.active_anim_idx {
                 let elapsed = self.anim_elapsed_ms;
                 let looping = self.anim_loop;
-                if let Some(anim) = self.anims.get_mut(idx) {
-                    let fps = anim.fps.max(1) as u64;
+                let fi_opt = self.anims.get(idx).and_then(|anim| {
                     let fc = anim.frame_count();
-                    if fc > 0 {
-                        let raw_idx = ((elapsed * fps) / 1000) as usize;
-                        let fi = if looping { raw_idx % fc } else { raw_idx.min(fc - 1) };
-                        if let Some((f, extra_s)) = anim.get_frame(fi, out_s) {
-                            let scale_x = if f.width() <= 240 * out_s { 2u32 } else { 1u32 };
-                            let draw_w = f.width() * scale_x * extra_s;
-                            let draw_h = f.height() * extra_s;
-                            let ox = ((SCREEN_W * out_s) as i32 - (draw_w as i32)) / 2;
-                            let oy = ((185 * out_si) - (draw_h as i32)).max(4 * out_si);
-                            blit_rgba_ex(
-                                &mut self.native_240,
-                                &f,
-                                ox,
-                                oy,
-                                scale_x * extra_s,
-                                extra_s,
-                                (240 * out_s) as i32,
-                                false,
-                                None,
-                            );
-                        }
+                    if fc == 0 {
+                        return None;
+                    }
+                    let raw_idx = ((elapsed * anim.fps.max(1) as u64) / 1000) as usize;
+                    Some(if looping { raw_idx % fc } else { raw_idx.min(fc - 1) })
+                });
+                if let Some(fi) = fi_opt {
+                    if let Some((f, extra_s)) = self.get_cached_frame(idx, fi) {
+                        let scale_x = if f.width() <= 240 * out_s { 2u32 } else { 1u32 };
+                        let draw_w = f.width() * scale_x * extra_s;
+                        let draw_h = f.height() * extra_s;
+                        let ox = ((SCREEN_W * out_s) as i32 - (draw_w as i32)) / 2;
+                        let oy = ((185 * out_si) - (draw_h as i32)).max(4 * out_si);
+                        blit_rgba_ex(
+                            &mut self.native_240,
+                            &f,
+                            ox,
+                            oy,
+                            scale_x * extra_s,
+                            extra_s,
+                            (240 * out_s) as i32,
+                            false,
+                            None,
+                            self.soft_alpha,
+                        );
                     }
                 }
             }
@@ -657,10 +670,7 @@ impl SoftwareCompositor {
         let Some(&idx) = self.anim_lookup.get(name) else {
             return false;
         };
-        let Some(anim) = self.anims.get_mut(idx) else {
-            return false;
-        };
-        let Some((f, extra_s)) = anim.get_frame(frame_idx, out_s) else {
+        let Some((f, extra_s)) = self.get_cached_frame(idx, frame_idx) else {
             return false;
         };
         blit_rgba_ex(
@@ -673,6 +683,7 @@ impl SoftwareCompositor {
             (240 * out_s) as i32,
             flip_x,
             monochrome_rgb555,
+            self.soft_alpha,
         );
         true
     }

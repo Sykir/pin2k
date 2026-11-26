@@ -104,7 +104,8 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
 
     let mut compositor = SoftwareCompositor::new();
     compositor.native_fullscreen = !cli.telemetry_overlay;
-    let out_scale = cli.hd_scale.unwrap_or(if cli.hd { 2 } else { 1 }).clamp(1, 4);
+    compositor.soft_alpha = cli.aa;
+    let out_scale = cli.hd_scale.unwrap_or(if cli.hd { 2 } else { 1 }).clamp(1, 8);
     if !cli.telemetry_overlay && out_scale > 1 {
         compositor.set_output_scale(out_scale);
     }
@@ -510,7 +511,7 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
             machine.video.framebuffer.width(),
             machine.video.framebuffer.height(),
         );
-        crate::window::run_windowed(&win_title, win_w, win_h, cli.fullscreen, |switches| {
+        crate::window::run_windowed(&win_title, win_w, win_h, cli.fullscreen, cli.display_filter, |switches| {
             for &(sw_id, closed) in switches {
                 machine.hw.port.inner_mut().set_virtual_switch(sw_id, closed);
             }

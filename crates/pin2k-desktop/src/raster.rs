@@ -18,6 +18,7 @@ pub(crate) fn blit_rgba_ex(
     max_y: i32,
     flip_x: bool,
     monochrome_rgb555: Option<u16>,
+    soft_alpha: bool,
 ) {
     let sx_scale = scale_x.max(1);
     let sy_scale = scale_y.max(1);
@@ -52,7 +53,23 @@ pub(crate) fn blit_rgba_ex(
                 for dx_rep in 0..sx_scale {
                     let dx = ox + (sx * sx_scale + dx_rep) as i32;
                     if (0..dst_w).contains(&dx) {
-                        dst.put_pixel(dx as u32, dy as u32, out_px);
+                        if soft_alpha && out_px.0[3] < 255 {
+                            let bg = dst.get_pixel(dx as u32, dy as u32).0;
+                            let a = out_px.0[3] as u16;
+                            let inv = 255 - a;
+                            dst.put_pixel(
+                                dx as u32,
+                                dy as u32,
+                                Rgba([
+                                    ((out_px.0[0] as u16 * a + bg[0] as u16 * inv) / 255) as u8,
+                                    ((out_px.0[1] as u16 * a + bg[1] as u16 * inv) / 255) as u8,
+                                    ((out_px.0[2] as u16 * a + bg[2] as u16 * inv) / 255) as u8,
+                                    255,
+                                ]),
+                            );
+                        } else {
+                            dst.put_pixel(dx as u32, dy as u32, out_px);
+                        }
                     }
                 }
             }

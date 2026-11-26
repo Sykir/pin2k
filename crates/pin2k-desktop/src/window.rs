@@ -15,11 +15,14 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::{Fullscreen, Window, WindowAttributes, WindowId};
 
+use crate::cli::DisplayFilter;
+
 pub(crate) fn run_windowed<F>(
     title: &str,
     src_w: u32,
     src_h: u32,
     start_fullscreen: bool,
+    display_filter: DisplayFilter,
     mut tick_frame: F,
 ) -> Result<()>
 where
@@ -31,6 +34,7 @@ where
         src_w: src_w.max(1),
         src_h: src_h.max(1),
         start_fullscreen,
+        display_filter,
         window: None,
         surface: None,
         modifiers: ModifiersState::empty(),
@@ -48,6 +52,7 @@ struct Pin2kWindowApp<'a, F> {
     src_w: u32,
     src_h: u32,
     start_fullscreen: bool,
+    display_filter: DisplayFilter,
     window: Option<Rc<Window>>,
     surface: Option<Surface<Rc<Window>, Rc<Window>>>,
     modifiers: ModifiersState,
@@ -173,18 +178,61 @@ impl<F> Pin2kWindowApp<'_, F> {
         let ox = (dst_w.saturating_sub(vp_w)) / 2;
         let oy = (dst_h.saturating_sub(vp_h)) / 2;
 
-        for dy in 0..vp_h {
-            let sy = (dy * self.src_h as usize) / vp_h.max(1);
-            let dst_row = (oy + dy) * dst_w + ox;
-            let src_row = sy * self.src_w as usize;
-            for dx in 0..vp_w {
-                let sx = (dx * self.src_w as usize) / vp_w.max(1);
-                let p = (src_row + sx) * 4;
-                if p + 2 < self.last_rgba.len() {
-                    let r = self.last_rgba[p] as u32;
-                    let g = self.last_rgba[p + 1] as u32;
-                    let b = self.last_rgba[p + 2] as u32;
-                    buf[dst_row + dx] = (r << 16) | (g << 8) | b;
+        let sw = self.src_w as usize;
+        let sh = self.src_h as usize;
+        if self.display_filter == DisplayFilter::Nearest {
+            for dy in 0..vp_h {
+                let sy = (dy * sh) / vp_h.max(1);
+                let dst_row = (oy + dy) * dst_w + ox;
+                let src_row = sy * sw;
+                for dx in 0..vp_w {
+                    let sx = (dx * sw) / vp_w.max(1);
+                    let p = (src_row + sx) * 4;
+                    if p + 2 < self.last_rgba.len() {
+                        let r = self.last_rgba[p] as u32;
+                        let g = self.last_rgba[p + 1] as u32;
+                        let b = self.last_rgba[p + 2] as u32;
+                        buf[dst_row + dx] = (r << 16) | (g << 8) | b;
+                    }
+                }
+            }
+        } else {
+            let crt = self.display_filter == DisplayFilter::Crt;
+            let sw_f = (sw.saturating_sub(1)) as f32;
+            let sh_f = (sh.saturating_sub(1)) as f32;
+            for dy in 0..vp_h {
+                let fy = (dy as f32 * sh_f) / vp_h.saturating_sub(1).max(1) as f32;
+                let y0 = (fy as usize).min(sh.saturating_sub(1));
+                let y1 = (y0 + 1).min(sh.saturating_sub(1));
+                let wy = ((fy - y0 as f32) * 256.0) as u32;
+                let inv_wy = 256 - wy;
+                let scan_mul = if crt && (dy & 1) == 1 { 205u32 } else { 256u32 };
+                let dst_row = (oy + dy) * dst_w + ox;
+                for dx in 0..vp_w {
+                    let fx = (dx as f32 * sw_f) / vp_w.saturating_sub(1).max(1) as f32;
+                    let x0 = (fx as usize).min(sw.saturating_sub(1));
+                    let x1 = (x0 + 1).min(sw.saturating_sub(1));
+                    let wx = ((fx - x0 as f32) * 256.0) as u32;
+                    let inv_wx = 256 - wx;
+                    let p00 = (y0 * sw + x0) * 4;
+                    let p10 = (y0 * sw + x1) * 4;
+                    let p01 = (y1 * sw + x0) * 4;
+                    let p11 = (y1 * sw + x1) * 4;
+                    if p11 + 2 < self.last_rgba.len() {
+                        let w00 = inv_wx * inv_wy;
+                        let w10 = wx * inv_wy;
+                        let w01 = inv_wx * wy;
+                        let w11 = wx * wy;
+                        let sample = |c: usize| -> u32 {
+                            let v = (self.last_rgba[p00 + c] as u32 * w00
+                                + self.last_rgba[p10 + c] as u32 * w10
+                                + self.last_rgba[p01 + c] as u32 * w01
+                                + self.last_rgba[p11 + c] as u32 * w11)
+                                >> 16;
+                            (v * scan_mul) >> 8
+                        };
+                        buf[dst_row + dx] = (sample(0) << 16) | (sample(1) << 8) | sample(2);
+                    }
                 }
             }
         }

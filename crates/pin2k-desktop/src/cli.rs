@@ -114,7 +114,22 @@ pub(crate) struct Cli {
     #[arg(long, default_value_t = false)]
     pub(crate) hd: bool,
 
-    /// Output framebuffer scale (`1` = 640x480, `2` = 1280x960, `3` = 1920x1440). Defaults to `2` when `--hd` is enabled.
+    /// Output framebuffer scale (`1` = 640x480, `2` = 1280x960, `4` = 2560x1920, `8` = 5120x3840). Defaults to `2` when `--hd` is enabled.
     #[arg(long)]
     pub(crate) hd_scale: Option<u32>,
+
+    /// Display scaling filter for `--window` / `--fullscreen` (`nearest`, `bilinear`, or `crt`).
+    #[arg(long, value_enum, default_value_t = DisplayFilter::Bilinear)]
+    pub(crate) display_filter: DisplayFilter,
+
+    /// Enable soft alpha-blending antialiasing on sprite edges (best with `--hd`).
+    #[arg(long, default_value_t = false)]
+    pub(crate) aa: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum DisplayFilter {
+    Nearest,
+    Bilinear,
+    Crt,
 }

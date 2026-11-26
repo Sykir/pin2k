@@ -102,14 +102,14 @@ pub fn edge_pad_transparent_rgb(src: &RgbaImage, passes: u32) -> RgbaImage {
     cur
 }
 
-/// Upscales a single RGBA8888 sprite frame by `scale` (`2..=4`) with edge-padding.
+/// Upscales a single RGBA8888 sprite frame by `scale` (`2..=8`) with edge-padding.
 pub fn upscale_rgba_image(
     src: &RgbaImage,
     scale: u32,
     filter: UpscaleFilter,
     crisp_alpha: bool,
 ) -> RgbaImage {
-    let s = scale.clamp(1, 4);
+    let s = scale.clamp(1, 8);
     if s == 1 {
         return src.clone();
     }
@@ -133,7 +133,7 @@ pub fn upscale_rgba_image(
 
 /// Upscales extracted animations from `<assets_dir>/gfx/` into `<assets_dir>/gfx_hd/`.
 pub fn upscale_assets_dir(assets_dir: &Path, opts: &UpscaleOptions) -> Result<UpscaleReport> {
-    let scale = opts.scale.clamp(2, 4);
+    let scale = opts.scale.clamp(2, 8);
     let src_gfx = assets_dir.join("gfx");
     let manifest_path = src_gfx.join("gfx_manifest.json");
     let raw = fs::read_to_string(&manifest_path)

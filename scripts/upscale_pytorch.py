@@ -120,7 +120,7 @@ def upscale_frame(
 def main() -> None:
     ap = argparse.ArgumentParser(description="PyTorch HD upscaler for Pinball 2000 gfx/ -> gfx_hd/")
     ap.add_argument("--assets-dir", type=Path, default=Path("work/swe1_assets"))
-    ap.add_argument("--scale", type=int, default=2, choices=[2, 3, 4])
+    ap.add_argument("--scale", type=int, default=2, choices=[2, 3, 4, 8])
     ap.add_argument("--model", type=str, default=None, help="Optional Real-ESRGAN/SwinIR .pth path")
     ap.add_argument("--anim", type=str, default=None, help="Optional animation substring filter")
     args = ap.parse_args()

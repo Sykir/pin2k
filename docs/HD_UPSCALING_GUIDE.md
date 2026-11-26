@@ -53,9 +53,13 @@ Naive multi-tap resizing on RGBA PNGs blends opaque silhouette colors with black
 
 ## 3. Implementation Status
 
-1. **[Done] Built-in Offline Upscaler (`pin2k-rom-tool upscale-assets`)**: pure-Rust edge-padded `Lanczos3`/`CatmullRom`/`Nearest` generator writing `gfx_hd/gfx_manifest.json`.
-2. **[Done] `--hd` Flag in `pin2k-desktop`**: `SoftwareCompositor::load_hd_assets()` loads `gfx_hd/` overrides cleanly.
-3. **[Next] WebGL2 Client Shaders & LRU Cache**: add selectable `Native / Bicubic / xBRZ / CRT` shaders in `web_ui.html` and cap decoded frame memory with an LRU cache.
+1. **[Done] Built-in Offline Upscaler (`pin2k-rom-tool upscale-assets`)**: pure-Rust edge-padded `Lanczos3`/`CatmullRom`/`Nearest` generator (`2×`–`8×`) writing `gfx_hd/gfx_manifest.json` while preserving edge-padded RGB on transparent pixels.
+2. **[Done] Offline PyTorch / Real-ESRGAN Upscaler (`scripts/upscale_pytorch.py`)**: supports `2×`/`4×`/`8×` neural super-resolution via `spandrel` (`.pth` weights) or PyTorch `bicubic` antialias with separate 1-bit alpha upscaling.
+3. **[Done] Native HD Output, Global 256 MiB LRU Cache & Display Filters (`pin2k-desktop`)**:
+   - `--hd` + `--hd-scale <1|2|4|8>` renders directly at `1280×960` (`2×`), `2560×1920` (`4×`), or `5120×3840` (`8×`) with a global `256 MiB` byte-bounded LRU frame cache (`SoftwareCompositor`).
+   - `--display-filter <nearest|bilinear|crt>` adds real-time bilinear antialiasing and optional Pepper's Ghost CRT scanlines in `window.rs`.
+   - `--aa` enables soft alpha-blending on sprite edges in `raster.rs`.
+4. **[Next] WebGL2 Client Shaders & `wgpu` GPU Backend**: add selectable `Native / Bicubic / xBRZ / CRT` shaders in `web_ui.html` and a native `wgpu` backend for full-speed `8×` (`5120×3840`) at 60 Hz.
 
 ---
 
