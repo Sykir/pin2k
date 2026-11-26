@@ -5,3 +5,6 @@
 
 pub mod jarjar_juggle;
 pub mod jarjar_juggle_state;
+pub mod podrace;
+pub mod podrace_render;
+pub mod podrace_state;

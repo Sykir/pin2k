@@ -153,28 +153,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.render_scene_footer(hits, secs, "TANKS");
                 }
                 Swe1Scene::Podrace => {
-                    self.render_podrace_layers(sc.active_ms);
-                    let lap = 4u8.saturating_sub(hits).clamp(1, 3);
-                    self.scene_text(
-                        "font_shadow_11_data",
-                        format!("LAP {lap}/3"),
-                        12,
-                        90,
-                        8,
-                        0x7FE0,
-                        Some(0x0000),
-                        TextAlign::Left,
-                    );
-                    self.scene_text(
-                        "font_shadow_11_data",
-                        format!("{secs}S"),
-                        628,
-                        72,
-                        8,
-                        0x7FE0,
-                        Some(0x0000),
-                        TextAlign::Right,
-                    );
+                    self.render_podrace(secs);
                 }
                 Swe1Scene::ProbeDroid => {
                     let scroll_x = -((f60 % 160) as i32);

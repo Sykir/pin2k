@@ -61,6 +61,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 if self.players[self.current_player].scene_select_ready && self.active_scene.is_none() {
                     self.cycle_scene_selection(false);
                 }
+                self.handle_podrace_button(false);
             }
             sw::RIGHT_FLIPPER_BUTTON => {
                 self.hw.fire_coil(drive::RIGHT_FLIPPER_POWER, 40);
@@ -69,6 +70,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 if self.players[self.current_player].scene_select_ready && self.active_scene.is_none() {
                     self.cycle_scene_selection(true);
                 }
+                self.handle_podrace_button(true);
             }
             // Cabinet Laser Action Buttons (`Lasers::fire_left` / `Lasers::fire_right`)
             sw::LEFT_ACTION_BUTTON | sw::RIGHT_ACTION_BUTTON => {
@@ -77,6 +79,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.cycle_scene_selection(right);
                     return;
                 }
+                self.handle_podrace_button(right);
                 if self.players[self.current_player].laser_shots > 0 {
                     self.players[self.current_player].laser_shots -= 1;
                     self.audio.play_sound(sound::LASER_FIRE, false);
@@ -192,7 +195,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             // Deflector Shield Targets & Center Shield Popper (`Scenes::start_valid_scene`)
             sw::LEFT_SHIELD_TARGET | sw::RIGHT_SHIELD_TARGET | sw::SHIELD_HIT => {
                 self.skill_shot_ready = false;
-                if self.handle_jarjar_juggle_switch(id) {
+                if self.handle_jarjar_juggle_switch(id) || self.handle_podrace_switch(id) {
                     return;
                 }
                 self.audio.play_sound(sound::SHIELD_HIT_SFX, false);
@@ -241,7 +244,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             sw::LEFT_RAMP_ENTER => {
                 self.skill_shot_ready = false;
                 self.trigger_virtual_spinner(false, true);
-                if self.handle_jarjar_juggle_switch(id) {
+                if self.handle_jarjar_juggle_switch(id) || self.handle_podrace_switch(id) {
                     return;
                 }
                 self.add_score(25_000);
@@ -250,7 +253,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.skill_shot_ready = false;
                 self.trigger_virtual_spinner(true, true);
                 self.jarjar_saucer_event(true, 0);
-                if self.handle_jarjar_juggle_switch(id) {
+                if self.handle_jarjar_juggle_switch(id) || self.handle_podrace_switch(id) {
                     return;
                 }
                 self.add_score(25_000);
@@ -461,6 +464,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.start_jarjar_juggle_state();
         } else {
             self.jarjar_juggle = None;
+        }
+        if scene == Swe1Scene::Podrace {
+            self.start_podrace_state();
+        } else {
+            self.podrace = None;
         }
         self.active_anim_hint = scene.intro_anim_hint().to_string();
         self.audits.scenes_started = self.audits.scenes_started.saturating_add(1);

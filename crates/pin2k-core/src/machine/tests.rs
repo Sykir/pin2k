@@ -622,6 +622,56 @@
     }
 
     #[test]
+    fn podrace_authentic_lanes_checkpoints_and_state_machine() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine = Pin2kMachine::new(driver, HeadlessVideo::default());
+
+        assert!(machine.debug_launch_mode("scene:6"));
+        assert_eq!(
+            machine.active_scene.as_ref().map(|s| s.scene),
+            Some(Swe1Scene::Podrace)
+        );
+        let pr = machine.podrace.as_ref().expect("podrace state initialized");
+        assert_eq!(pr.phase, super::PodracePhase::StartingGate);
+        assert_eq!(pr.speed_mph, 150);
+        assert_eq!(pr.checkpoints, 0);
+
+        // Skip intro -> StartingGate -> Closeup -> Racing
+        if let Some(ref mut sc) = machine.active_scene {
+            sc.intro_remaining_ms = 0;
+        }
+        machine.tick(16);
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_podrace_starting").count(),
+            1
+        );
+        for _ in 0..78 {
+            machine.tick(50);
+        }
+        let pr = machine.podrace.as_ref().unwrap();
+        assert_eq!(pr.phase, super::PodracePhase::Racing);
+        // First icon placed is always a Checkpoint (`PodraceIconKind::Checkpoint`)
+        let cp_lane = pr
+            .lanes
+            .iter()
+            .position(|l| l.icon == Some(super::PodraceIconKind::Checkpoint))
+            .expect("first icon must be checkpoint");
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_podrace_1").count(),
+            1
+        );
+
+        let lane_sw = [sw::LEFT_RAMP_ENTER, sw::SHIELD_HIT, sw::RIGHT_RAMP_ENTER][cp_lane];
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), lane_sw);
+        assert_eq!(machine.podrace.as_ref().unwrap().checkpoints, 1);
+
+        // Debounce blocks immediate duplicate hit within 600ms
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), lane_sw);
+        assert_eq!(machine.podrace.as_ref().unwrap().checkpoints, 1);
+    }
+
+    #[test]
     fn attract_kahuna_logo_renders_tinted_light_flare_and_spinning_logo() {
         let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
         let driver = PdbDriver::new(port);
@@ -777,11 +827,6 @@
                         .any(|s| s.anim_name.starts_with("anim_podrace_") && s.z <= 6),
                     "missing Podrace layers in pin2k-core"
                 );
-                assert!(machine
-                    .video
-                    .last_font_text_cmds
-                    .iter()
-                    .any(|t| t.z == 8 && t.text.contains("LAP")));
             } else {
                 assert!(
                     machine.video.last_sprite_cmds.iter().any(|s| s.z <= 6),
