@@ -135,18 +135,12 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.hw.fire_coil(drive::LEFT_FLIPPER_POWER, 40);
                 self.hw.set_drive_hold(drive::LEFT_FLIPPER_HOLD, true);
                 self.players[self.current_player].rotate_jedi_letters(false);
-                if self.players[self.current_player].scene_select_ready && self.active_scene.is_none() {
-                    self.cycle_scene_selection(false);
-                }
                 self.handle_podrace_button(false);
             }
             sw::RIGHT_FLIPPER_BUTTON => {
                 self.hw.fire_coil(drive::RIGHT_FLIPPER_POWER, 40);
                 self.hw.set_drive_hold(drive::RIGHT_FLIPPER_HOLD, true);
                 self.players[self.current_player].rotate_jedi_letters(true);
-                if self.players[self.current_player].scene_select_ready && self.active_scene.is_none() {
-                    self.cycle_scene_selection(true);
-                }
                 self.handle_podrace_button(true);
             }
             // Cabinet Laser Action Buttons (`Lasers::fire_left` / `Lasers::fire_right`)
@@ -299,7 +293,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                         self.emit_sound(sound::SHIELD_GONE_CALLOUT, false);
                         self.active_anim_hint = selected.holo_anim_hint().to_string();
                         self.set_banner(
-                            format!("SHIELD DOWN! SELECT: {} (FLIPPERS) -> SHOOT SCOOP/RAMP!", selected.title()),
+                            format!("SHIELD DOWN! SELECT: {} (LASER BUTTONS) -> SHOOT SCOOP!", selected.title()),
                             4_000,
                         );
                     } else {
@@ -688,7 +682,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         let scene = Swe1Scene::ALL[p.next_scene_idx];
         self.active_anim_hint = scene.holo_anim_hint().to_string();
         self.emit_sound(sound::LASER_SFX_OR_CLICK(), false);
-        self.set_banner(format!("SELECT MODE: {} (SCOOP/RAMP TO START)", scene.title()), 3_000);
+        self.set_banner(format!("SELECT MODE: {} (SHOOT SCOOP TO START)", scene.title()), 3_000);
     }
 
     pub fn start_swe1_scene(&mut self, scene: Swe1Scene) {
@@ -827,11 +821,10 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         if self.players[self.current_player].scene_select_ready {
             if sw_id == sw::RAMP_MADE_LEFT {
-                self.cycle_scene_selection(true);
+                self.cycle_scene_selection(false);
                 return;
             } else if sw_id == sw::RAMP_MADE_RIGHT {
-                let scene = self.players[self.current_player].choose_next_scene();
-                self.start_swe1_scene(scene);
+                self.cycle_scene_selection(true);
                 return;
             }
         }

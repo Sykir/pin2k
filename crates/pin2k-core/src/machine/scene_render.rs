@@ -397,7 +397,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 );
                 self.scene_text(
                     "font_system_7_data",
-                    "FLIPPERS CHANGE - CENTER STARTS",
+                    "LASER BUTTONS CHANGE - CENTER STARTS",
                     320,
                     222,
                     7,

@@ -103,7 +103,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
     /// Renders left/right virtual spinners (`z = 22`) and rising score popups (`z = 23`).
     /// In nominal gameplay (no active scene, multiball, or special screen), both spinners
-    /// are visible resting statically at frame `0` and only animate when triggered by a ramp pass.
+    /// are visible resting statically at the last frame (`55`) and only animate when triggered by a ramp pass.
     pub fn render_virtual_spinners(&mut self) {
         let is_nominal = self.active_scene.is_none()
             && self.multiball == ActiveMultiball::None
@@ -149,9 +149,14 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     ));
                 }
             } else {
-                // Resting static spinner wheel at frame 0 until a ramp pass triggers it
-                self.video
-                    .draw_named_sprite(SpriteDrawCmd::new(wheel, 0, x, SPINNER_Y, 22));
+                // Resting static spinner wheel at the last frame until a ramp pass triggers it
+                self.video.draw_named_sprite(SpriteDrawCmd::new(
+                    wheel,
+                    (SPINNER_ANIM_FRAMES as usize) - 1,
+                    x,
+                    SPINNER_Y,
+                    22,
+                ));
             }
 
             if sp.active && sp.popup_ms > 0 && sp.last_award > 0 {

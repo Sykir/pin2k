@@ -410,18 +410,18 @@
         }
         assert!(!machine.left_spinner.active);
         assert!(!machine.right_spinner.active);
-        // Nominal mode displays both spinners statically at frame 0 without playing turnstile sound
+        // Nominal mode displays both spinners statically at the last frame (55) without playing turnstile sound
         assert!(machine.video.last_sprite_cmds.iter().any(|s| {
             s.anim_name == "anim_spinner_bracket_left" && s.x == 43 && s.y == 174 && s.z == 22
         }));
         assert!(machine.video.last_sprite_cmds.iter().any(|s| {
-            s.anim_name == "anim_spinner_1" && s.frame == 0 && s.x == 43 && s.y == 174 && s.z == 22
+            s.anim_name == "anim_spinner_1" && s.frame == 55 && s.x == 43 && s.y == 174 && s.z == 22
         }));
         assert!(machine.video.last_sprite_cmds.iter().any(|s| {
             s.anim_name == "anim_spinner_bracket_right" && s.x == 421 && s.y == 174 && s.z == 22
         }));
         assert!(machine.video.last_sprite_cmds.iter().any(|s| {
-            s.anim_name == "anim_spinner_2" && s.frame == 0 && s.x == 421 && s.y == 174 && s.z == 22
+            s.anim_name == "anim_spinner_2" && s.frame == 55 && s.x == 421 && s.y == 174 && s.z == 22
         }));
         assert!(!machine
             .audio
@@ -529,6 +529,24 @@
             .find(|s| s.anim_name == sc.holo_anim_hint())
             .expect("expected selectable mini-game hologram");
         assert!(mini_holo.y < glow_loop.y);
+
+        // 6. Flippers do NOT change scene selection; Laser action buttons and ramps DO (by side)
+        let initial_idx = machine.players[0].next_scene_idx;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_FLIPPER_BUTTON);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_FLIPPER_BUTTON);
+        assert_eq!(machine.players[0].next_scene_idx, initial_idx);
+
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_ACTION_BUTTON);
+        assert_eq!(machine.players[0].next_scene_idx, (initial_idx + 1) % Swe1Scene::ALL.len());
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_ACTION_BUTTON);
+        assert_eq!(machine.players[0].next_scene_idx, initial_idx);
+
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_RIGHT);
+        assert_eq!(machine.players[0].next_scene_idx, (initial_idx + 1) % Swe1Scene::ALL.len());
+        assert!(machine.active_scene.is_none());
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
+        assert_eq!(machine.players[0].next_scene_idx, initial_idx);
+        assert!(machine.active_scene.is_none());
     }
 
     #[test]
