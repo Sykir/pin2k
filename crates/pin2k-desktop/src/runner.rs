@@ -104,6 +104,10 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
 
     let mut compositor = SoftwareCompositor::new();
     compositor.native_fullscreen = !cli.telemetry_overlay;
+    let out_scale = cli.hd_scale.unwrap_or(if cli.hd { 2 } else { 1 }).clamp(1, 4);
+    if !cli.telemetry_overlay && out_scale > 1 {
+        compositor.set_output_scale(out_scale);
+    }
     let mut loaded_anims = if let Some(ref dir) = cli.assets_dir {
         let n = compositor.load_assets(dir)?;
         if cli.hd {
@@ -502,7 +506,11 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
 
     if cli.window || cli.fullscreen {
         let win_title = format!("Pinball 2000 — {}", rom_version_str);
-        crate::window::run_windowed(&win_title, cli.fullscreen, |switches| {
+        let (win_w, win_h) = (
+            machine.video.framebuffer.width(),
+            machine.video.framebuffer.height(),
+        );
+        crate::window::run_windowed(&win_title, win_w, win_h, cli.fullscreen, |switches| {
             for &(sw_id, closed) in switches {
                 machine.hw.port.inner_mut().set_virtual_switch(sw_id, closed);
             }
@@ -526,7 +534,12 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
             }
         }
         machine.video.framebuffer.save(shot_path)?;
-        println!("Saved 640x480 composite screenshot -> {}", shot_path.display());
+        println!(
+            "Saved {}x{} composite screenshot -> {}",
+            machine.video.framebuffer.width(),
+            machine.video.framebuffer.height(),
+            shot_path.display()
+        );
     }
 
     machine.sync_to_db(&mut local_db);

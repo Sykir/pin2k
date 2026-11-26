@@ -1,7 +1,5 @@
 use image::{Rgba, RgbaImage};
 
-use crate::compositor::SCREEN_W;
-
 pub(crate) fn rgb555_to_rgba(color_rgb555: u16, alpha: u8) -> [u8; 4] {
     let r = (((color_rgb555 >> 10) & 0x1F) as u8) << 3;
     let g = (((color_rgb555 >> 5) & 0x1F) as u8) << 3;
@@ -27,6 +25,7 @@ pub(crate) fn blit_rgba_ex(
     let w = src.width();
     let h = src.height();
 
+    let dst_w = dst.width() as i32;
     for sy in 0..h {
         for dy_rep in 0..sy_scale {
             let dy = oy + (sy * sy_scale + dy_rep) as i32;
@@ -52,24 +51,13 @@ pub(crate) fn blit_rgba_ex(
                 };
                 for dx_rep in 0..sx_scale {
                     let dx = ox + (sx * sx_scale + dx_rep) as i32;
-                    if (0..SCREEN_W as i32).contains(&dx) {
+                    if (0..dst_w).contains(&dx) {
                         dst.put_pixel(dx as u32, dy as u32, out_px);
                     }
                 }
             }
         }
     }
-}
-
-pub(crate) fn blit_rgba_clipped(
-    dst: &mut RgbaImage,
-    src: &RgbaImage,
-    ox: i32,
-    oy: i32,
-    scale_x: u32,
-    max_y: i32,
-) {
-    blit_rgba_ex(dst, src, ox, oy, scale_x, 1, max_y, false, None);
 }
 
 pub(crate) fn fill_rect(img: &mut RgbaImage, x: i32, y: i32, w: i32, h: i32, color: [u8; 4]) {

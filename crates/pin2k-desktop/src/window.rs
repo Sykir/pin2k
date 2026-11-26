@@ -15,11 +15,10 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::{Fullscreen, Window, WindowAttributes, WindowId};
 
-const SRC_W: u32 = 640;
-const SRC_H: u32 = 480;
-
 pub(crate) fn run_windowed<F>(
     title: &str,
+    src_w: u32,
+    src_h: u32,
     start_fullscreen: bool,
     mut tick_frame: F,
 ) -> Result<()>
@@ -29,12 +28,14 @@ where
     let event_loop = EventLoop::new()?;
     let mut app = Pin2kWindowApp {
         title: title.to_string(),
+        src_w: src_w.max(1),
+        src_h: src_h.max(1),
         start_fullscreen,
         window: None,
         surface: None,
         modifiers: ModifiersState::empty(),
         next_frame_at: Instant::now(),
-        last_rgba: vec![0u8; (SRC_W * SRC_H * 4) as usize],
+        last_rgba: vec![0u8; (src_w.max(1) * src_h.max(1) * 4) as usize],
         pending_switches: Vec::new(),
         tick_frame: &mut tick_frame,
     };
@@ -44,6 +45,8 @@ where
 
 struct Pin2kWindowApp<'a, F> {
     title: String,
+    src_w: u32,
+    src_h: u32,
     start_fullscreen: bool,
     window: Option<Rc<Window>>,
     surface: Option<Surface<Rc<Window>, Rc<Window>>>,
@@ -64,8 +67,8 @@ where
         }
         let mut attrs = WindowAttributes::default()
             .with_title(&self.title)
-            .with_inner_size(LogicalSize::new(960, 720))
-            .with_min_inner_size(LogicalSize::new(SRC_W, SRC_H));
+            .with_inner_size(LogicalSize::new(self.src_w.max(960), self.src_h.max(720)))
+            .with_min_inner_size(LogicalSize::new(640, 480));
         if self.start_fullscreen {
             attrs = attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));
         }
@@ -171,11 +174,11 @@ impl<F> Pin2kWindowApp<'_, F> {
         let oy = (dst_h.saturating_sub(vp_h)) / 2;
 
         for dy in 0..vp_h {
-            let sy = (dy * SRC_H as usize) / vp_h.max(1);
+            let sy = (dy * self.src_h as usize) / vp_h.max(1);
             let dst_row = (oy + dy) * dst_w + ox;
-            let src_row = sy * SRC_W as usize;
+            let src_row = sy * self.src_w as usize;
             for dx in 0..vp_w {
-                let sx = (dx * SRC_W as usize) / vp_w.max(1);
+                let sx = (dx * self.src_w as usize) / vp_w.max(1);
                 let p = (src_row + sx) * 4;
                 if p + 2 < self.last_rgba.len() {
                     let r = self.last_rgba[p] as u32;
