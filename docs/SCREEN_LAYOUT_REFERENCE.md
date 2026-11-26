@@ -168,7 +168,19 @@ Started with `--web-port 8080`, the console serves a 5-tab UI (`web_ui.html`, `w
 
 `pin2k-desktop` supports deterministic headless PNG capture, 60 Hz frame-sequence export, and live HTTP frame snapshots. All captures render the exact `640×480` scan-doubled composite output (or `2×` HD sprites when `--hd` is enabled).
 
-> **Repository policy:** Generated `.png`, `.gif`, and `.mp4` captures belong in `./work/` (which is gitignored via `.gitignore`) because they contain proprietary ROM graphics.
+> **Repository policy:** Curated documentation screenshots live in `docs/screenshots/*.png`; ad-hoc captures and video exports belong in `./work/` (which is gitignored via `.gitignore`).
+
+### 7.0 Runtime Gallery (`640×480`)
+
+| Attract (`attract:0`) | Nominal HUD (`ingame`) |
+|---|---|
+| ![Attract Mode Kahuna Logo](screenshots/attract_kahuna.png) | ![Nominal Gameplay HUD](screenshots/ingame_nominal.png) |
+| **Virtual Spinner (`spinner_left`)** | **Scene Intro (`scene:6` Intro)** |
+| ![Left Virtual Spinner](screenshots/spinner_left.png) | ![Scene Intro Bezel](screenshots/scene_intro.png) |
+| **Boonta Eve Podrace (`scene:6`)** | **Jar Jar Juggle (`scene:9`)** |
+| ![Boonta Eve Podrace](screenshots/scene_podrace.png) | ![Jar Jar Juggle](screenshots/scene_jarjar_juggle.png) |
+| **End-of-Ball Bonus (`bonus`)** | **Diagnostics (`diag:colorbar`)** |
+| ![End-of-Ball Bonus](screenshots/bonus.png) | ![Diagnostic Color Bar](screenshots/diag_colorbar.png) |
 
 ### 7.1 Single-Frame Screenshot (`--screenshot-out`)
 
