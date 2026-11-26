@@ -19,7 +19,21 @@ mod vspinner;
 
 pub use fx::{anims as fx_anims, ActiveFx, ActiveOverlay, FxAnim, OverlayKind};
 pub use leff::{ActiveLeff, LeffKind};
+pub use scenes::battle_droid_state::{BattleDroidState, DroidSideState};
+pub use scenes::destroyer_droid_state::{
+    DestroyerDroidPhase, DestroyerDroidState, DestroyerSize,
+};
+pub use scenes::federation_fighter_state::{FederationFighterState, FighterPhase};
+pub use scenes::gungan_battle_state::GunganBattleState;
+pub use scenes::hangar_escape_state::HangarEscapeState;
+pub use scenes::hover_tank_state::{HoverTankState, TankLane, TankPhase};
+pub use scenes::probe_droid_state::ProbeDroidState;
+pub use scenes::question_mark_state::{MysteryAward, QuestionMarkState};
+pub use scenes::queen_fashion_state::QueenFashionState;
+pub use scenes::r2d2_state::R2D2State;
+pub use scenes::wattos_chance_state::WattosChanceState;
 pub use scenes::jarjar_juggle_state::{JarjarJuggleState, JuggleAnimState, JuggleAward};
+pub use scenes::mos_espa_cantina_state::MosEspaCantinaState;
 pub use scenes::podrace_state::{PodraceIconKind, PodracePhase, PodraceState};
 pub use vspinner::VirtualSpinnerState;
 
@@ -145,6 +159,30 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
 
     // Active scene / multiball / HUD banner
     pub active_scene: Option<ActiveSceneState>,
+    /// Authentic per-scene state for `BattleDroidScene` (`DeffBattleDroidSceneBackground`).
+    pub battle_droid: Option<BattleDroidState>,
+    /// Authentic per-scene state for `DestroyerDroidScene` (`DeffDestroyerDroidSceneBackground`).
+    pub destroyer_droid: Option<DestroyerDroidState>,
+    /// Authentic per-scene state for `FederationFighterScene` (`DeffFedFighterSceneBackground`).
+    pub federation_fighter: Option<FederationFighterState>,
+    /// Authentic per-scene state for `GunganScene` (`DeffSubEscapeSceneBackground`).
+    pub gungan_battle: Option<GunganBattleState>,
+    /// Authentic per-scene state for `HangarEscapeScene` (`DeffHangarEscapeSceneBackground`).
+    pub hangar_escape: Option<HangarEscapeState>,
+    /// Authentic per-scene state for `HoverTankScene` (`DeffHoverTankSceneBackground`).
+    pub hover_tank: Option<HoverTankState>,
+    /// Authentic per-scene state for `ProbeDroidScene` (`DeffProbeDroidSceneBackground`).
+    pub probe_droid: Option<ProbeDroidState>,
+    /// Authentic per-scene state for `QueenFashionScene` (`DeffQueenFashionSceneBackground`).
+    pub queen_fashion: Option<QueenFashionState>,
+    /// Authentic per-scene state for `WattosChanceScene` (`DeffWattosChanceSceneBackground`).
+    pub wattos_chance: Option<WattosChanceState>,
+    /// Authentic per-scene state for `MusicalChairsScene` (`MosEspaCantina`).
+    pub mos_espa_cantina: Option<MosEspaCantinaState>,
+    /// Authentic per-scene state for `R2D2Scene` (`DeffR2D2SceneBackground`).
+    pub r2d2: Option<R2D2State>,
+    /// Authentic per-scene state for `QuestionMarkScene` (`DeffQuestionMarkSceneBackground`).
+    pub question_mark: Option<QuestionMarkState>,
     /// Authentic per-scene state for `JarjarJuggleScene` (`DeffJarjarJuggleScene`).
     pub jarjar_juggle: Option<JarjarJuggleState>,
     /// Authentic per-scene state for `PodraceScene` (`DeffPodRaceSceneBackground`).
@@ -244,6 +282,18 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             popper_hold_ms: 0,
             tilt_warnings: 0,
             active_scene: None,
+            battle_droid: None,
+            destroyer_droid: None,
+            federation_fighter: None,
+            gungan_battle: None,
+            hangar_escape: None,
+            hover_tank: None,
+            probe_droid: None,
+            queen_fashion: None,
+            wattos_chance: None,
+            mos_espa_cantina: None,
+            r2d2: None,
+            question_mark: None,
             jarjar_juggle: None,
             podrace: None,
             multiball: ActiveMultiball::None,
@@ -584,6 +634,18 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     pub(super) fn start_ball(&mut self) {
         self.tilt_warnings = 0;
         self.active_scene = None;
+        self.battle_droid = None;
+        self.destroyer_droid = None;
+        self.federation_fighter = None;
+        self.gungan_battle = None;
+        self.hangar_escape = None;
+        self.hover_tank = None;
+        self.probe_droid = None;
+        self.queen_fashion = None;
+        self.wattos_chance = None;
+        self.mos_espa_cantina = None;
+        self.r2d2 = None;
+        self.question_mark = None;
         self.jarjar_juggle = None;
         self.podrace = None;
         self.multiball = ActiveMultiball::None;
@@ -913,6 +975,18 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.special_screen_ms = self.special_screen_ms.saturating_add(dt_ms);
         }
         self.update_virtual_spinners(dt_ms);
+        self.tick_battle_droid(dt_ms);
+        self.tick_destroyer_droid(dt_ms);
+        self.tick_federation_fighter(dt_ms);
+        self.tick_gungan_battle(dt_ms);
+        self.tick_hangar_escape(dt_ms);
+        self.tick_hover_tank(dt_ms);
+        self.tick_probe_droid(dt_ms);
+        self.tick_queen_fashion(dt_ms);
+        self.tick_wattos_chance(dt_ms);
+        self.tick_mos_espa_cantina(dt_ms);
+        self.tick_r2d2(dt_ms);
+        self.tick_question_mark(dt_ms);
         self.tick_jarjar_juggle(dt_ms);
         self.tick_podrace(dt_ms);
         self.tick_leff(dt_ms);
@@ -1012,6 +1086,84 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     let title = sc.scene.title();
                     timed_out_scene = Some(sc.scene);
                     self.active_scene = None;
+                    self.battle_droid = None;
+                    self.destroyer_droid = None;
+                    self.federation_fighter = None;
+                    self.gungan_battle = None;
+                    self.hangar_escape = None;
+                    self.hover_tank = None;
+                    self.probe_droid = None;
+                    self.queen_fashion = None;
+                    self.wattos_chance = None;
+                    self.mos_espa_cantina = None;
+                    self.r2d2 = None;
+                    self.question_mark = None;
+        self.question_mark = None;
+        self.r2d2 = None;
+        self.question_mark = None;
+        self.mos_espa_cantina = None;
+        self.r2d2 = None;
+        self.question_mark = None;
+        self.wattos_chance = None;
+        self.mos_espa_cantina = None;
+        self.r2d2 = None;
+        self.question_mark = None;
+        self.queen_fashion = None;
+        self.wattos_chance = None;
+        self.mos_espa_cantina = None;
+        self.r2d2 = None;
+        self.question_mark = None;
+        self.probe_droid = None;
+        self.queen_fashion = None;
+        self.wattos_chance = None;
+        self.mos_espa_cantina = None;
+        self.r2d2 = None;
+        self.question_mark = None;
+        self.hover_tank = None;
+        self.probe_droid = None;
+        self.queen_fashion = None;
+        self.wattos_chance = None;
+        self.mos_espa_cantina = None;
+        self.r2d2 = None;
+        self.question_mark = None;
+        self.hangar_escape = None;
+        self.hover_tank = None;
+        self.probe_droid = None;
+        self.queen_fashion = None;
+        self.wattos_chance = None;
+        self.mos_espa_cantina = None;
+        self.r2d2 = None;
+        self.question_mark = None;
+        self.gungan_battle = None;
+        self.hangar_escape = None;
+        self.hover_tank = None;
+        self.probe_droid = None;
+        self.queen_fashion = None;
+        self.wattos_chance = None;
+        self.mos_espa_cantina = None;
+        self.r2d2 = None;
+        self.question_mark = None;
+        self.federation_fighter = None;
+        self.gungan_battle = None;
+        self.hangar_escape = None;
+        self.hover_tank = None;
+        self.probe_droid = None;
+        self.queen_fashion = None;
+        self.wattos_chance = None;
+        self.mos_espa_cantina = None;
+        self.r2d2 = None;
+        self.question_mark = None;
+        self.destroyer_droid = None;
+        self.federation_fighter = None;
+        self.gungan_battle = None;
+        self.hangar_escape = None;
+        self.hover_tank = None;
+        self.probe_droid = None;
+        self.queen_fashion = None;
+        self.wattos_chance = None;
+        self.mos_espa_cantina = None;
+        self.r2d2 = None;
+        self.question_mark = None;
                     self.jarjar_juggle = None;
                     self.podrace = None;
                     self.active_anim_hint.clear();

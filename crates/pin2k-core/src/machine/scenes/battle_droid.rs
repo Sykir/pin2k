@@ -1,0 +1,228 @@
+//! Authentic `BattleDroidScene` + `DeffBattleDroidSceneBackground` runtime & renderer (`swe1_0200.elf`):
+//! - `SHIELD_HIT` (`0x27`): `400,000` pts, `-2` tank HP (8 total), `tank_hit()` / `tank_defeated()`.
+//! - `LEFT_SHIELD_TARGET` (`0x22`) / `RIGHT_SHIELD_TARGET` (`0x23`): `200,000` pts, `-1` tank HP (down to 1).
+//! - `RAMP_MADE_LEFT` (`0x1b`) / `RAMP_MADE_RIGHT` (`0x1c`): STAP ramp hit (`stap_ramp_hit`) + `400,000` pts.
+
+use pin2k_hal::{AudioBackend, PinballHardware, VideoBackend};
+
+use super::battle_droid_state::{
+    BattleDroidState, DroidSideState, MTT_DOORS_X, MTT_DOORS_Y, MTT_X, MTT_Y, TANK_EXPLOSION_X,
+    TANK_EXPLOSION_Y,
+};
+use crate::machine::{LeffKind, Pin2kMachine};
+use crate::swe1_rules::Swe1Scene;
+use crate::swe1_tables::sw;
+
+impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A> {
+    pub(crate) fn start_battle_droid_state(&mut self) {
+        self.battle_droid = Some(BattleDroidState::new());
+    }
+
+    pub(crate) fn tick_battle_droid(&mut self, dt_ms: u32) {
+        let active_gameplay = self
+            .active_scene
+            .as_ref()
+            .is_some_and(|s| s.scene == Swe1Scene::BattleDroid && s.intro_remaining_ms == 0);
+        if !active_gameplay {
+            return;
+        }
+        let mut emit_ards: Vec<&'static str> = Vec::new();
+        if let Some(ref mut bd) = self.battle_droid {
+            bd.intro_elapsed_ms = bd.intro_elapsed_ms.saturating_add(dt_ms);
+            bd.tank_hit_flash_ms = bd.tank_hit_flash_ms.saturating_sub(dt_ms);
+            bd.tank_defeated_ms = bd.tank_defeated_ms.saturating_sub(dt_ms);
+            bd.stap_exploding_ms = bd.stap_exploding_ms.saturating_sub(dt_ms);
+            bd.stap_zap_ms = bd.stap_zap_ms.saturating_add(dt_ms) % 1_600;
+
+            for (side, ms, ard) in [
+                (&mut bd.left_droid, &mut bd.left_droid_ms, "ard_bdroid_laser_l"),
+                (&mut bd.right_droid, &mut bd.right_droid_ms, "ard_bdroid_laser_r"),
+            ] {
+                *ms = ms.saturating_add(dt_ms);
+                match *side {
+                    DroidSideState::Unpacking if *ms >= 250 => {
+                        *side = DroidSideState::Standing;
+                        *ms = 0;
+                    }
+                    DroidSideState::Standing if *ms >= 1_900 => {
+                        *side = DroidSideState::Shooting;
+                        *ms = 0;
+                        emit_ards.push(ard);
+                    }
+                    DroidSideState::Shooting if *ms >= 500 => {
+                        *side = DroidSideState::Standing;
+                        *ms = 0;
+                    }
+                    DroidSideState::Exploding if *ms >= 350 => {
+                        *side = DroidSideState::Standing;
+                        *ms = 0;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        for ard in emit_ards {
+            self.emit_ard(ard);
+        }
+    }
+
+    /// Handles authentic `BattleDroidScene` switches (`0x27`, `0x22`, `0x23`, `0x1b`, `0x1c`).
+    pub(crate) fn handle_battle_droid_switch(&mut self, sw_id: u8) -> bool {
+        let is_bd = self
+            .active_scene
+            .as_ref()
+            .is_some_and(|s| s.scene == Swe1Scene::BattleDroid);
+        if !is_bd {
+            return false;
+        }
+        if self.battle_droid.is_none() {
+            self.start_battle_droid_state();
+        }
+        match sw_id {
+            sw::SHIELD_HIT | sw::LEFT_SHIELD_TARGET | sw::RIGHT_SHIELD_TARGET => {
+                let is_center = sw_id == sw::SHIELD_HIT;
+                let pts = if is_center { 400_000 } else { 200_000 };
+                self.add_score(pts);
+                self.trigger_leff(LeffKind::ShieldHit);
+                let mut completed = false;
+                let mut speech = false;
+                if let Some(ref mut bd) = self.battle_droid {
+                    if is_center {
+                        bd.tank_hits_remaining = bd.tank_hits_remaining.saturating_sub(2);
+                    } else if bd.tank_hits_remaining > 1 {
+                        bd.tank_hits_remaining -= 1;
+                    }
+                    bd.tank_hits_landed = 8u8.saturating_sub(bd.tank_hits_remaining);
+                    if bd.tank_hits_remaining == 0 {
+                        completed = true;
+                        bd.tank_defeated_ms = 500;
+                    } else {
+                        bd.tank_hit_flash_ms = 500;
+                        bd.speech_counter = bd.speech_counter.wrapping_add(1);
+                        speech = (bd.speech_counter & 3) == 3;
+                    }
+                }
+                if completed {
+                    self.complete_battle_droid_scene();
+                } else {
+                    self.emit_ard("ard_battle_droid_scene_tank_hit");
+                    if speech {
+                        self.emit_ard("ard_hit_bdroids_speech");
+                    }
+                    if let Some(ref mut sc) = self.active_scene {
+                        sc.hits_remaining = self
+                            .battle_droid
+                            .as_ref()
+                            .map_or(1, |b| b.tank_hits_remaining.div_ceil(2).max(1));
+                    }
+                }
+                true
+            }
+            sw::RAMP_MADE_LEFT | sw::RAMP_MADE_RIGHT => {
+                let is_right = sw_id == sw::RAMP_MADE_RIGHT;
+                if let Some(ref mut bd) = self.battle_droid {
+                    bd.staps_destroyed = bd.staps_destroyed.saturating_add(1);
+                    bd.stap_exploding_ms = 350;
+                    bd.last_hit_laser = false;
+                    if is_right {
+                        bd.right_droid = DroidSideState::Exploding;
+                        bd.right_droid_ms = 0;
+                    } else {
+                        bd.left_droid = DroidSideState::Exploding;
+                        bd.left_droid_ms = 0;
+                    }
+                }
+                self.emit_ard("ard_battle_droid_scene_droid_boom");
+                self.advance_active_scene("STAP DESTROYED!");
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn complete_battle_droid_scene(&mut self) {
+        self.emit_ard("ard_battle_droid_scene_tank_boom");
+        self.complete_active_scene(Swe1Scene::BattleDroid);
+        self.battle_droid = None;
+        self.set_banner("BATTLE DROID TANK DESTROYED!", 3_000);
+    }
+
+    pub(crate) fn render_battle_droid(&mut self, secs: u32) {
+        let f60 = ((self.elapsed_ms * 60) / 1000) as usize;
+        self.scene_sprite("anim_bdroid_background", 0, 0, 0, 1);
+        let bd = self.battle_droid.clone().unwrap_or_default();
+
+        // MTT Frame (`242x135`) + Doors (`138x152`) + Fires (`242x150`)
+        self.scene_sprite("anim_mtt_frame", 0, MTT_X, MTT_Y, 2);
+        self.scene_sprite(bd.mtt_doors_anim(), f60, MTT_DOORS_X, MTT_DOORS_Y, 4);
+        if bd.tank_hits_landed >= 3 {
+            self.scene_sprite("anim_mtt_fires", f60, MTT_X, MTT_Y, 3);
+        }
+        if bd.tank_hit_flash_ms > 0 {
+            let fr = ((500 - bd.tank_hit_flash_ms) * 60 / 1000) as usize;
+            self.scene_sprite("anim_explosion_2", fr, 210, 180, 7);
+        }
+        if bd.tank_defeated_ms > 0 {
+            let fr = ((500 - bd.tank_defeated_ms) * 60 / 1000) as usize;
+            self.scene_sprite(
+                "anim_bdroid_tank_explosion",
+                fr,
+                TANK_EXPLOSION_X,
+                TANK_EXPLOSION_Y,
+                8,
+            );
+        }
+
+        // Left & Right Battle Droids
+        match bd.left_droid {
+            DroidSideState::Unpacking => {
+                let fr = ((bd.left_droid_ms * 60) / 1000) as usize;
+                self.scene_sprite("anim_left_bdroid_unpacking", fr.min(14), -30, 75, 3);
+            }
+            DroidSideState::Standing => {
+                self.scene_sprite("anim_left_bdroid_standing", f60, 40, 80, 3);
+            }
+            DroidSideState::Shooting => {
+                self.scene_sprite("anim_left_bdroid_shooting", f60, 40, 80, 3);
+                let dx = (bd.left_droid_ms / 4) as i32;
+                self.scene_sprite("anim_bdroid_zap", f60, 96 + dx, 112, 6);
+            }
+            DroidSideState::Exploding => {
+                let fr = ((bd.left_droid_ms * 60) / 1000) as usize;
+                self.scene_sprite("anim_bdroid_explosion", fr, 12, 60, 7);
+            }
+        }
+        match bd.right_droid {
+            DroidSideState::Unpacking => {
+                let fr = ((bd.right_droid_ms * 60) / 1000) as usize;
+                self.scene_sprite("anim_right_bdroid_unpacking", fr.min(14), 470, 75, 3);
+            }
+            DroidSideState::Standing => {
+                self.scene_sprite("anim_right_bdroid_standing", f60, 520, 80, 3);
+            }
+            DroidSideState::Shooting => {
+                self.scene_sprite("anim_right_bdroid_shooting", f60, 520, 80, 3);
+                let dx = (bd.right_droid_ms / 4) as i32;
+                self.scene_sprite("anim_bdroid_zap", f60, 516 - dx, 112, 6);
+            }
+            DroidSideState::Exploding => {
+                let fr = ((bd.right_droid_ms * 60) / 1000) as usize;
+                self.scene_sprite("anim_bdroid_explosion", fr, 420, 60, 7);
+            }
+        }
+
+        // Center STAP + Crosshair + Zap / Explosion
+        if bd.stap_exploding_ms > 0 {
+            let fr = ((350 - bd.stap_exploding_ms) * 60 / 1000) as usize;
+            self.scene_sprite("anim_bdroid_stap_explosion", fr, 33, 14, 7);
+        } else {
+            self.scene_sprite("anim_bdroid_on_stap", f60, 238, 68, 4);
+            self.scene_sprite("anim_stap_xhair", f60, 275, 76, 5);
+            if bd.stap_zap_ms < 367 {
+                self.scene_sprite("anim_bdroid_stap_zap", f60, 280, 96, 6);
+            }
+        }
+
+        self.render_scene_footer(bd.tank_hits_remaining, secs, "DROIDS LEFT");
+    }
+}

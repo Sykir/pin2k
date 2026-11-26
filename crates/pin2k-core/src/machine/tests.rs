@@ -691,6 +691,333 @@
     }
 
     #[test]
+    fn battle_droid_authentic_tank_and_stap_state_machine() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:0"));
+        assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, 8);
+        for _ in 0..240 {
+            machine.tick(16);
+        }
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_mtt_frame").count(),
+            1
+        );
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_mtt_doors_clean_anim" && s.x == 239 && s.y == 89));
+
+        // Side shield target deals 1 damage (down to 7) + 200_000 pts
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_SHIELD_TARGET);
+        assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, 7);
+
+        // Center shield hits deal 2 damage each (7 -> 5 -> 3 -> 1)
+        for expected in [5, 3, 1] {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+            assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, expected);
+        }
+        // Final center shield hit defeats the tank & completes the scene
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+        assert!(machine.active_scene.is_none());
+        assert!(machine.battle_droid.is_none());
+    }
+
+    #[test]
+    fn destroyer_droid_authentic_target_sweep_and_completion() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:1"));
+        assert_eq!(machine.destroyer_droid.as_ref().unwrap().destroyers_remaining, 6);
+        machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
+        machine.tick(16);
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_sith_probe_target").count(),
+            1
+        );
+
+        // Place target in center window and destroy all 6 droidekas
+        for expected in (0..6).rev() {
+            machine.destroyer_droid.as_mut().unwrap().target_x = 220;
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+            if expected > 0 {
+                assert_eq!(machine.destroyer_droid.as_ref().unwrap().destroyers_remaining, expected);
+            }
+        }
+        assert!(machine.active_scene.is_none());
+        assert!(machine.destroyer_droid.is_none());
+    }
+
+    #[test]
+    fn federation_fighter_authentic_fighters_and_control_ship_completion() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:2"));
+        assert_eq!(machine.federation_fighter.as_ref().unwrap().fighters_remaining, 9);
+        machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
+        machine.tick(16);
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_droid_control_ship").count(),
+            1
+        );
+
+        // 3 SHIELD_POPPER hits (3 damage each) defeat all 9 fighters
+        for expected in [6, 3, 0] {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_POPPER);
+            if expected > 0 {
+                assert_eq!(machine.federation_fighter.as_ref().unwrap().fighters_remaining, expected);
+            }
+        }
+        assert!(machine.active_scene.is_none());
+        assert!(machine.federation_fighter.is_none());
+    }
+
+    #[test]
+    fn gungan_battle_authentic_sub_escape_distance_and_completion() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:3"));
+        assert_eq!(machine.gungan_battle.as_ref().unwrap().distance, 5);
+        machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
+        machine.tick(16);
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_gungan_sub_sub").count(),
+            1
+        );
+
+        // Shield hit (+1 -> 6), then 2 ramp shots (+2 each -> 8 -> 10) complete the escape
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+        assert_eq!(machine.gungan_battle.as_ref().unwrap().distance, 6);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
+        assert_eq!(machine.gungan_battle.as_ref().unwrap().distance, 8);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_RIGHT);
+        assert!(machine.active_scene.is_none());
+        assert!(machine.gungan_battle.is_none());
+    }
+
+    #[test]
+    fn hangar_escape_authentic_droids_and_popper_completion() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:4"));
+        assert_eq!(machine.hangar_escape.as_ref().unwrap().droids_remaining, 8);
+        machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
+        machine.tick(16);
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_hangar_droid_run").count(),
+            1
+        );
+
+        // 4 SHIELD_POPPER hits (2 each) defeat all 8 droids
+        for expected in [6, 4, 2, 0] {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_POPPER);
+            if expected > 0 {
+                assert_eq!(machine.hangar_escape.as_ref().unwrap().droids_remaining, expected);
+            }
+        }
+        assert!(machine.active_scene.is_none());
+        assert!(machine.hangar_escape.is_none());
+    }
+
+    #[test]
+    fn hover_tank_authentic_lanes_catapult_and_completion() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:5"));
+        assert_eq!(machine.hover_tank.as_ref().unwrap().tanks_remaining, 6);
+        machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
+        machine.tick(16);
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_hover_tank_boomer_ball").count(),
+            1
+        );
+
+        for expected in (0..6).rev() {
+            let sw_id = [sw::LEFT_RAMP_ENTER, sw::SHIELD_HIT, sw::RIGHT_RAMP_ENTER][expected as usize % 3];
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw_id);
+            if expected > 0 {
+                assert_eq!(machine.hover_tank.as_ref().unwrap().tanks_remaining, expected);
+            }
+        }
+        assert!(machine.active_scene.is_none());
+        assert!(machine.hover_tank.is_none());
+    }
+
+    #[test]
+    fn probe_droid_authentic_target_and_completion() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:7"));
+        assert_eq!(machine.probe_droid.as_ref().unwrap().probes_remaining, 3);
+        machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
+        machine.tick(16);
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_sith_probe_target").count(),
+            1
+        );
+
+        for expected in [2, 1, 0] {
+            machine.probe_droid.as_mut().unwrap().target_x = 220;
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+            if expected > 0 {
+                assert_eq!(machine.probe_droid.as_ref().unwrap().probes_remaining, expected);
+            }
+        }
+        assert!(machine.active_scene.is_none());
+        assert!(machine.probe_droid.is_none());
+    }
+
+    #[test]
+    fn queen_fashion_authentic_wheel_and_outfits_completion() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:8"));
+        assert_eq!(machine.queen_fashion.as_ref().unwrap().outfits_remaining, 3);
+        machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
+        machine.tick(16);
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_fashion_throne" && s.x == 5 && s.y == 44));
+
+        // Spin wheel with SHIELD_HIT
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+        assert_eq!(machine.queen_fashion.as_ref().unwrap().wheel_pos, 1);
+
+        // Collect 3 outfits via ramps
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
+        assert_eq!(machine.queen_fashion.as_ref().unwrap().outfits_remaining, 2);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_RAMP_ENTER);
+        assert_eq!(machine.queen_fashion.as_ref().unwrap().outfits_remaining, 1);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_SHIELD_TARGET);
+        assert!(machine.active_scene.is_none());
+        assert!(machine.queen_fashion.is_none());
+    }
+
+    #[test]
+    fn wattos_chance_authentic_cubes_and_completion() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:10"));
+        assert_eq!(machine.wattos_chance.as_ref().unwrap().hits_remaining, 3);
+        machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
+        machine.tick(16);
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_watto_scene_cube").count(),
+            3
+        );
+
+        // Active lane starts at 0 (left); hit left 3 times to complete
+        for expected in [2, 1, 0] {
+            machine.wattos_chance.as_mut().unwrap().timeline_ms = 0;
+            machine.wattos_chance.as_mut().unwrap().active_lane = 0;
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
+            if expected > 0 {
+                assert_eq!(machine.wattos_chance.as_ref().unwrap().hits_remaining, expected);
+            }
+        }
+        assert!(machine.active_scene.is_none());
+        assert!(machine.wattos_chance.is_none());
+    }
+
+    #[test]
+    fn mos_espa_cantina_authentic_chairs_and_completion() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:11"));
+        assert_eq!(machine.mos_espa_cantina.as_ref().unwrap().seats_remaining, 5);
+        machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
+        machine.tick(16);
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_jedi_council_background").count(),
+            1
+        );
+
+        for expected in (0..5).rev() {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+            if expected > 0 {
+                assert_eq!(machine.mos_espa_cantina.as_ref().unwrap().seats_remaining, expected);
+            }
+        }
+        assert!(machine.active_scene.is_none());
+        assert!(machine.mos_espa_cantina.is_none());
+    }
+
+    #[test]
+    fn r2d2_authentic_units_hurry_up_and_completion() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:12"));
+        assert_eq!(machine.r2d2.as_ref().unwrap().units_remaining, 6);
+        machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
+        machine.tick(16);
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_r2d2_scene_r2d2_unit").count(),
+            1
+        );
+
+        for expected in (0..6).rev() {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+            if expected > 0 {
+                assert_eq!(machine.r2d2.as_ref().unwrap().units_remaining, expected);
+            }
+        }
+        assert!(machine.active_scene.is_none());
+        assert!(machine.r2d2.is_none());
+    }
+
+    #[test]
+    fn question_mark_authentic_mystery_award_and_timer_completion() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("scene:13"));
+        assert!(machine.question_mark.is_some());
+        machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
+        machine.tick(16);
+        assert_eq!(
+            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_super_mystery_icon").count(),
+            1
+        );
+
+        // 5-second sleep completes QuestionMarkScene
+        for _ in 0..320 {
+            machine.tick(16);
+        }
+        assert!(machine.active_scene.is_none());
+        assert!(machine.question_mark.is_none());
+    }
+
+    #[test]
     fn attract_kahuna_logo_renders_tinted_light_flare_and_spinning_logo() {
         let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
         let driver = PdbDriver::new(port);

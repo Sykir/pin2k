@@ -258,7 +258,20 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
             // Deflector Shield Targets & Center Shield Popper (`Scenes::start_valid_scene`)
             sw::LEFT_SHIELD_TARGET | sw::RIGHT_SHIELD_TARGET | sw::SHIELD_HIT => {
-                if self.handle_jarjar_juggle_switch(id) || self.handle_podrace_switch(id) {
+                if self.handle_battle_droid_switch(id)
+                    || self.handle_destroyer_droid_switch(id)
+                    || self.handle_federation_fighter_switch(id)
+                    || self.handle_gungan_battle_switch(id)
+                    || self.handle_hangar_escape_switch(id)
+                    || self.handle_hover_tank_switch(id)
+                    || self.handle_probe_droid_switch(id)
+                    || self.handle_queen_fashion_switch(id)
+                    || self.handle_wattos_chance_switch(id)
+                    || self.handle_mos_espa_cantina_switch(id)
+                    || self.handle_r2d2_switch(id)
+                    || self.handle_jarjar_juggle_switch(id)
+                    || self.handle_podrace_switch(id)
+                {
                     return;
                 }
                 self.audio.play_sound(sound::SHIELD_HIT_SFX, false);
@@ -306,12 +319,26 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             sw::SHIELD_POPPER => {
                 self.popper_hold_ms = 900;
                 self.add_score(scoring::SAUCER_ARRIVAL);
+                if self.handle_federation_fighter_switch(id)
+                    || self.handle_hangar_escape_switch(id)
+                {
+                    return;
+                }
                 self.on_shield_popper_entered();
             }
             // Left & Right Ramps + Left Loop -> Virtual Spinners + Combos + C-3PO + JEDI + Scene/Multiball
             sw::LEFT_RAMP_ENTER => {
                 self.trigger_virtual_spinner(false, true);
-                if self.handle_jarjar_juggle_switch(id) || self.handle_podrace_switch(id) {
+                if self.handle_destroyer_droid_switch(id)
+                    || self.handle_federation_fighter_switch(id)
+                    || self.handle_hangar_escape_switch(id)
+                    || self.handle_hover_tank_switch(id)
+                    || self.handle_probe_droid_switch(id)
+                    || self.handle_queen_fashion_switch(id)
+                    || self.handle_wattos_chance_switch(id)
+                    || self.handle_jarjar_juggle_switch(id)
+                    || self.handle_podrace_switch(id)
+                {
                     return;
                 }
                 self.add_score(scoring::SWITCH_BASE);
@@ -319,7 +346,16 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             sw::RIGHT_RAMP_ENTER => {
                 self.trigger_virtual_spinner(true, true);
                 self.jarjar_saucer_event(true, 0);
-                if self.handle_jarjar_juggle_switch(id) || self.handle_podrace_switch(id) {
+                if self.handle_destroyer_droid_switch(id)
+                    || self.handle_federation_fighter_switch(id)
+                    || self.handle_hangar_escape_switch(id)
+                    || self.handle_hover_tank_switch(id)
+                    || self.handle_probe_droid_switch(id)
+                    || self.handle_queen_fashion_switch(id)
+                    || self.handle_wattos_chance_switch(id)
+                    || self.handle_jarjar_juggle_switch(id)
+                    || self.handle_podrace_switch(id)
+                {
                     return;
                 }
                 self.add_score(scoring::SWITCH_BASE);
@@ -330,6 +366,13 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.trigger_virtual_spinner(false, true);
                 } else if id == sw::RAMP_MADE_RIGHT {
                     self.trigger_virtual_spinner(true, true);
+                }
+                if self.handle_battle_droid_switch(id)
+                    || self.handle_gungan_battle_switch(id)
+                    || self.handle_mos_espa_cantina_switch(id)
+                    || self.handle_r2d2_switch(id)
+                {
+                    return;
                 }
                 self.on_major_shot_made(id);
             }
@@ -705,6 +748,66 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             intro_remaining_ms: intro_ms,
             active_ms: 0,
         });
+        if scene == Swe1Scene::BattleDroid {
+            self.start_battle_droid_state();
+        } else {
+            self.battle_droid = None;
+        }
+        if scene == Swe1Scene::DestroyerDroid {
+            self.start_destroyer_droid_state();
+        } else {
+            self.destroyer_droid = None;
+        }
+        if scene == Swe1Scene::FederationFighter {
+            self.start_federation_fighter_state();
+        } else {
+            self.federation_fighter = None;
+        }
+        if scene == Swe1Scene::GunganBattle {
+            self.start_gungan_battle_state();
+        } else {
+            self.gungan_battle = None;
+        }
+        if scene == Swe1Scene::HangarEscape {
+            self.start_hangar_escape_state();
+        } else {
+            self.hangar_escape = None;
+        }
+        if scene == Swe1Scene::HoverTank {
+            self.start_hover_tank_state();
+        } else {
+            self.hover_tank = None;
+        }
+        if scene == Swe1Scene::ProbeDroid {
+            self.start_probe_droid_state();
+        } else {
+            self.probe_droid = None;
+        }
+        if scene == Swe1Scene::QueenFashion {
+            self.start_queen_fashion_state();
+        } else {
+            self.queen_fashion = None;
+        }
+        if scene == Swe1Scene::WattosChance {
+            self.start_wattos_chance_state();
+        } else {
+            self.wattos_chance = None;
+        }
+        if scene == Swe1Scene::MosEspaCantina {
+            self.start_mos_espa_cantina_state();
+        } else {
+            self.mos_espa_cantina = None;
+        }
+        if scene == Swe1Scene::R2D2 {
+            self.start_r2d2_state();
+        } else {
+            self.r2d2 = None;
+        }
+        if scene == Swe1Scene::QuestionMark {
+            self.start_question_mark_state();
+        } else {
+            self.question_mark = None;
+        }
         if scene == Swe1Scene::JarJarJuggle {
             self.start_jarjar_juggle_state();
         } else {

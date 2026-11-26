@@ -11,12 +11,12 @@ use super::Pin2kMachine;
 use crate::swe1_rules::{ActiveMultiball, Swe1Scene};
 
 impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A> {
-    fn scene_sprite(&mut self, name: &str, frame: usize, x: i32, y: i32, z: u8) {
+    pub(crate) fn scene_sprite(&mut self, name: &str, frame: usize, x: i32, y: i32, z: u8) {
         self.video
             .draw_named_sprite(SpriteDrawCmd::new(name, frame, x, y, z));
     }
 
-    fn scene_text(
+    pub(crate) fn scene_text(
         &mut self,
         font: &str,
         text: impl Into<String>,
@@ -93,162 +93,46 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             let hits = sc.hits_remaining;
             match sc.scene {
                 Swe1Scene::BattleDroid => {
-                    self.scene_sprite("anim_bdroid_background", 0, 0, 0, 1);
-                    self.scene_sprite("anim_left_bdroid_standing", f60, 40, 80, 3);
-                    self.scene_sprite("anim_right_bdroid_standing", f60, 520, 80, 3);
-                    self.scene_sprite("anim_bdroid_on_stap", f60, 238, 68, 4);
-                    self.scene_sprite("anim_stap_xhair", f60, 275, 76, 5);
-                    if (f60 % 48) < 18 {
-                        self.scene_sprite("anim_bdroid_stap_zap", f60, 280, 96, 6);
-                    }
-                    self.render_scene_footer(hits, secs, "DROIDS LEFT");
+                    self.render_battle_droid(secs);
                 }
                 Swe1Scene::DestroyerDroid => {
-                    self.scene_sprite("anim_destroyer_droid_background", 0, 0, 0, 1);
-                    self.scene_sprite("anim_destroyer_droid_s_idle", f60, 80, 92, 3);
-                    self.scene_sprite("anim_destroyer_droid_m_idle", f60, 430, 82, 3);
-                    self.scene_sprite("anim_destroyer_droid_l_roll", f60, 20, 62, 5);
-                    self.render_scene_footer(hits, secs, "DROIDEKAS");
+                    self.render_destroyer_droid(secs);
                 }
                 Swe1Scene::FederationFighter => {
-                    let scroll_x = -((f60 % 260) as i32);
-                    self.scene_sprite("anim_federation_fighter_background", 0, scroll_x, 0, 1);
-                    self.scene_sprite("anim_droid_control_ship", 0, 120, 8, 2);
-                    self.scene_sprite("anim_federation_fighter", f60, 220, 74, 4);
-                    self.scene_sprite("anim_naboo_xhair", 0, 245, 78, 5);
-                    self.render_scene_footer(hits, secs, "FIGHTERS");
+                    self.render_federation_fighter(secs);
                 }
                 Swe1Scene::GunganBattle => {
-                    self.scene_sprite("anim_gungan_seaweed", f60, 0, 40, 1);
-                    self.scene_sprite("anim_gungan_sub_bubbles_2", f60, 35, 0, 2);
-                    self.scene_sprite("anim_gungan_sub_sub", f60, 80, 84, 4);
-                    self.scene_sprite("anim_gungan_sub_opee", f60, 220, 44, 5);
-                    self.scene_text(
-                        "font_shadow_9_narrow_data",
-                        "G U N G A N",
-                        540,
-                        80,
-                        7,
-                        0x7FE0,
-                        Some(0x0000),
-                        TextAlign::Center,
-                    );
-                    self.render_scene_footer(hits, secs, "BATTLE HITS");
+                    self.render_gungan_battle(secs);
                 }
                 Swe1Scene::HangarEscape => {
-                    self.scene_sprite("anim_federation_fighter_cockpit", 0, 0, 0, 1);
-                    self.scene_sprite("anim_hangar_droid_run", f60, 275, 48, 3);
-                    self.scene_sprite("anim_hangar_escape_torpedo", f60, 220, 80, 4);
-                    self.scene_sprite("anim_hangar_droid_explosion", f60, 140, 42, 5);
-                    self.scene_sprite("anim_hangar_droid_laser_explosion", f60, 220, 40, 6);
-                    self.render_scene_footer(hits, secs, "TARGETS");
+                    self.render_hangar_escape(secs);
                 }
                 Swe1Scene::HoverTank => {
-                    self.scene_sprite("anim_hover_tank_background", 0, 0, 0, 1);
-                    self.scene_sprite("anim_hover_tank_l_float", f60, 60, 72, 3);
-                    self.scene_sprite("anim_hover_tank_r_float", f60, 440, 72, 3);
-                    self.scene_sprite("anim_hover_tank_c_float", f60, 233, 66, 4);
-                    self.scene_sprite("anim_hover_tank_catapult_idle", f60, 456, 120, 5);
-                    self.scene_sprite("anim_hover_tank_boomer_ball", f60, 360, 115, 6);
-                    self.render_scene_footer(hits, secs, "TANKS");
+                    self.render_hover_tank(secs);
                 }
                 Swe1Scene::Podrace => {
                     self.render_podrace(secs);
                 }
                 Swe1Scene::ProbeDroid => {
-                    let scroll_x = -((f60 % 160) as i32);
-                    self.scene_sprite("anim_sith_probe_background", 0, scroll_x, 0, 1);
-                    self.scene_sprite("anim_sith_probe_hover", f60, 210, 44, 4);
-                    self.scene_sprite("anim_sith_probe_queen_shoot_1", f60, 40, 84, 5);
-                    self.scene_sprite("anim_sith_probe_xhair", f60, 240, 56, 6);
-                    self.render_scene_footer(hits, secs, "PROBES");
+                    self.render_probe_droid(secs);
                 }
                 Swe1Scene::QueenFashion => {
-                    self.scene_sprite("anim_fashion_base", 0, 210, 205, 2);
-                    self.scene_sprite("anim_fashion_throne", f60, 190, 40, 3);
-                    self.scene_sprite("anim_fashion_queen", f60, 210, 44, 4);
-                    self.scene_sprite("anim_fashion_wheel", f60, 40, 46, 5);
-                    self.scene_sprite("anim_fashion_sparkle_left", f60, 130, 60, 6);
-                    self.scene_sprite("anim_fashion_sparkle_right", f60, 420, 60, 6);
-                    self.render_scene_footer(hits, secs, "OUTFITS");
+                    self.render_queen_fashion(secs);
                 }
                 Swe1Scene::JarJarJuggle => {
                     self.render_jarjar_juggle(secs);
                 }
                 Swe1Scene::WattosChance => {
-                    self.scene_sprite("anim_watto_scene_background", 0, 0, 0, 1);
-                    self.scene_sprite("anim_watto_scene_chin_loop_middle", f60, 233, 44, 3);
-                    self.scene_sprite("anim_watto_scene_cube", f60, 257, 120, 5);
-                    self.scene_sprite("anim_watto_scene_cube_flash", f60, 226, 108, 6);
-                    self.scene_text(
-                        "font_shadow_7_data",
-                        format!("SHOOT CUBE!  HITS LEFT: {hits}   {secs}S"),
-                        320,
-                        208,
-                        7,
-                        0x7FE0,
-                        Some(0x0000),
-                        TextAlign::Center,
-                    );
+                    self.render_wattos_chance(secs);
                 }
                 Swe1Scene::MosEspaCantina => {
-                    self.scene_sprite("anim_jedi_council_background", 0, 23, 4, 1);
-                    self.scene_sprite("anim_jedi_council_mace", f60, 40, 86, 3);
-                    self.scene_sprite("anim_jedi_council_yoda", f60, 500, 92, 3);
-                    self.scene_sprite("anim_jedi_council_member_1", f60, 170, 84, 4);
-                    self.scene_sprite("anim_jedi_council_member_2", f60, 370, 84, 4);
-                    self.scene_sprite("anim_jedi_council_neck", f60, 275, 78, 5);
-                    self.scene_text(
-                        "font_shadow_9_data",
-                        format!("JEDI COUNCIL: {hits} LEFT   {secs}S"),
-                        320,
-                        206,
-                        7,
-                        0x7FFF,
-                        Some(0x0000),
-                        TextAlign::Center,
-                    );
+                    self.render_mos_espa_cantina(secs);
                 }
                 Swe1Scene::R2D2 => {
-                    self.scene_sprite("anim_r2d2_scene_background_upper", 0, 0, 0, 1);
-                    self.scene_sprite("anim_r2d2_scene_background_lower", 0, 0, 109, 2);
-                    self.scene_sprite("anim_r2d2_scene_r2d2_unit", f60, 225, 105, 4);
-                    self.scene_sprite("anim_r2d2_scene_blue_yellow_r2_unit", f60, 25, 135, 5);
-                    self.scene_sprite("anim_r2d2_scene_red_r2_unit", f60, 410, 130, 5);
-                    self.scene_text(
-                        "font_shadow_11_narrow_data",
-                        format!("REPAIR SHIELD!  {hits} LEFT  ({secs}S)"),
-                        320,
-                        214,
-                        7,
-                        0x7E00,
-                        Some(0x0000),
-                        TextAlign::Center,
-                    );
+                    self.render_r2d2(secs);
                 }
                 Swe1Scene::QuestionMark => {
-                    self.scene_sprite("anim_question_mark_blue", f60, 140, 88, 4);
-                    self.scene_sprite("anim_question_mark_green", f60, 378, 88, 4);
-                    self.scene_text(
-                        "font_shadow_15_data",
-                        "MYSTERY AWARD",
-                        320,
-                        62,
-                        6,
-                        0x7FE0,
-                        Some(0x001F),
-                        TextAlign::Center,
-                    );
-                    self.scene_text(
-                        "font_shadow_11_data",
-                        format!("HITS LEFT: {hits}   TIME: {secs}S"),
-                        320,
-                        174,
-                        7,
-                        0x7FFF,
-                        Some(0x0000),
-                        TextAlign::Center,
-                    );
+                    self.render_question_mark(secs);
                 }
             }
             self.render_scene_extras(sc.scene, sc.active_ms, hits);
@@ -428,7 +312,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
     }
 
-    fn render_scene_footer(&mut self, hits: u8, secs: u32, label: &str) {
+    pub(crate) fn render_scene_footer(&mut self, hits: u8, secs: u32, label: &str) {
         self.scene_text(
             "font_shadow_9_narrow_data",
             format!("{label}: {hits}   TIME: {secs}S"),
