@@ -488,6 +488,7 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
                     .collect();
                 let layers_json = machine.video.last_frame_layers_json();
                 if let Ok(mut st) = shared_web.lock() {
+                    st.prune_expired_sounds();
                     let (seq, sfile, sloop) = st
                         .active_sound_file
                         .clone()

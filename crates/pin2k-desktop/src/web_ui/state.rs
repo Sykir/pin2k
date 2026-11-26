@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use pin2k_hal::{AudioBackend, SoundId};
 use pin2k_rom_tool::asset_extractor::SoundManifest;
@@ -53,6 +54,8 @@ pub struct SoundStackEntry {
     pub looping: bool,
     pub is_override: bool,
     pub active: bool,
+    #[serde(skip)]
+    pub expires_at: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -79,6 +82,44 @@ impl SharedWebState {
             }
         }
     }
+
+    /// Drops one-shot SFX entries from `sound_stack` once their audio duration has elapsed
+    /// so the live stack only shows sounds that are currently audible.
+    pub fn prune_expired_sounds(&mut self) {
+        let now = Instant::now();
+        self.sound_stack
+            .retain(|entry| entry.active && entry.expires_at.is_none_or(|exp| now < exp));
+    }
+}
+
+/// Fast OGG Vorbis duration probe (reads sample rate from Vorbis ident header + final OggS granule).
+fn probe_ogg_duration_ms(path: &Path) -> Option<u64> {
+    let mut f = File::open(path).ok()?;
+    let mut head = [0u8; 64];
+    let n = f.read(&mut head).ok()?;
+    let vorbis_pos = head[..n].windows(7).position(|w| w == b"\x01vorbis")?;
+    let sr_off = vorbis_pos + 12;
+    if sr_off + 4 > n {
+        return None;
+    }
+    let sample_rate = u32::from_le_bytes(head[sr_off..sr_off + 4].try_into().ok()?);
+    if sample_rate == 0 {
+        return None;
+    }
+    let len = f.metadata().ok()?.len();
+    let tail_start = len.saturating_sub(65_536);
+    f.seek(SeekFrom::Start(tail_start)).ok()?;
+    let mut tail = Vec::new();
+    f.read_to_end(&mut tail).ok()?;
+    let oggs_pos = tail.windows(4).rposition(|w| w == b"OggS")?;
+    if oggs_pos + 14 > tail.len() {
+        return None;
+    }
+    let granule = i64::from_le_bytes(tail[oggs_pos + 6..oggs_pos + 14].try_into().ok()?);
+    if granule <= 0 {
+        return None;
+    }
+    Some(((granule as u128 * 1000) / (sample_rate as u128)).max(150) as u64)
 }
 
 #[derive(Clone)]
@@ -86,6 +127,8 @@ pub struct WebAudioBridge {
     pub shared: Arc<Mutex<SharedWebState>>,
     sound_files: Arc<HashMap<u16, String>>,
     override_files: Arc<HashMap<u16, String>>,
+    audio_dir: Option<PathBuf>,
+    duration_cache: HashMap<u16, u64>,
     seq: u64,
 }
 
@@ -108,6 +151,8 @@ impl WebAudioBridge {
             shared,
             sound_files: Arc::new(map),
             override_files: Arc::new(HashMap::new()),
+            audio_dir: assets_dir.map(|d| d.join("audio")),
+            duration_cache: HashMap::new(),
             seq: 0,
         }
     }
@@ -146,13 +191,33 @@ impl AudioBackend for WebAudioBridge {
             .or_else(|| self.sound_files.get(&id.0).cloned())
             .unwrap_or_else(|| format!("S{:04X}.ogg", id.0));
         let id_hex = format!("0x{:04X}", id.0);
+        let expires_at = if looping {
+            None
+        } else {
+            let dur_ms = if let Some(&cached) = self.duration_cache.get(&id.0) {
+                cached
+            } else {
+                let resolved_path = if is_override {
+                    self.shared
+                        .lock()
+                        .ok()
+                        .and_then(|st| st.audio_overrides.get(&file).cloned())
+                } else {
+                    self.audio_dir.as_ref().map(|d| d.join(&file))
+                };
+                let probed = resolved_path
+                    .as_deref()
+                    .and_then(probe_ogg_duration_ms)
+                    .unwrap_or(1_200);
+                self.duration_cache.insert(id.0, probed);
+                probed
+            };
+            Some(Instant::now() + Duration::from_millis(dur_ms))
+        };
         if let Ok(mut st) = self.shared.lock() {
+            st.prune_expired_sounds();
             if looping {
-                for entry in &mut st.sound_stack {
-                    if entry.looping && entry.active {
-                        entry.active = false;
-                    }
-                }
+                st.sound_stack.retain(|entry| !entry.looping);
             }
             st.sound_stack.insert(
                 0,
@@ -163,6 +228,7 @@ impl AudioBackend for WebAudioBridge {
                     looping,
                     is_override,
                     active: true,
+                    expires_at,
                 },
             );
             st.sound_stack.truncate(32);
@@ -181,11 +247,7 @@ impl AudioBackend for WebAudioBridge {
     fn stop_sound(&mut self, id: SoundId) {
         let id_hex = format!("0x{:04X}", id.0);
         if let Ok(mut st) = self.shared.lock() {
-            for entry in &mut st.sound_stack {
-                if entry.id_hex == id_hex && entry.active {
-                    entry.active = false;
-                }
-            }
+            st.sound_stack.retain(|entry| entry.id_hex != id_hex);
             st.write_log(&format!("[AUDIO] STOP {id_hex}"));
         }
     }
@@ -193,9 +255,7 @@ impl AudioBackend for WebAudioBridge {
     fn stop_all(&mut self) {
         self.seq = self.seq.wrapping_add(1);
         if let Ok(mut st) = self.shared.lock() {
-            for entry in &mut st.sound_stack {
-                entry.active = false;
-            }
+            st.sound_stack.clear();
             st.write_log(&format!("[AUDIO] seq={} STOP_ALL", self.seq));
             st.active_sound_file = None;
         }
@@ -245,16 +305,15 @@ mod tests {
 
         {
             let guard = shared.lock().unwrap();
-            assert_eq!(guard.sound_stack.len(), 3);
+            // 0x0001 was replaced by 0x0002 (looping), so only 0x0002 (loop) and 0x02C1 (SFX) are audible
+            assert_eq!(guard.sound_stack.len(), 2);
             assert_eq!(guard.sound_stack[0].id_hex, "0x0002");
-            assert!(guard.sound_stack[0].active);
-            // Previous looping BGM (0x0001) was superseded by 0x0002
-            assert_eq!(guard.sound_stack[2].id_hex, "0x0001");
-            assert!(!guard.sound_stack[2].active);
+            assert_eq!(guard.sound_stack[1].id_hex, "0x02C1");
+            assert!(guard.sound_stack.iter().all(|e| e.active));
         }
 
         bridge.stop_all();
         let guard = shared.lock().unwrap();
-        assert!(guard.sound_stack.iter().all(|e| !e.active));
+        assert!(guard.sound_stack.is_empty());
     }
 }
