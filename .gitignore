@@ -1,6 +1,8 @@
 /target
 **/*.rs.bk
 *.pdb
+.agent/
+.agents/
 
 # Local proprietary ROM dumps, updates, extracted assets, and runtime artifacts (never commit)
 /roms/
