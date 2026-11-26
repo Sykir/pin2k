@@ -518,6 +518,7 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
                         "paused": st.paused,
                         "layers": layers_json,
                         "sound_stack": st.sound_stack,
+                        "sound_events": st.web_audio_events,
                         "sound_seq": seq,
                         "sound_file": sfile,
                         "sound_loop": sloop,

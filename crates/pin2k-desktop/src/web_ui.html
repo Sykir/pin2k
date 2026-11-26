@@ -343,7 +343,23 @@ setInterval(async () => {
         `<tr style="opacity:${s.active ? '1' : '0.5'}"><td>${s.seq}</td><td><code>${s.id_hex}</code></td><td>${s.looping ? 'LOOP' : 'SFX'}</td><td style="color:${s.active ? '#4ade80' : '#94a3b8'}">${s.active ? 'ACTIF' : 'STOP'}</td><td>${s.file}${s.is_override ? ' <span style="color:#f472b6">[MOD]</span>' : ''}</td></tr>`
       ).join('');
     }
-    if (st.sound_seq && st.sound_seq !== lastSoundSeq) {
+    if (Array.isArray(st.sound_events)) {
+      for (const ev of st.sound_events) {
+        if (ev.seq <= lastSoundSeq) continue;
+        lastSoundSeq = ev.seq;
+        if (ev.action === 'stop_all') {
+          if (bgAudio) { bgAudio.pause(); bgAudio = null; }
+        } else if (ev.action === 'play' && ev.file) {
+          const a = new Audio('audio/' + ev.file);
+          a.loop = !!ev.looping;
+          if (ev.looping) {
+            if (bgAudio) bgAudio.pause();
+            bgAudio = a;
+          }
+          a.play().catch(()=>{});
+        }
+      }
+    } else if (st.sound_seq && st.sound_seq !== lastSoundSeq) {
       lastSoundSeq = st.sound_seq;
       if (st.sound_file) {
         const a = new Audio('audio/' + st.sound_file);

@@ -155,15 +155,22 @@ fn spawn_native_audio_worker() -> Sender<AudioCmd> {
     thread::spawn(move || {
         let stop_gen = Arc::new(AtomicU64::new(0));
         let mut active: HashMap<u16, Arc<AtomicBool>> = HashMap::new();
+        let mut current_loop: Option<Arc<AtomicBool>> = None;
         while let Ok(cmd) = rx.recv() {
             match cmd {
                 AudioCmd::Play { id, file, volume, looping } => {
                     if looping {
+                        if let Some(prev_loop) = current_loop.take() {
+                            prev_loop.store(true, Ordering::Relaxed);
+                        }
                         if let Some(prev) = active.remove(&id) {
                             prev.store(true, Ordering::Relaxed);
                         }
                     }
                     let cancel = Arc::new(AtomicBool::new(false));
+                    if looping {
+                        current_loop = Some(Arc::clone(&cancel));
+                    }
                     active.insert(id, Arc::clone(&cancel));
                     let gen = stop_gen.load(Ordering::Relaxed);
                     let gen_ref = Arc::clone(&stop_gen);
@@ -188,6 +195,9 @@ fn spawn_native_audio_worker() -> Sender<AudioCmd> {
                 }
                 AudioCmd::StopAll => {
                     stop_gen.fetch_add(1, Ordering::Relaxed);
+                    if let Some(prev_loop) = current_loop.take() {
+                        prev_loop.store(true, Ordering::Relaxed);
+                    }
                     for (_, flag) in active.drain() {
                         flag.store(true, Ordering::Relaxed);
                     }

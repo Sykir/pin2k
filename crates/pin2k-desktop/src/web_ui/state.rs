@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -58,6 +58,15 @@ pub struct SoundStackEntry {
     pub expires_at: Option<Instant>,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WebAudioEvent {
+    pub seq: u64,
+    pub action: &'static str,
+    pub id_hex: String,
+    pub file: String,
+    pub looping: bool,
+}
+
 #[derive(Default)]
 pub struct SharedWebState {
     pub latest_png: Vec<u8>,
@@ -69,6 +78,7 @@ pub struct SharedWebState {
     pub pending_debug: Vec<DebugCommand>,
     pub active_sound_file: Option<(u64, String, bool)>,
     pub sound_stack: Vec<SoundStackEntry>,
+    pub web_audio_events: VecDeque<WebAudioEvent>,
     pub audio_overrides: HashMap<String, PathBuf>,
     pub log_writer: Option<Arc<Mutex<File>>>,
     pub paused: bool,
@@ -232,6 +242,16 @@ impl AudioBackend for WebAudioBridge {
                 },
             );
             st.sound_stack.truncate(32);
+            st.web_audio_events.push_back(WebAudioEvent {
+                seq: self.seq,
+                action: "play",
+                id_hex: id_hex.clone(),
+                file: file.clone(),
+                looping,
+            });
+            while st.web_audio_events.len() > 64 {
+                st.web_audio_events.pop_front();
+            }
             st.write_log(&format!(
                 "[AUDIO] seq={} PLAY {} {} {}{}",
                 self.seq,
@@ -245,9 +265,20 @@ impl AudioBackend for WebAudioBridge {
     }
 
     fn stop_sound(&mut self, id: SoundId) {
+        self.seq = self.seq.wrapping_add(1);
         let id_hex = format!("0x{:04X}", id.0);
         if let Ok(mut st) = self.shared.lock() {
             st.sound_stack.retain(|entry| entry.id_hex != id_hex);
+            st.web_audio_events.push_back(WebAudioEvent {
+                seq: self.seq,
+                action: "stop",
+                id_hex: id_hex.clone(),
+                file: String::new(),
+                looping: false,
+            });
+            while st.web_audio_events.len() > 64 {
+                st.web_audio_events.pop_front();
+            }
             st.write_log(&format!("[AUDIO] STOP {id_hex}"));
         }
     }
@@ -256,6 +287,16 @@ impl AudioBackend for WebAudioBridge {
         self.seq = self.seq.wrapping_add(1);
         if let Ok(mut st) = self.shared.lock() {
             st.sound_stack.clear();
+            st.web_audio_events.push_back(WebAudioEvent {
+                seq: self.seq,
+                action: "stop_all",
+                id_hex: String::new(),
+                file: String::new(),
+                looping: false,
+            });
+            while st.web_audio_events.len() > 64 {
+                st.web_audio_events.pop_front();
+            }
             st.write_log(&format!("[AUDIO] seq={} STOP_ALL", self.seq));
             st.active_sound_file = None;
         }
@@ -310,10 +351,16 @@ mod tests {
             assert_eq!(guard.sound_stack[0].id_hex, "0x0002");
             assert_eq!(guard.sound_stack[1].id_hex, "0x02C1");
             assert!(guard.sound_stack.iter().all(|e| e.active));
+            // All 3 play events are preserved in web_audio_events so WebAudio never drops an earlier sound
+            assert_eq!(guard.web_audio_events.len(), 3);
+            assert_eq!(guard.web_audio_events[0].id_hex, "0x0001");
+            assert_eq!(guard.web_audio_events[1].id_hex, "0x02C1");
+            assert_eq!(guard.web_audio_events[2].id_hex, "0x0002");
         }
 
         bridge.stop_all();
         let guard = shared.lock().unwrap();
         assert!(guard.sound_stack.is_empty());
+        assert_eq!(guard.web_audio_events.back().unwrap().action, "stop_all");
     }
 }
