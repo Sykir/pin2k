@@ -33,7 +33,12 @@
   <h2>STAR WARS EPISODE I — PINBALL 2000 (RUST NATIVE + DEBUG CONSOLE)</h2>
   <div class="layout">
     <div class="left-col">
+      <div style="display:flex; gap:8px; width:100%; justify-content:flex-end; margin-bottom:6px;">
+        <button id="toggleVideoBtn" onclick="toggleVideoFeed()">Vidéo : ON</button>
+        <button id="toggleAudioBtn" onclick="toggleWebAudio()">Audio Web : ON</button>
+      </div>
       <img id="screen" src="frame.png" alt="Pinball 2000 Display">
+      <div id="videoOffBanner" style="display:none; width:640px; padding:18px; border:1px dashed #334155; border-radius:6px; text-align:center; color:#64748b; background:#0b1120;">Retour vidéo désactivé (mode debug léger)</div>
       <div id="hud" style="margin-top:6px; color:#93c5fd; font-size:12px; text-align:center;">LOADING...</div>
       <div class="controls">
         <button onclick="hit(64)">Coin [C]</button>
@@ -264,7 +269,43 @@
 <script>
 let lastSoundSeq = 0;
 let bgAudio = null;
+const activeSfx = new Set();
+let webAudioEnabled = localStorage.getItem('pin2k_web_audio') !== '0';
+let videoEnabled = localStorage.getItem('pin2k_web_video') !== '0';
 let catalog = { anims: [], fonts: [], sounds: [] };
+
+function applyMediaUiState() {
+  const vBtn = document.getElementById('toggleVideoBtn');
+  const aBtn = document.getElementById('toggleAudioBtn');
+  const scr = document.getElementById('screen');
+  const banner = document.getElementById('videoOffBanner');
+  vBtn.textContent = videoEnabled ? 'Vidéo : ON' : 'Vidéo : OFF';
+  vBtn.classList.toggle('active', videoEnabled);
+  aBtn.textContent = webAudioEnabled ? 'Audio Web : ON' : 'Audio Web : OFF';
+  aBtn.classList.toggle('active', webAudioEnabled);
+  scr.style.display = videoEnabled ? 'block' : 'none';
+  banner.style.display = videoEnabled ? 'none' : 'block';
+}
+
+function toggleWebAudio() {
+  webAudioEnabled = !webAudioEnabled;
+  localStorage.setItem('pin2k_web_audio', webAudioEnabled ? '1' : '0');
+  if (!webAudioEnabled) {
+    if (bgAudio) { bgAudio.pause(); bgAudio = null; }
+    for (const sfx of activeSfx) { sfx.pause(); }
+    activeSfx.clear();
+  }
+  applyMediaUiState();
+}
+
+function toggleVideoFeed() {
+  videoEnabled = !videoEnabled;
+  localStorage.setItem('pin2k_web_video', videoEnabled ? '1' : '0');
+  applyMediaUiState();
+  if (videoEnabled) pumpFrame();
+}
+
+applyMediaUiState();
 
 function post(url) { return fetch(url, {method:'POST'}); }
 function hit(sw) { post('api/switch/' + sw); }
@@ -288,15 +329,17 @@ document.addEventListener('keydown', (e) => {
 });
 
 function pumpFrame() {
+  if (!videoEnabled) return;
   const pre = new Image();
   pre.onload = () => {
+    if (!videoEnabled) return;
     document.getElementById('screen').src = pre.src;
     setTimeout(pumpFrame, 45);
   };
-  pre.onerror = () => { setTimeout(pumpFrame, 250); };
+  pre.onerror = () => { if (videoEnabled) setTimeout(pumpFrame, 250); };
   pre.src = 'frame.png?t=' + Date.now();
 }
-pumpFrame();
+if (videoEnabled) pumpFrame();
 
 function renderAssets() {
   const af = (document.getElementById('animFilter').value || '').toLowerCase();
@@ -347,21 +390,27 @@ setInterval(async () => {
       for (const ev of st.sound_events) {
         if (ev.seq <= lastSoundSeq) continue;
         lastSoundSeq = ev.seq;
+        if (!webAudioEnabled) continue;
         if (ev.action === 'stop_all') {
           if (bgAudio) { bgAudio.pause(); bgAudio = null; }
+          for (const sfx of activeSfx) { sfx.pause(); }
+          activeSfx.clear();
         } else if (ev.action === 'play' && ev.file) {
           const a = new Audio('audio/' + ev.file);
           a.loop = !!ev.looping;
           if (ev.looping) {
             if (bgAudio) bgAudio.pause();
             bgAudio = a;
+          } else {
+            activeSfx.add(a);
+            a.addEventListener('ended', () => activeSfx.delete(a), { once: true });
           }
           a.play().catch(()=>{});
         }
       }
     } else if (st.sound_seq && st.sound_seq !== lastSoundSeq) {
       lastSoundSeq = st.sound_seq;
-      if (st.sound_file) {
+      if (webAudioEnabled && st.sound_file) {
         const a = new Audio('audio/' + st.sound_file);
         a.loop = !!st.sound_loop;
         if (st.sound_loop) { if (bgAudio) bgAudio.pause(); bgAudio = a; }
