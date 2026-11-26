@@ -40,13 +40,26 @@ Williams Pinball 2000 hardware (MediaGX + PRISM) composites each logical frame a
 - Remaining shot count `(585, 35)` and label `LASER` / `LASERS` / `TORPEDOS` (during *Hangar Escape*) `(585, 48)`, `font_system_7_data`, `z = 21`, yellow `0x7FE0` when ready; greyed out (`monochrome_rgb555 = Some(0x294A)`, text `0x294A`) at `0`.
 
 ### `VirtualSpinners` / `DeffVSpinner` (`0x0017ead0..0x0017fa04`) — `crates/pin2k-core/src/machine/vspinner.rs`
-- **Authentic behavior**: completely idle at rest; triggered **exclusively** on ramp passes (`LEFT_RAMP_ENTER`, `RIGHT_RAMP_ENTER`, `RAMP_MADE_LEFT`, `RAMP_MADE_RIGHT`).
+- **Authentic behavior**: in nominal gameplay (`InGame` with no active scene, multiball, or special screen), both spinners remain visible resting statically at frame `0`; spinning animation, lightning, score popups, and turnstile audio trigger **exclusively** on ramp passes (`LEFT_RAMP_ENTER`, `RIGHT_RAMP_ENTER`, `RAMP_MADE_LEFT`, `RAMP_MADE_RIGHT`).
 - **Positions & layers**:
   - Left: `anim_spinner_bracket_left` + `anim_spinner_1` at `(43, 174)`, `z = 22`.
   - Right: `anim_spinner_bracket_right` + `anim_spinner_2` at `(421, 174)`, `z = 22`.
   - High speed: `anim_spinner_lightning` (`x + 6, y = 162, z = 22`).
   - Score popup `+10000` / `+25000`: `font_system_7_data`, `z = 23`, color `0x7FE0`.
 - **Audio**: rotates through the 4 DCS turnstile cues `sound::SPINNER_TICKS` (`0x03C3`, `0x03C9`, `0x03CA`, `0x03CB`) per half-revolution.
+
+### `DeffObiHolo` (Nominal Shield & Scene Select) — `crates/pin2k-core/src/machine/scene_render.rs`
+- **Shield up (`!scene_select_ready`)**: renders `anim_obiwan_holo` at `(125, 80)`, `z = 3`, flashing `anim_obiwan_holo_glow` for `350 ms` on each deflector shield hit.
+- **Shield defeated (`shield_health == 0`)**:
+  1. `0..900 ms`: plays `anim_obiwan_holo_flatten` (`125, 80, z = 3`) + `ard_obi_holo_watch_descends`.
+  2. `900..1500 ms`: chains into `anim_obiwan_holo_activate` (`162, 159, z = 4`) + `anim_holo_burst` (`60, 8, z = 5`) + `ard_scene_holo_burst`.
+  3. `>= 1500 ms`: loops `anim_obiwan_holo_glow_loop` (`179, 157, z = 4`) with the selectable mini-game hologram (`sc.holo_anim_hint()`) floating above it (`x = 190, y = 44, z = 5`).
+
+### `DeffGunganSeaweed` & `DeffGunganLetters` — `crates/pin2k-core/src/machine/hud_display.rs`
+- Rendered on the right side above the jet bumpers during nominal gameplay (`InGame` with no active scene, multiball, or special screen):
+  - `anim_gungan_seaweed` (`139×90`, 40 fr @ 40 fps) at `(496, 135)`, `z = 15`.
+  - 5 rising `anim_gungan_bubbles` columns behind the seaweed at `z = 10` (`y = 195 → 125`).
+  - `G-U-N-G-A-N` letter progress (`font_shadow_9_narrow_data`, `y = 112, z = 15`), blinking yellow/cyan during Super Jets.
 
 ---
 
@@ -95,7 +108,7 @@ Implemented in `crates/pin2k-core/src/swe1_rules.rs`, `crates/pin2k-core/src/mac
 | 6 | `scene:6` | Boonta Eve Podrace | `anim_podrace_intro_badge` | Unified `render_podrace_layers` (`starting`, sky, horizon, ground, rivals, Anakin) + race icons + `LAP`/`SPEED` HUD |
 | 7 | `scene:7` | Sith Probe Droids | `anim_probe_droid_intro_badge` | `anim_sith_probe_background` (scroll) + hover/fly + Queen shooting + blasts/explosions |
 | 8 | `scene:8` | Queen Amidala Wardrobe | `anim_queen_ship_intro_badge` | `anim_fashion_base` + throne + queen + wheel + sparkles + outfit icons + flash |
-| 9 | `scene:9` | Jar Jar Juggle | `anim_jarjar_juggle_intro_badge` | `anim_jarjar_juggle_backdrop` + stare/juggle + orbiting junk1..6/EB + jumpup/fall/thumbs_up |
+| 9 | `scene:9` | Jar Jar Juggle | `anim_jarjar_juggle_intro_badge` | `anim_jarjar_juggle_backdrop` `(0,50)` + `Juggle1/2 → Fall1/2 → JumpUp → Switch → Stare` + 5 lane rewards (`anim_jarjar_junk1..6`/`_eb`) + ballistic fly-off & `showoff_award_text` |
 | 10 | `scene:10` | Watto's Chance Cube | `anim_wattos_chance_intro_badge` | `anim_watto_scene_background` + full Watto timeline (left/middle/right) + cube + flash/explode |
 | 11 | `scene:11` | Mos Espa Cantina | `anim_musical_chairs_intro_badge` | `anim_jedi_council_background` + Mace/Yoda/members/neck/chic |
 | 12 | `scene:12` | R2-D2 Repair | `anim_r2d2_intro_badge` | `anim_r2d2_scene_background_{upper,lower}` + R2 units (blue/red/dark_blue/yellow/red_white) |
@@ -148,3 +161,84 @@ Started with `--web-port 8080`, the console serves a 5-tab UI (`web_ui.html`, `w
 **HTTP Endpoints:**
 - `GET /api/state`, `GET /api/assets`, `GET /api/events`, `GET /api/db`, `GET /frame.png`, `GET /audio/{file}`
 - `POST /api/debug/mode/{target}`, `POST /api/debug/anim/{name}`, `POST /api/debug/sound/{id}`, `POST /api/debug/score/{pts}`, `POST /api/debug/drive/{id}/{ms}`, `POST /api/debug/lamp/{id}/{val}`, `POST /api/debug/player/{cmd}`, `POST /api/debug/pause`, `POST /api/debug/step`, `POST /api/switch/{id}`.
+
+---
+
+## 7. Automated Screenshots, Frame Sequences & Video Capture
+
+`pin2k-desktop` supports deterministic headless PNG capture, 60 Hz frame-sequence export, and live HTTP frame snapshots. All captures render the exact `640×480` scan-doubled composite output (or `2×` HD sprites when `--hd` is enabled).
+
+> **Repository policy:** Generated `.png`, `.gif`, and `.mp4` captures belong in `./work/` (which is gitignored via `.gitignore`) because they contain proprietary ROM graphics.
+
+### 7.1 Single-Frame Screenshot (`--screenshot-out`)
+
+Use `--frames <N>` together with `--screenshot-out <path.png>` to advance the simulation deterministically for `N` 60 Hz frames (`16 ms` each) and save the final `640×480` PNG:
+
+```bash
+# Nominal gameplay HUD (score bar, sabers, Naboo lasers, static spinners, Obi-Wan holo, Gungan seaweed)
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode ingame --frames 20 --screenshot-out ./work/verify_ingame_hud.png
+
+# Attract slide 0 (Star Wars Kahuna logo + 9-color light flare)
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode attract:0 --frames 90 --screenshot-out ./work/verify_kahuna.png
+
+# Left virtual spinner spinning with score popup
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode spinner_left --frames 25 --screenshot-out ./work/verify_spinner.png
+
+# Specific SWE1 scene (example: scene:9 Jar Jar Juggle, after 3.5s intro -> frames > 220)
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode scene:9 --frames 260 --screenshot-out ./work/verify_jarjar_juggle.png
+
+# HD 2x upscaled sprites (`--hd`, requires `pin2k-rom-tool upscale-assets`)
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --hd --debug-mode scene:6 --frames 250 --screenshot-out ./work/verify_podrace_hd.png
+
+# Include lower-half playfield lamp/coil debug telemetry overlay
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --telemetry-overlay --debug-mode ingame --frames 30 --screenshot-out ./work/verify_telemetry.png
+```
+
+### 7.2 Frame Sequence Export & Video Encoding (`--frames-out-dir`)
+
+Use `--frames-out-dir <dir>` to dump every simulated 60 Hz frame as `frame_0000.png`, `frame_0001.png`, ... (`640×480` RGB):
+
+```bash
+# Export 300 frames (5 seconds @ 60 Hz) of Boonta Eve Podrace
+./target/release/pin2k-desktop \
+  --assets-dir ./work/swe1_assets \
+  --script podrace --frames 300 \
+  --frames-out-dir ./work/podrace_frames
+
+# Encode to H.264 MP4 (30 fps or 60 fps) with ffmpeg
+ffmpeg -y -framerate 60 -i ./work/podrace_frames/frame_%04d.png \
+  -c:v libx264 -pix_fmt yuv420p -crf 18 ./work/podrace.mp4
+
+# Or encode a lightweight animated GIF
+ffmpeg -y -framerate 30 -i ./work/podrace_frames/frame_%04d.png \
+  -vf "fps=30,scale=640:-1:flags=lanczos" ./work/podrace.gif
+```
+
+### 7.3 Built-in Automated Scenarios (`--script`)
+
+| `--script` | Description | Recommended `--frames` |
+|---|---|---|
+| `none` | Default idle / manual `--debug-mode` | `10..300` |
+| `demo` | Scripted SWE1 gameplay showcase (start, skill shot, shield hits, scene) | `280` |
+| `podrace` | Queues *Boonta Eve Podrace* (`scene:6`) and runs scripted ramp/target hits | `300` |
+| `all-sequences` | Sequentially triggers SWE1 scenes, *Darth Maul Duel*, and *Hangar Multiball* | `1455` |
+| `diagnostics` | Walks through diagnostic test pages | `120` |
+| `admin` | Opens and navigates the Operator Admin menu | `48` |
+| `rfm-demo` | Scripted *Revenge From Mars* (`#50070`) gameplay showcase | `280` |
+
+### 7.4 Live Capture via Web Debug Console (`--web-port`)
+
+When running interactively with `--web-port 8080 --frames 0`, you can pause on an exact frame, step frame-by-frame (`16 ms`), and download the current framebuffer directly over HTTP:
+
+```bash
+# 1. Jump to a mode or scene (example: Jar Jar Juggle)
+curl -s -X POST http://127.0.0.1:8080/api/debug/mode/scene:9
+
+# 2. Pause & step 1 frame at a time (16 ms)
+curl -s -X POST http://127.0.0.1:8080/api/debug/pause
+curl -s -X POST http://127.0.0.1:8080/api/debug/step
+
+# 3. Inspect live Z-layers or save the exact 640x480 PNG framebuffer
+curl -s http://127.0.0.1:8080/api/state | jq .
+curl -s http://127.0.0.1:8080/frame.png -o ./work/live_capture.png
+```
