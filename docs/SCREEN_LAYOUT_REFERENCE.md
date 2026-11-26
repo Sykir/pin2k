@@ -196,8 +196,8 @@ Use `--frames <N>` together with `--screenshot-out <path.png>` to advance the si
 # Left virtual spinner spinning with score popup
 ./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode spinner_left --frames 25 --screenshot-out ./work/verify_spinner.png
 
-# Specific SWE1 scene (example: scene:9 Jar Jar Juggle, after 3.5s intro -> frames > 220)
-./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode scene:9 --frames 260 --screenshot-out ./work/verify_jarjar_juggle.png
+# Specific SWE1 scene (example: scene:9 Jar Jar Juggle, after 4.5s intro -> frames > 280)
+./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --debug-mode scene:9 --frames 320 --screenshot-out ./work/verify_jarjar_juggle.png
 
 # HD 2x upscaled sprites (`--hd`, requires `pin2k-rom-tool upscale-assets`)
 ./target/release/pin2k-desktop --assets-dir ./work/swe1_assets --hd --debug-mode scene:6 --frames 250 --screenshot-out ./work/verify_podrace_hd.png
