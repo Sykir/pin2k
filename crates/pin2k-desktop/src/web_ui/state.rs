@@ -44,6 +44,16 @@ pub enum DebugCommand {
     StepFrame,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SoundStackEntry {
+    pub seq: u64,
+    pub id_hex: String,
+    pub file: String,
+    pub looping: bool,
+    pub is_override: bool,
+    pub active: bool,
+}
+
 #[derive(Default)]
 pub struct SharedWebState {
     pub latest_png: Vec<u8>,
@@ -54,6 +64,7 @@ pub struct SharedWebState {
     pub pending_switches: Vec<(u8, bool, u32)>,
     pub pending_debug: Vec<DebugCommand>,
     pub active_sound_file: Option<(u64, String, bool)>,
+    pub sound_stack: Vec<SoundStackEntry>,
     pub audio_overrides: HashMap<String, PathBuf>,
     pub paused: bool,
 }
@@ -115,22 +126,55 @@ impl WebAudioBridge {
 impl AudioBackend for WebAudioBridge {
     fn play_sound(&mut self, id: SoundId, looping: bool) {
         self.seq = self.seq.wrapping_add(1);
+        let is_override = self.override_files.contains_key(&id.0);
         let file = self
             .override_files
             .get(&id.0)
             .cloned()
             .or_else(|| self.sound_files.get(&id.0).cloned())
             .unwrap_or_else(|| format!("S{:04X}.ogg", id.0));
+        let id_hex = format!("0x{:04X}", id.0);
         if let Ok(mut st) = self.shared.lock() {
+            if looping {
+                for entry in &mut st.sound_stack {
+                    if entry.looping && entry.active {
+                        entry.active = false;
+                    }
+                }
+            }
+            st.sound_stack.insert(
+                0,
+                SoundStackEntry {
+                    seq: self.seq,
+                    id_hex,
+                    file: file.clone(),
+                    looping,
+                    is_override,
+                    active: true,
+                },
+            );
+            st.sound_stack.truncate(32);
             st.active_sound_file = Some((self.seq, file, looping));
         }
     }
 
-    fn stop_sound(&mut self, _id: SoundId) {}
+    fn stop_sound(&mut self, id: SoundId) {
+        let id_hex = format!("0x{:04X}", id.0);
+        if let Ok(mut st) = self.shared.lock() {
+            for entry in &mut st.sound_stack {
+                if entry.id_hex == id_hex && entry.active {
+                    entry.active = false;
+                }
+            }
+        }
+    }
 
     fn stop_all(&mut self) {
         self.seq = self.seq.wrapping_add(1);
         if let Ok(mut st) = self.shared.lock() {
+            for entry in &mut st.sound_stack {
+                entry.active = false;
+            }
             st.active_sound_file = None;
         }
     }
@@ -167,5 +211,28 @@ mod tests {
         let guard = shared.lock().unwrap();
         assert!(guard.audio_overrides.contains_key("mod_019A.ogg"));
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sound_stack_tracks_active_loops_sfx_and_stops() {
+        let shared = Arc::new(Mutex::new(SharedWebState::default()));
+        let mut bridge = WebAudioBridge::new(shared.clone(), None);
+        bridge.play_sound(SoundId(0x0001), true);
+        bridge.play_sound(SoundId(0x02C1), false);
+        bridge.play_sound(SoundId(0x0002), true);
+
+        {
+            let guard = shared.lock().unwrap();
+            assert_eq!(guard.sound_stack.len(), 3);
+            assert_eq!(guard.sound_stack[0].id_hex, "0x0002");
+            assert!(guard.sound_stack[0].active);
+            // Previous looping BGM (0x0001) was superseded by 0x0002
+            assert_eq!(guard.sound_stack[2].id_hex, "0x0001");
+            assert!(!guard.sound_stack[2].active);
+        }
+
+        bridge.stop_all();
+        let guard = shared.lock().unwrap();
+        assert!(guard.sound_stack.iter().all(|e| !e.active));
     }
 }

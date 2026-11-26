@@ -64,7 +64,7 @@
         <button onclick="showTab('player', this)">Joueurs &amp; Temps</button>
         <button onclick="showTab('assets', this)">Anims &amp; Sons</button>
         <button onclick="showTab('hw', this)">Matériel</button>
-        <button onclick="showTab('layers', this)">Couches Live</button>
+        <button onclick="showTab('layers', this)">Piles Live (GFX/Audio)</button>
       </div>
 
       <div id="tab-modes" class="tab-pane active">
@@ -245,6 +245,13 @@
 
       <div id="tab-layers" class="tab-pane">
         <div class="grp">
+          <h4>Pile Audio DCS-2 (Sons joués Live)</h4>
+          <table>
+            <thead><tr><th>#</th><th>ID</th><th>Type</th><th>Statut</th><th>Fichier</th></tr></thead>
+            <tbody id="soundStackBody"></tbody>
+          </table>
+        </div>
+        <div class="grp">
           <h4>Couches BaseViewManager (Z-Order Live)</h4>
           <table>
             <thead><tr><th>Z</th><th>Type</th><th>Asset / Texte</th><th>Pos (X,Y)</th><th>Détail</th></tr></thead>
@@ -329,6 +336,11 @@ setInterval(async () => {
     if (st.layers) {
       document.getElementById('layersBody').innerHTML = st.layers.map(l =>
         `<tr><td>${l.z}</td><td>${l.kind}</td><td>${l.anim || l.text || ''}</td><td>(${l.x},${l.y})</td><td>${l.font || ('f=' + l.frame)} ${l.color || l.tint || ''}</td></tr>`
+      ).join('');
+    }
+    if (st.sound_stack) {
+      document.getElementById('soundStackBody').innerHTML = st.sound_stack.map(s =>
+        `<tr style="opacity:${s.active ? '1' : '0.5'}"><td>${s.seq}</td><td><code>${s.id_hex}</code></td><td>${s.looping ? 'LOOP' : 'SFX'}</td><td style="color:${s.active ? '#4ade80' : '#94a3b8'}">${s.active ? 'ACTIF' : 'STOP'}</td><td>${s.file}${s.is_override ? ' <span style="color:#f472b6">[MOD]</span>' : ''}</td></tr>`
       ).join('');
     }
     if (st.sound_seq && st.sound_seq !== lastSoundSeq) {

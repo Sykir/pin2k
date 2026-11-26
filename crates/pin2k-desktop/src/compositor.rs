@@ -87,6 +87,7 @@ pub struct SoftwareCompositor {
     cache_lru: VecDeque<(usize, usize)>,
     fonts: HashMap<String, LoadedFont>,
     active_anim_idx: Option<usize>,
+    active_anim_hint: String,
     pub(crate) anim_elapsed_ms: u64,
     anim_loop: bool,
     queued_texts: Vec<(String, i32, i32, [u8; 4], u8)>,
@@ -117,6 +118,7 @@ impl SoftwareCompositor {
             cache_lru: VecDeque::new(),
             fonts: HashMap::new(),
             active_anim_idx: None,
+            active_anim_hint: String::new(),
             anim_elapsed_ms: 0,
             anim_loop: true,
             queued_texts: Vec::new(),
@@ -359,8 +361,16 @@ impl SoftwareCompositor {
     pub fn select_anim_by_hint(&mut self, hint: &str) {
         if hint.is_empty() {
             self.active_anim_idx = None;
+            self.active_anim_hint.clear();
             self.anim_elapsed_ms = 0;
             return;
+        }
+        if self.active_anim_hint != hint {
+            self.active_anim_hint = hint.to_string();
+            if self.anim_layers.contains_key(hint) {
+                self.anim_elapsed_ms = 0;
+                self.anim_loop = !Self::is_oneshot_anim(hint);
+            }
         }
         let target_idx = if let Some(&idx) = self.anim_lookup.get(hint) {
             Some(idx)
@@ -576,7 +586,11 @@ impl VideoBackend for SoftwareCompositor {
                 );
             }
 
-            if let Some(idx) = self.active_anim_idx {
+            let hint = self.active_anim_hint.clone();
+            if !hint.is_empty() && self.anim_layers.contains_key(&hint) {
+                let fi = ((self.anim_elapsed_ms * 24) / 1000) as usize;
+                let _ = self.blit_named_ex(&hint, fi, 122, 42, 1, 1, false, None);
+            } else if let Some(idx) = self.active_anim_idx {
                 let elapsed = self.anim_elapsed_ms;
                 let looping = self.anim_loop;
                 let fi_opt = self.anims.get(idx).and_then(|anim| {
@@ -1016,5 +1030,38 @@ mod tests {
         assert_eq!(comp.native_240.get_pixel(202, 62), &Rgba([255, 20, 20, 255]));
 
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn darth_jarjar_mod_loads_and_renders_both_animated_combatants() {
+        let mod_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../mods/darth_jarjar");
+        let manifest = pin2k_core::mods::ModManifest::load_from_dir(&mod_dir)
+            .expect("darth_jarjar mod.json should load");
+
+        let mut comp = SoftwareCompositor::new();
+        comp.load_mod_assets(&mod_dir, &manifest.anim_overrides).unwrap();
+        comp.set_anim_layers(&manifest.anim_layers);
+
+        let kenobi_idx = comp.anim_lookup["custom_assets/jarjar_kenobi_combat"];
+        let sith_idx = comp.anim_lookup["custom_assets/darth_jarjar_combat"];
+        assert_eq!(comp.anims[kenobi_idx].frame_count(), 120);
+        assert_eq!(comp.anims[sith_idx].frame_count(), 120);
+
+        // Render frame 10 of anim_jedi_battle_idle onto a clean black buffer
+        for px in comp.native_240.pixels_mut() {
+            *px = Rgba([0, 0, 0, 255]);
+        }
+        assert!(comp.blit_named_ex("anim_jedi_battle_idle", 10, 122, 42, 1, 1, false, None));
+
+        // Left side (Jar Jar Kenobi: x=75..321) and right side (Darth Jar Jar: x=325..587) must have non-black pixels
+        let left_lit = (75..260u32)
+            .flat_map(|x| (60..225u32).map(move |y| (x, y)))
+            .any(|(x, y)| comp.native_240.get_pixel(x, y).0[..3] != [0, 0, 0]);
+        let right_lit = (330..560u32)
+            .flat_map(|x| (60..225u32).map(move |y| (x, y)))
+            .any(|(x, y)| comp.native_240.get_pixel(x, y).0[..3] != [0, 0, 0]);
+        assert!(left_lit, "Jar Jar Kenobi combat animation should draw on left");
+        assert!(right_lit, "Darth Jar Jar combat animation should draw on right");
     }
 }
