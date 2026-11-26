@@ -88,9 +88,8 @@ Progress tracker for the native Rust **Pinball 2000** port (*Star Wars Episode I
 - [x] **5-tab Web Debug Console** (`web_ui/{mod,state}.rs` + `web_ui.html`): direct mode/scene/diagnostic launch, Pause/Step, player/time mutations, `/api/assets` browser, coils/lamps, live Z-layer inspector
 - [x] Native OS audio (`lewton` → `winmm.dll` / `aplay`) with atomic `StopAll`, `Stop`, and `looping` (`audio/{mod,platform}.rs`) + WebAudio mod overrides (`/audio/`)
 - [x] **Native Desktop Window & Fullscreen (`--window` / `--fullscreen`)** (`window.rs`, pure-Rust `winit` + `softbuffer`, `4:3` aspect ratio, `F11` / `Alt+Enter`)
-- [x] **`gfx_hd/` support via `--hd`** in `SoftwareCompositor::load_hd_assets()`
-- [x] Windows (`x86_64-pc-windows-msvc`, `x86_64-pc-windows-gnu`) and Linux builds
-- [ ] **WebGL2 HD Shaders & LRU memory cache** (see [HD_UPSCALING_GUIDE.md](HD_UPSCALING_GUIDE.md))
+- [x] **Native `2×`/`4×`/`8×` HD output (`--hd` / `--hd-scale`), global 256 MiB LRU frame cache, `--display-filter <nearest|bilinear|crt>`, and `--aa` soft-alpha blending** in `pin2k-desktop` (`compositor.rs`, `window.rs`, `raster.rs`) + `scripts/upscale_pytorch.py`
+- [ ] **WebGL2 HD Shaders & native `wgpu` GPU backend** for full-speed `8×` (`5120×3840`) at 60 Hz (see [HD_UPSCALING_GUIDE.md](HD_UPSCALING_GUIDE.md))
 
 ---
 

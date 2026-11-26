@@ -8,7 +8,7 @@
 //! - Supports `flip_x`, X/Y scaling, and RGB555 monochrome palette tinting
 //!   (`set_cloned_anim_palette_monochrome`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -17,7 +17,7 @@ use image::{ImageBuffer, ImageFormat, Rgba, RgbaImage};
 use pin2k_hal::{AssetId, RectDrawCmd, SpriteDrawCmd, TextAlign, TextDrawCmd, VideoBackend};
 use pin2k_rom_tool::asset_extractor::{FontGlyphEntry, FontManifestEntry, FontsManifest, GfxManifest};
 
-use crate::raster::{blit_rgba_clipped, blit_rgba_ex, draw_string, fill_rect, rgb555_to_rgba};
+use crate::raster::{blit_rgba_ex, draw_string, fill_rect, rgb555_to_rgba};
 
 pub const SCREEN_W: u32 = 640;
 pub const SCREEN_H: u32 = 480;
@@ -28,38 +28,31 @@ pub struct LoadedFont {
     pub glyphs: HashMap<u8, FontGlyphEntry>,
 }
 
+const MAX_CACHE_BYTES: usize = 256 * 1024 * 1024; // 256 MiB global LRU budget for 2x/4x/8x HD frames
+
 pub struct LoadedAnim {
     pub name: String,
     pub fps: u32,
     pub height: u32,
     pub hd_scale: u32,
     frame_paths: Vec<PathBuf>,
-    decoded_frames: Vec<RgbaImage>,
+    decoded_frames: HashMap<usize, RgbaImage>,
 }
 
 impl LoadedAnim {
-    fn ensure_decoded(&mut self) -> &[RgbaImage] {
-        if self.decoded_frames.is_empty() && !self.frame_paths.is_empty() {
-            let scale = self.hd_scale.max(1);
-            for p in &self.frame_paths {
-                if let Ok(img) = image::open(p) {
-                    let rgba = img.to_rgba8();
-                    if scale > 1 {
-                        let lw = (rgba.width() / scale).max(1);
-                        let lh = (rgba.height() / scale).max(1);
-                        self.decoded_frames.push(image::imageops::resize(
-                            &rgba,
-                            lw,
-                            lh,
-                            image::imageops::FilterType::Triangle,
-                        ));
-                    } else {
-                        self.decoded_frames.push(rgba);
-                    }
-                }
-            }
+    fn new(name: String, fps: u32, height: u32, hd_scale: u32, frame_paths: Vec<PathBuf>) -> Self {
+        Self {
+            name,
+            fps,
+            height,
+            hd_scale,
+            frame_paths,
+            decoded_frames: HashMap::new(),
         }
-        &self.decoded_frames
+    }
+
+    fn frame_count(&self) -> usize {
+        self.frame_paths.len()
     }
 }
 
@@ -83,10 +76,14 @@ impl LayerOp {
 pub struct SoftwareCompositor {
     pub framebuffer: RgbaImage,
     pub native_240: RgbaImage,
+    pub output_scale: u32,
+    pub soft_alpha: bool,
     pub native_fullscreen: bool,
     pub frames_presented: u64,
     anims: Vec<LoadedAnim>,
     anim_lookup: HashMap<String, usize>,
+    cache_bytes: usize,
+    cache_lru: VecDeque<(usize, usize)>,
     fonts: HashMap<String, LoadedFont>,
     active_anim_idx: Option<usize>,
     pub(crate) anim_elapsed_ms: u64,
@@ -108,10 +105,14 @@ impl SoftwareCompositor {
         Self {
             framebuffer: ImageBuffer::from_pixel(SCREEN_W, SCREEN_H, Rgba([6, 8, 18, 255])),
             native_240: ImageBuffer::from_pixel(SCREEN_W, 240, Rgba([5, 7, 15, 255])),
+            output_scale: 1,
+            soft_alpha: false,
             native_fullscreen: true,
             frames_presented: 0,
             anims: Vec::new(),
             anim_lookup: HashMap::new(),
+            cache_bytes: 0,
+            cache_lru: VecDeque::new(),
             fonts: HashMap::new(),
             active_anim_idx: None,
             anim_elapsed_ms: 0,
@@ -145,14 +146,13 @@ impl SoftwareCompositor {
                 let idx = self.anims.len();
                 let clean = entry.symbol_name.trim_end_matches("_ptr").to_string();
                 self.anim_lookup.insert(clean.clone(), idx);
-                self.anims.push(LoadedAnim {
-                    name: clean,
-                    fps: entry.fps.max(1),
-                    height: entry.height,
-                    hd_scale: 1,
+                self.anims.push(LoadedAnim::new(
+                    clean,
+                    entry.fps.max(1),
+                    entry.height,
+                    1,
                     frame_paths,
-                    decoded_frames: Vec::new(),
-                });
+                ));
             }
         }
         if !self.anims.is_empty() {
@@ -214,13 +214,15 @@ impl SoftwareCompositor {
                 continue;
             }
             if let Some(anim) = self.anims.get_mut(idx) {
-                let scale = (entry.height / anim.height.max(1)).clamp(1, 4);
+                let scale = (entry.height / anim.height.max(1)).clamp(1, 8);
                 anim.frame_paths = frame_paths;
                 anim.decoded_frames.clear();
                 anim.hd_scale = scale;
                 upgraded += 1;
             }
         }
+        self.cache_bytes = 0;
+        self.cache_lru.clear();
         Ok(upgraded)
     }
 
@@ -256,14 +258,13 @@ impl SoftwareCompositor {
             let height = image::image_dimensions(&frame_paths[0]).map(|(_, h)| h).unwrap_or(120);
             let idx = self.anims.len();
             self.anim_lookup.insert(folder_name.clone(), idx);
-            self.anims.push(LoadedAnim {
-                name: folder_name.clone(),
-                fps: 30,
+            self.anims.push(LoadedAnim::new(
+                folder_name.clone(),
+                30,
                 height,
-                hd_scale: 1,
+                1,
                 frame_paths,
-                decoded_frames: Vec::new(),
-            });
+            ));
             for (target_hint, src_folder) in anim_overrides {
                 if src_folder == &folder_name {
                     self.anim_lookup.insert(target_hint.clone(), idx);
@@ -325,6 +326,71 @@ impl SoftwareCompositor {
                 self.anim_loop = !Self::is_oneshot_anim(&self.anims[idx].name);
             }
         }
+    }
+
+    /// Sets the output framebuffer scale (`1` = 640x480, `2` = 1280x960, `4` = 2560x1920, `8` = 5120x3840).
+    pub fn set_output_scale(&mut self, scale: u32) {
+        let s = scale.clamp(1, 8);
+        if self.output_scale == s {
+            return;
+        }
+        self.output_scale = s;
+        self.framebuffer = ImageBuffer::from_pixel(SCREEN_W * s, SCREEN_H * s, Rgba([6, 8, 18, 255]));
+        self.native_240 = ImageBuffer::from_pixel(SCREEN_W * s, 240 * s, Rgba([5, 7, 15, 255]));
+        for anim in &mut self.anims {
+            anim.decoded_frames.clear();
+        }
+        self.cache_bytes = 0;
+        self.cache_lru.clear();
+    }
+
+    fn get_cached_frame(&mut self, anim_idx: usize, frame_idx: usize) -> Option<(RgbaImage, u32)> {
+        let target = self.output_scale.max(1);
+        let (fc, hd) = {
+            let anim = self.anims.get(anim_idx)?;
+            (anim.frame_count(), anim.hd_scale.max(1))
+        };
+        if fc == 0 {
+            return None;
+        }
+        let idx = frame_idx % fc;
+        let extra_scale = if hd < target && target % hd == 0 {
+            target / hd
+        } else {
+            1
+        };
+        if let Some(img) = self.anims[anim_idx].decoded_frames.get(&idx) {
+            return Some((img.clone(), extra_scale));
+        }
+        let path = self.anims[anim_idx].frame_paths[idx].clone();
+        let img = image::open(&path).ok()?.to_rgba8();
+        let prepared = if hd != target && extra_scale == 1 {
+            let lw = ((img.width() * target) / hd).max(1);
+            let lh = ((img.height() * target) / hd).max(1);
+            let mut resized =
+                image::imageops::resize(&img, lw, lh, image::imageops::FilterType::Triangle);
+            if !self.soft_alpha {
+                for px in resized.pixels_mut() {
+                    px[3] = if px[3] >= 128 { 255 } else { 0 };
+                }
+            }
+            resized
+        } else {
+            img
+        };
+        let bytes = prepared.as_raw().len();
+        while self.cache_bytes + bytes > MAX_CACHE_BYTES {
+            let Some((ev_anim, ev_frame)) = self.cache_lru.pop_front() else {
+                break;
+            };
+            if let Some(removed) = self.anims.get_mut(ev_anim).and_then(|a| a.decoded_frames.remove(&ev_frame)) {
+                self.cache_bytes = self.cache_bytes.saturating_sub(removed.as_raw().len());
+            }
+        }
+        self.anims[anim_idx].decoded_frames.insert(idx, prepared.clone());
+        self.cache_lru.push_back((anim_idx, idx));
+        self.cache_bytes += bytes;
+        Some((prepared, extra_scale))
     }
 
     pub fn encode_png(&self) -> anyhow::Result<Vec<u8>> {
@@ -423,7 +489,10 @@ impl VideoBackend for SoftwareCompositor {
     }
 
     fn present(&mut self) {
-        // Render into native 640x240 MediaGX logical buffer first
+        let out_s = self.output_scale.max(1);
+        let out_si = out_s as i32;
+
+        // Render into native 640x240 (* output_scale) logical buffer first
         for px in self.native_240.pixels_mut() {
             *px = Rgba([0, 0, 0, 255]);
         }
@@ -438,29 +507,46 @@ impl VideoBackend for SoftwareCompositor {
             for i in 0..48u32 {
                 let sx = (i.wrapping_mul(137) + (self.frames_presented as u32) / 2) % SCREEN_W;
                 let sy = i.wrapping_mul(53) % 235;
-                self.native_240.put_pixel(sx, sy, Rgba([110, 130, 180, 255]));
+                fill_rect(
+                    &mut self.native_240,
+                    (sx * out_s) as i32,
+                    (sy * out_s) as i32,
+                    out_si,
+                    out_si,
+                    [110, 130, 180, 255],
+                );
             }
 
             if let Some(idx) = self.active_anim_idx {
                 let elapsed = self.anim_elapsed_ms;
                 let looping = self.anim_loop;
-                if let Some(anim) = self.anims.get_mut(idx) {
-                    let fps = anim.fps.max(1) as u64;
-                    let frames = anim.ensure_decoded();
-                    if !frames.is_empty() {
-                        let raw_idx = ((elapsed * fps) / 1000) as usize;
-                        let fi = if looping {
-                            raw_idx % frames.len()
-                        } else {
-                            raw_idx.min(frames.len() - 1)
-                        };
-                        let f = &frames[fi];
-                        let scale_x = if f.width() <= 240 { 2u32 } else { 1u32 };
-                        let draw_w = f.width() * scale_x;
-                        let draw_h = f.height();
-                        let ox = ((SCREEN_W as i32) - (draw_w as i32)) / 2;
-                        let oy = (185i32 - (draw_h as i32)).max(4);
-                        blit_rgba_clipped(&mut self.native_240, f, ox, oy, scale_x, 240);
+                let fi_opt = self.anims.get(idx).and_then(|anim| {
+                    let fc = anim.frame_count();
+                    if fc == 0 {
+                        return None;
+                    }
+                    let raw_idx = ((elapsed * anim.fps.max(1) as u64) / 1000) as usize;
+                    Some(if looping { raw_idx % fc } else { raw_idx.min(fc - 1) })
+                });
+                if let Some(fi) = fi_opt {
+                    if let Some((f, extra_s)) = self.get_cached_frame(idx, fi) {
+                        let scale_x = if f.width() <= 240 * out_s { 2u32 } else { 1u32 };
+                        let draw_w = f.width() * scale_x * extra_s;
+                        let draw_h = f.height() * extra_s;
+                        let ox = ((SCREEN_W * out_s) as i32 - (draw_w as i32)) / 2;
+                        let oy = ((185 * out_si) - (draw_h as i32)).max(4 * out_si);
+                        blit_rgba_ex(
+                            &mut self.native_240,
+                            &f,
+                            ox,
+                            oy,
+                            scale_x * extra_s,
+                            extra_s,
+                            (240 * out_s) as i32,
+                            false,
+                            None,
+                            self.soft_alpha,
+                        );
                     }
                 }
             }
@@ -492,12 +578,26 @@ impl VideoBackend for SoftwareCompositor {
                             TextAlign::Center => t.x - (t.text.len() as i32 * 4),
                             TextAlign::Right => t.x - (t.text.len() as i32 * 8),
                         };
-                        draw_string(&mut self.native_240, &t.text, start_x, t.y, fg, 1);
+                        draw_string(
+                            &mut self.native_240,
+                            &t.text,
+                            start_x * out_si,
+                            t.y * out_si,
+                            fg,
+                            out_s as u8,
+                        );
                     }
                 }
                 LayerOp::Rect(r) => {
                     let rgba = rgb555_to_rgba(r.color_rgb555, r.alpha);
-                    fill_rect(&mut self.native_240, r.x, r.y, r.w, r.h, rgba);
+                    fill_rect(
+                        &mut self.native_240,
+                        r.x * out_si,
+                        r.y * out_si,
+                        r.w * out_si,
+                        r.h * out_si,
+                        rgba,
+                    );
                 }
             }
         }
@@ -516,15 +616,23 @@ impl VideoBackend for SoftwareCompositor {
             let char_w = 8 * (scale as i32);
             let total_w = (txt.len() as i32) * char_w;
             let start_x = (cx - total_w / 2).max(8);
-            draw_string(&mut self.native_240, &txt, start_x, y, color, scale);
+            draw_string(
+                &mut self.native_240,
+                &txt,
+                start_x * out_si,
+                y * out_si,
+                color,
+                scale.saturating_mul(out_s as u8),
+            );
         }
 
         if self.native_fullscreen {
-            // Authentic MediaGX 640x240 -> 640x480 vertical scan-doubler
+            // Authentic MediaGX 640x240 -> 640x480 (* output_scale) vertical scan-doubler
             let src_raw = self.native_240.as_raw();
             let dst_raw = self.framebuffer.as_mut();
-            let row_bytes = (SCREEN_W as usize) * 4;
-            for y in 0..240usize {
+            let row_bytes = ((SCREEN_W * out_s) as usize) * 4;
+            let rows_240 = (240 * out_s) as usize;
+            for y in 0..rows_240 {
                 let src_row = &src_raw[y * row_bytes..(y + 1) * row_bytes];
                 dst_raw[(y * 2) * row_bytes..(y * 2 + 1) * row_bytes].copy_from_slice(src_row);
                 dst_raw[(y * 2 + 1) * row_bytes..(y * 2 + 2) * row_bytes].copy_from_slice(src_row);
@@ -558,27 +666,24 @@ impl SoftwareCompositor {
         flip_x: bool,
         monochrome_rgb555: Option<u16>,
     ) -> bool {
+        let out_s = self.output_scale.max(1);
         let Some(&idx) = self.anim_lookup.get(name) else {
             return false;
         };
-        let Some(anim) = self.anims.get_mut(idx) else {
+        let Some((f, extra_s)) = self.get_cached_frame(idx, frame_idx) else {
             return false;
         };
-        let frames = anim.ensure_decoded();
-        if frames.is_empty() {
-            return false;
-        }
-        let f = frames[frame_idx % frames.len()].clone();
         blit_rgba_ex(
             &mut self.native_240,
             &f,
-            ox,
-            oy,
-            scale_x,
-            scale_y,
-            240,
+            ox * (out_s as i32),
+            oy * (out_s as i32),
+            scale_x * extra_s,
+            scale_y * extra_s,
+            (240 * out_s) as i32,
             flip_x,
             monochrome_rgb555,
+            self.soft_alpha,
         );
         true
     }
@@ -705,7 +810,13 @@ impl SoftwareCompositor {
                             255,
                         ])
                     };
-                    self.native_240.put_pixel(dx as u32, dy as u32, out);
+                    let out_s = self.output_scale.max(1) as i32;
+                    for sy in 0..out_s {
+                        for sx in 0..out_s {
+                            self.native_240
+                                .put_pixel((dx * out_s + sx) as u32, (dy * out_s + sy) as u32, out);
+                        }
+                    }
                 }
             }
             let adv = if g.advance_extra != 0 { g.advance_extra } else { spacing };

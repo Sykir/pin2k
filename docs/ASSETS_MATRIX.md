@@ -4,15 +4,15 @@ This document lists **100% of extracted assets** from *Star Wars Episode I* (`#5
 
 ## Coverage Summary
 
-| Category | Total Extracted | Used | Unused |
-|---|---:|---:|---:|
-| **Animations & Sprites (`gfx/`)** | 392 | 354 | 38 |
-| **Bitmap Fonts (`fonts/`)** | 19 | 19 | 0 |
-| **DCS-2 Audio Tracks (`audio/`)** | 689 | 689 | 0 |
+| Category | Total Extracted | Total Frames | Used | Unused |
+|---|---:|---:|---:|---:|
+| **Animations & Sprites (`gfx/`)** | 392 | 11,322 | 354 | 38 |
+| **Bitmap Fonts (`fonts/`)** | 19 | — | 19 | 0 |
+| **DCS-2 Audio Tracks (`audio/`)** | 689 | — | 689 | 0 |
 
 ---
 
-## 1. Animations & Sprites (392 entries)
+## 1. Animations & Sprites (392 entries, 11,322 total frames)
 
 | # | Asset | Frames | FPS | Dimensions | Used | Code Location(s) |
 |---:|---|---:|---:|---|---|---|

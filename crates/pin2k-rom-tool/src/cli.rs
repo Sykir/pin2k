@@ -329,7 +329,7 @@ pub(crate) enum Commands {
         #[arg(long)]
         assets_dir: PathBuf,
 
-        /// Integer upscale factor (`2`, `3`, or `4`).
+        /// Integer upscale factor (`2`, `3`, `4`, or `8`).
         #[arg(long, default_value_t = 2)]
         scale: u32,
 
