@@ -113,26 +113,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 }
             }
             Swe1Scene::Podrace => {
-                // Race position icons (`DeffPodRaceSceneBackground`) and rival pods — z=8
-                // keeps `z<=7` free for `SoftwareCompositor::render_podrace_scene`.
-                let lead = (f60 / 30) % 4;
-                for i in 0..4usize {
-                    let blur = i == lead;
-                    let name = match (i, blur) {
-                        (0, false) => "anim_podrace_icon1",
-                        (0, true) => "anim_podrace_icon1_blur",
-                        (1, false) => "anim_podrace_icon2",
-                        (1, true) => "anim_podrace_icon2_blur",
-                        (2, false) => "anim_podrace_icon3",
-                        (2, true) => "anim_podrace_icon3_blur",
-                        (_, false) => "anim_podrace_icon4",
-                        (_, true) => "anim_podrace_icon4_blur",
-                    };
-                    self.fx_sprite(name, f60, 8, 108 + (i as i32) * 30, 8, 1);
-                }
-                let drift = ((a / 20) % 300) as i32;
-                self.fx_sprite("anim_podrace_3", f60, 460 - drift, 150, 8, 1);
-                self.fx_sprite("anim_podrace_4", f60, 180 + drift / 2, 164, 8, 1);
+                // Rendered authentically by `machine/scenes/podrace.rs`
             }
             Swe1Scene::ProbeDroid => {
                 self.fx_sprite("anim_sith_probe_hover_far", f60, 470, 40, 2, 1);
@@ -206,39 +187,5 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.fx_sprite("anim_super_mystery_icon", f60, 275, 120, 5, 1);
             }
         }
-    }
-
-    /// Layered *Boonta Eve Podrace* canyon + Anakin + rival podracer scene (`z = 1..6`).
-    pub(crate) fn render_podrace_layers(&mut self, active_ms: u32) {
-        let t = (active_ms / 16) as usize;
-        if t < 60 {
-            self.fx_sprite("anim_podrace_starting", t, 0, 0, 2, 1);
-            return;
-        }
-        let race_t = t.saturating_sub(60);
-        let scroll_x = -(((race_t * 3) % 160) as i32);
-        self.fx_sprite("anim_podrace_sky", 0, 0, 0, 1, 1);
-        self.fx_sprite("anim_podrace_horizon", 0, scroll_x, 4, 2, 1);
-        self.fx_sprite("anim_podrace_ground", race_t, 0, 112, 3, 1);
-
-        let cycle = race_t % 55;
-        if (28..54).contains(&cycle) {
-            self.fx_sprite("anim_podrace_2_explosion", cycle - 28, 145, 18, 4, 1);
-        } else {
-            let rival_x = 245 + (((race_t as i32) * 5) % 90) - 45;
-            self.fx_sprite("anim_podrace_2", race_t, rival_x, 90, 4, 1);
-        }
-        let sway = match (race_t / 20) % 4 {
-            0 => (race_t % 20) as i32 * 2 - 20,
-            1 => 20 - (race_t % 20) as i32 * 2,
-            2 => -((race_t % 20) as i32),
-            _ => -20 + (race_t % 20) as i32,
-        };
-        self.fx_sprite("anim_podrace_1", race_t, 143 + sway, 76, 5, 1);
-        if (51..68).contains(&race_t) || (101..118).contains(&race_t) {
-            self.fx_sprite("anim_podrace_checkpoint", 0, 224, 10, 6, 1);
-        }
-        let mph = 615 + ((race_t * 4) % 332);
-        self.fx_text("font_shadow_9_data", format!("SPEED {mph} MPH"), 556, 12, 8, 0x03FF);
     }
 }

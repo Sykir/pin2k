@@ -20,6 +20,7 @@ mod vspinner;
 pub use fx::{anims as fx_anims, ActiveFx, ActiveOverlay, FxAnim, OverlayKind};
 pub use leff::{ActiveLeff, LeffKind};
 pub use scenes::jarjar_juggle_state::{JarjarJuggleState, JuggleAnimState, JuggleAward};
+pub use scenes::podrace_state::{PodraceIconKind, PodracePhase, PodraceState};
 pub use vspinner::VirtualSpinnerState;
 
 use pin2k_hal::{
@@ -143,6 +144,8 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub active_scene: Option<ActiveSceneState>,
     /// Authentic per-scene state for `JarjarJuggleScene` (`DeffJarjarJuggleScene`).
     pub jarjar_juggle: Option<JarjarJuggleState>,
+    /// Authentic per-scene state for `PodraceScene` (`DeffPodRaceSceneBackground`).
+    pub podrace: Option<PodraceState>,
     pub multiball: ActiveMultiball,
     pub active_leff: Option<ActiveLeff>,
     /// One-shot ROM sprite effects (explosions, booms, sparks) queued on top of the scene.
@@ -235,6 +238,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             tilt_warnings: 0,
             active_scene: None,
             jarjar_juggle: None,
+            podrace: None,
             multiball: ActiveMultiball::None,
             active_leff: None,
             fx_queue: Vec::new(),
@@ -565,6 +569,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.tilt_warnings = 0;
         self.active_scene = None;
         self.jarjar_juggle = None;
+        self.podrace = None;
         self.multiball = ActiveMultiball::None;
         self.special_screen = None;
         self.special_screen_ms = 0;
@@ -866,6 +871,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         self.update_virtual_spinners(dt_ms);
         self.tick_jarjar_juggle(dt_ms);
+        self.tick_podrace(dt_ms);
         self.tick_leff(dt_ms);
         self.tick_fx(dt_ms);
         if self.state == MachineState::InGame && self.script_runtime.is_some() {
@@ -944,6 +950,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     timed_out_scene = Some(sc.scene);
                     self.active_scene = None;
                     self.jarjar_juggle = None;
+                    self.podrace = None;
                     self.active_anim_hint.clear();
                     self.audio.play_sound(sound::MAIN_THEME_LOOP, true);
                     self.set_banner(format!("{title} TIME EXPIRED"), 2_500);
