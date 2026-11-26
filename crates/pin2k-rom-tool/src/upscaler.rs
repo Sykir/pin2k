@@ -123,12 +123,9 @@ pub fn upscale_rgba_image(
     let mut out = resize(&padded, dst_w, dst_h, filter.to_image_filter());
     if crisp_alpha {
         for px in out.pixels_mut() {
+            // Preserve edge-padded RGB on transparent pixels so downstream bilinear/GPU
+            // downsampling never bleeds black halos into the sprite silhouette.
             px[3] = if px[3] >= 128 { 255 } else { 0 };
-            if px[3] == 0 {
-                px[0] = 0;
-                px[1] = 0;
-                px[2] = 0;
-            }
         }
     }
     out

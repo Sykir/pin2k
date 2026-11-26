@@ -47,12 +47,18 @@ impl LoadedAnim {
                     if scale > 1 {
                         let lw = (rgba.width() / scale).max(1);
                         let lh = (rgba.height() / scale).max(1);
-                        self.decoded_frames.push(image::imageops::resize(
+                        let mut down = image::imageops::resize(
                             &rgba,
                             lw,
                             lh,
                             image::imageops::FilterType::Triangle,
-                        ));
+                        );
+                        // Keep crisp 1-bit Pinball 2000 silhouette alpha so `blit_rgba_ex`
+                        // never draws semi-transparent fringe pixels as solid outlines.
+                        for px in down.pixels_mut() {
+                            px[3] = if px[3] >= 128 { 255 } else { 0 };
+                        }
+                        self.decoded_frames.push(down);
                     } else {
                         self.decoded_frames.push(rgba);
                     }
