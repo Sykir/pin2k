@@ -91,17 +91,14 @@ impl WebAudioBridge {
 
     /// Registers `<mod_dir>/audio/` overrides for WebAudio `/audio/{route_key}` serving.
     pub fn apply_mod_audio(&mut self, mod_dir: &Path, overrides: &HashMap<String, String>) {
-        let adir = mod_dir.join("audio");
-        if !adir.is_dir() {
-            return;
-        }
         let mut next = (*self.override_files).clone();
         let mut route_paths = HashMap::new();
         for (hex_id, rel_file) in overrides {
             let trimmed = hex_id.trim_start_matches("0x").trim_start_matches("0X");
             if let Ok(id) = u16::from_str_radix(trimmed, 16).or_else(|_| hex_id.parse::<u16>()) {
-                let full = adir.join(rel_file);
-                if full.exists() {
+                if let Some(full) =
+                    crate::audio::CompositeAudioBackend::resolve_mod_audio_path(mod_dir, rel_file)
+                {
                     let route_name = format!("mod_{id:04X}.ogg");
                     next.insert(id, route_name.clone());
                     route_paths.insert(route_name, full);
@@ -143,7 +140,7 @@ impl AudioBackend for WebAudioBridge {
 
 #[cfg(test)]
 mod tests {
-    use super::percent_decode;
+    use super::*;
 
     #[test]
     fn percent_decode_handles_colons_and_spaces() {
@@ -151,5 +148,24 @@ mod tests {
         assert_eq!(percent_decode("game%3Aswe1"), "game:swe1");
         assert_eq!(percent_decode("rfm_wave%3A8"), "rfm_wave:8");
         assert_eq!(percent_decode("hello+world%21"), "hello world!");
+    }
+
+    #[test]
+    fn apply_mod_audio_resolves_custom_assets_ogg() {
+        let tmp = std::env::temp_dir().join("pin2k_test_custom_audio_mod");
+        let _ = std::fs::remove_dir_all(&tmp);
+        let custom_dir = tmp.join("custom_assets");
+        std::fs::create_dir_all(&custom_dir).unwrap();
+        std::fs::write(custom_dir.join("sith_jarjar.ogg"), b"OggS").unwrap();
+
+        let shared = Arc::new(Mutex::new(SharedWebState::default()));
+        let mut bridge = WebAudioBridge::new(shared.clone(), None);
+        let mut overrides = HashMap::new();
+        overrides.insert("0x019A".to_string(), "custom_assets/sith_jarjar.ogg".to_string());
+        bridge.apply_mod_audio(&tmp, &overrides);
+
+        let guard = shared.lock().unwrap();
+        assert!(guard.audio_overrides.contains_key("mod_019A.ogg"));
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
