@@ -232,50 +232,90 @@ impl SoftwareCompositor {
     }
 
     /// Loads custom `.png` animation folders from `<mod_dir>/gfx/<anim_name>/*.png`,
-    /// overriding or adding animations for mods & standalone homebrew games.
+    /// Loads custom PNG animations from `<mod_dir>/gfx/` and `<mod_dir>/custom_assets/`,
+    /// supporting both `<name>/*.png` frame folders and single `<name>.png` images.
     pub fn load_mod_assets(
         &mut self,
         mod_dir: &Path,
         anim_overrides: &HashMap<String, String>,
     ) -> anyhow::Result<usize> {
-        let gfx_dir = mod_dir.join("gfx");
-        if !gfx_dir.is_dir() {
-            return Ok(0);
-        }
         let mut loaded = 0usize;
-        for entry in fs::read_dir(&gfx_dir)? {
-            let entry = entry?;
-            let p = entry.path();
-            if !p.is_dir() {
+        for (sub_root, prefix) in [("gfx", ""), ("custom_assets", "custom_assets/")] {
+            let dir = mod_dir.join(sub_root);
+            if !dir.is_dir() {
                 continue;
             }
-            let Some(folder_name) = p.file_name().and_then(|s| s.to_str()).map(str::to_string) else {
-                continue;
-            };
-            let mut frame_paths: Vec<PathBuf> = fs::read_dir(&p)?
-                .filter_map(|f| f.ok().map(|x| x.path()))
-                .filter(|fp| fp.extension().and_then(|s| s.to_str()) == Some("png"))
-                .collect();
-            frame_paths.sort();
-            if frame_paths.is_empty() {
-                continue;
-            }
-            let height = image::image_dimensions(&frame_paths[0]).map(|(_, h)| h).unwrap_or(120);
-            let idx = self.anims.len();
-            self.anim_lookup.insert(folder_name.clone(), idx);
-            self.anims.push(LoadedAnim::new(
-                folder_name.clone(),
-                30,
-                height,
-                1,
-                frame_paths,
-            ));
-            for (target_hint, src_folder) in anim_overrides {
-                if src_folder == &folder_name {
-                    self.anim_lookup.insert(target_hint.clone(), idx);
+            for entry in fs::read_dir(&dir)? {
+                let entry = entry?;
+                let p = entry.path();
+                let (asset_name, file_name, frame_paths): (String, String, Vec<PathBuf>) =
+                    if p.is_dir() {
+                        let Some(folder) = p.file_name().and_then(|s| s.to_str()).map(str::to_string)
+                        else {
+                            continue;
+                        };
+                        let mut frames: Vec<PathBuf> = fs::read_dir(&p)?
+                            .filter_map(|f| f.ok().map(|x| x.path()))
+                            .filter(|fp| {
+                                fp.extension()
+                                    .and_then(|s| s.to_str())
+                                    .is_some_and(|e| e.eq_ignore_ascii_case("png"))
+                            })
+                            .collect();
+                        frames.sort();
+                        if frames.is_empty() {
+                            continue;
+                        }
+                        (folder.clone(), folder, frames)
+                    } else if p
+                        .extension()
+                        .and_then(|s| s.to_str())
+                        .is_some_and(|e| e.eq_ignore_ascii_case("png"))
+                    {
+                        let Some(stem) = p.file_stem().and_then(|s| s.to_str()).map(str::to_string)
+                        else {
+                            continue;
+                        };
+                        let fname = p
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .map(str::to_string)
+                            .unwrap_or_else(|| stem.clone());
+                        (stem, fname, vec![p])
+                    } else {
+                        continue;
+                    };
+
+                let height = image::image_dimensions(&frame_paths[0])
+                    .map(|(_, h)| h)
+                    .unwrap_or(120);
+                let idx = self.anims.len();
+                self.anim_lookup.insert(asset_name.clone(), idx);
+                if !prefix.is_empty() {
+                    self.anim_lookup
+                        .insert(format!("{prefix}{asset_name}"), idx);
+                    self.anim_lookup.insert(format!("{prefix}{file_name}"), idx);
                 }
+                self.anims.push(LoadedAnim::new(
+                    asset_name.clone(),
+                    30,
+                    height,
+                    1,
+                    frame_paths,
+                ));
+                for (target_hint, src) in anim_overrides {
+                    let norm = src.trim_start_matches("./");
+                    if norm == asset_name
+                        || norm == file_name
+                        || (!prefix.is_empty()
+                            && (norm == format!("{prefix}{asset_name}")
+                                || norm == format!("{prefix}{file_name}")))
+                    {
+                        self.anim_lookup.insert(target_hint.clone(), idx);
+                    }
+                }
+                loaded += 1;
             }
-            loaded += 1;
         }
         if self.active_anim_idx.is_none() && !self.anims.is_empty() {
             self.active_anim_idx = Some(0);
@@ -828,5 +868,43 @@ impl SoftwareCompositor {
             cur_x += g.width as i32 + adv;
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_mod_assets_supports_custom_assets_dir_and_single_png() {
+        let tmp = std::env::temp_dir().join("pin2k_test_custom_assets_mod");
+        let _ = fs::remove_dir_all(&tmp);
+        let custom_dir = tmp.join("custom_assets");
+        let anim_dir = custom_dir.join("sith_jarjar_anim");
+        fs::create_dir_all(&anim_dir).unwrap();
+
+        let img = RgbaImage::from_pixel(16, 16, Rgba([255, 0, 0, 255]));
+        img.save(custom_dir.join("darth_jarjar.png")).unwrap();
+        img.save(anim_dir.join("frame_0000.png")).unwrap();
+
+        let mut overrides = HashMap::new();
+        overrides.insert(
+            "anim_jedi_battle_maul_5_move".to_string(),
+            "custom_assets/darth_jarjar.png".to_string(),
+        );
+        overrides.insert(
+            "anim_jedi_battle_icon_maul".to_string(),
+            "sith_jarjar_anim".to_string(),
+        );
+
+        let mut comp = SoftwareCompositor::new();
+        let loaded = comp.load_mod_assets(&tmp, &overrides).unwrap();
+        assert_eq!(loaded, 2);
+        assert!(comp.anim_lookup.contains_key("darth_jarjar"));
+        assert!(comp.anim_lookup.contains_key("custom_assets/darth_jarjar.png"));
+        assert!(comp.anim_lookup.contains_key("anim_jedi_battle_maul_5_move"));
+        assert!(comp.anim_lookup.contains_key("anim_jedi_battle_icon_maul"));
+
+        let _ = fs::remove_dir_all(&tmp);
     }
 }

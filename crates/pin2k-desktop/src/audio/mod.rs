@@ -71,18 +71,25 @@ impl CompositeAudioBackend {
     }
 
     /// Registers custom `.ogg` audio overrides from `<mod_dir>/audio/` for native and WebAudio.
+    /// Resolves a mod audio override relative path across `<mod>/audio/`, `<mod>/custom_assets/`, or `<mod>/`.
+    pub(crate) fn resolve_mod_audio_path(mod_dir: &Path, rel_file: &str) -> Option<PathBuf> {
+        let trimmed = rel_file.trim_start_matches("./");
+        [
+            mod_dir.join("audio").join(trimmed),
+            mod_dir.join("custom_assets").join(trimmed),
+            mod_dir.join(trimmed),
+        ]
+        .into_iter()
+        .find(|p| p.is_file())
+    }
+
     pub fn apply_mod_audio(&mut self, mod_dir: &Path, overrides: &HashMap<String, String>) {
         self.web.apply_mod_audio(mod_dir, overrides);
-        let adir = mod_dir.join("audio");
-        if !adir.is_dir() {
-            return;
-        }
         let mut next = (*self.override_paths).clone();
         for (hex_id, rel_file) in overrides {
             let trimmed = hex_id.trim_start_matches("0x").trim_start_matches("0X");
             if let Ok(id) = u16::from_str_radix(trimmed, 16).or_else(|_| hex_id.parse::<u16>()) {
-                let p = adir.join(rel_file);
-                if p.exists() {
+                if let Some(p) = Self::resolve_mod_audio_path(mod_dir, rel_file) {
                     next.insert(id, p);
                 }
             }
