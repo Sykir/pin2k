@@ -194,19 +194,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.render_scene_footer(hits, secs, "OUTFITS");
                 }
                 Swe1Scene::JarJarJuggle => {
-                    self.scene_sprite("anim_jarjar_juggle_backdrop", 0, 5, 50, 1);
-                    self.scene_sprite("anim_jarjar_stare", f60, 40, 40, 3);
-                    self.scene_sprite("anim_jarjar_juggle", f60, 210, 40, 5);
-                    self.scene_text(
-                        "font_system_11_data",
-                        format!("JUGGLE HITS LEFT: {hits}   TIME: {secs}S"),
-                        320,
-                        204,
-                        7,
-                        0x7FE0,
-                        Some(0x0000),
-                        TextAlign::Center,
-                    );
+                    self.render_jarjar_juggle(secs);
                 }
                 Swe1Scene::WattosChance => {
                     self.scene_sprite("anim_watto_scene_background", 0, 0, 0, 1);

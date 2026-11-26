@@ -8,6 +8,7 @@ mod leff;
 mod render;
 mod rfm_playfield;
 mod scene_render;
+mod scenes;
 mod score_display;
 mod script_exec;
 mod swe1_playfield;
@@ -18,6 +19,7 @@ mod vspinner;
 
 pub use fx::{anims as fx_anims, ActiveFx, ActiveOverlay, FxAnim, OverlayKind};
 pub use leff::{ActiveLeff, LeffKind};
+pub use scenes::jarjar_juggle_state::{JarjarJuggleState, JuggleAnimState, JuggleAward};
 pub use vspinner::VirtualSpinnerState;
 
 use pin2k_hal::{
@@ -139,6 +141,8 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
 
     // Active scene / multiball / HUD banner
     pub active_scene: Option<ActiveSceneState>,
+    /// Authentic per-scene state for `JarjarJuggleScene` (`DeffJarjarJuggleScene`).
+    pub jarjar_juggle: Option<JarjarJuggleState>,
     pub multiball: ActiveMultiball,
     pub active_leff: Option<ActiveLeff>,
     /// One-shot ROM sprite effects (explosions, booms, sparks) queued on top of the scene.
@@ -230,6 +234,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             popper_hold_ms: 0,
             tilt_warnings: 0,
             active_scene: None,
+            jarjar_juggle: None,
             multiball: ActiveMultiball::None,
             active_leff: None,
             fx_queue: Vec::new(),
@@ -559,6 +564,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     pub(super) fn start_ball(&mut self) {
         self.tilt_warnings = 0;
         self.active_scene = None;
+        self.jarjar_juggle = None;
         self.multiball = ActiveMultiball::None;
         self.special_screen = None;
         self.special_screen_ms = 0;
@@ -859,6 +865,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.special_screen_ms = self.special_screen_ms.saturating_add(dt_ms);
         }
         self.update_virtual_spinners(dt_ms);
+        self.tick_jarjar_juggle(dt_ms);
         self.tick_leff(dt_ms);
         self.tick_fx(dt_ms);
         if self.state == MachineState::InGame && self.script_runtime.is_some() {
@@ -936,6 +943,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     let title = sc.scene.title();
                     timed_out_scene = Some(sc.scene);
                     self.active_scene = None;
+                    self.jarjar_juggle = None;
                     self.active_anim_hint.clear();
                     self.audio.play_sound(sound::MAIN_THEME_LOOP, true);
                     self.set_banner(format!("{title} TIME EXPIRED"), 2_500);

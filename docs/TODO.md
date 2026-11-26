@@ -65,6 +65,9 @@ Progress tracker for the native Rust **Pinball 2000** port (*Star Wars Episode I
 - [x] Ramp-only `VirtualSpinners` (`DeffVSpinner`) with 4 rotating turnstile DCS cues (`0x03C3`, `0x03C9`, `0x03CA`, `0x03CB`)
 - [x] **Complete Attract Mode (20 `AttractDeff` screens)** including `DeffAttractModeKahunaLogo` + 9-color RGB555 light flare
 - [x] **All 14 SWE1 scenes** (strictly isolated 2× bezel intros + active gameplay backgrounds + unified Podrace), `DeffObiHolo`, `HangarMultiball`, `DarthMaulDuel`, `Super Skill Shot`
+- [ ] **Authentic ROM-lifted per-scene gameplay logic (`machine/scenes/`)**: port exact state machines, reward tables, lane-to-switch mappings, timers, and `(x, y, z)` animation choreography from `swe1_0200.elf`:
+  - [x] `JarJarJuggle` (`JarjarJuggleScene` + `DeffJarjarJuggleScene`: 5 lanes, `ra_juggle_random_award_table`, `junk_table`, `Juggle1/2 -> Fall1/2 -> JumpUp -> Switch -> Stare`, ballistic fly-off & flashing award text)
+  - [ ] Remaining 13 SWE1 scenes (`BattleDroid`, `DestroyerDroid`, `FederationFighter`, `GunganBattle`, `HangarEscape`, `HoverTank`, `Podrace`, `ProbeDroid`, `QueenFashion`, `WattosChance`, `MosEspaCantina`, `R2D2`, `QuestionMark`)
 - [x] **All special screens & Diagnostics**: `Boot`, 12 `SpecialScreen` variants, `DeffTilt`, `DeffHSTDinitials`, and `DiagPage` (`Align`, `ColorBar`, `Grid`, `Rgb`, `Fuse`, `Switch`, `Coil`, `Lamp`, Operator menus)
 - [x] **Complete `ScriptRuntime` wiring** (`script_engine/{mod,schema}.rs`): `OnBallStart`, `OnBallEnd`, `OnTick`, `OnTimer`, `OnModeExit`, `tick_attract()` under `--strict-script`, and isolated 1–4P `player_vars`
 - [x] **Unified scene compositing in `pin2k-core`**: `render_podrace_layers` moved to `fx/scene_extras.rs` and legacy duplicate `scenes_compositor.rs` deleted

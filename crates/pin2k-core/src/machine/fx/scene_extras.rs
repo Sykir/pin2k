@@ -1,6 +1,5 @@
 use pin2k_hal::{AudioBackend, PinballHardware, VideoBackend};
 
-use super::JUGGLE_ORBIT;
 use crate::machine::Pin2kMachine;
 use crate::swe1_rules::Swe1Scene;
 
@@ -167,24 +166,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.fx_sprite(icons[idx], f60, 490, 92, 6, 1);
             }
             Swe1Scene::JarJarJuggle => {
-                self.fx_sprite("anim_textbox_300", f60, 170, 198, 6, 1);
-                let junk = [
-                    "anim_jarjar_junk1",
-                    "anim_jarjar_junk2",
-                    "anim_jarjar_junk3",
-                    "anim_jarjar_junk4",
-                    "anim_jarjar_junk5",
-                    "anim_jarjar_junk6",
-                ];
-                let step = f60 / 10;
-                for (i, name) in junk.iter().enumerate() {
-                    let (x, y) = JUGGLE_ORBIT[(step + i * 2) % JUGGLE_ORBIT.len()];
-                    self.fx_sprite(name, f60, x - 50, y - 30, 6, 1);
-                }
-                if hits == 1 {
-                    let (x, y) = JUGGLE_ORBIT[(step + 7) % JUGGLE_ORBIT.len()];
-                    self.fx_sprite("anim_jarjar_junk_eb", f60, x - 58, y - 30, 6, 1);
-                }
+                // Rendered authentically by `machine/scenes/jarjar_juggle.rs`
             }
             Swe1Scene::WattosChance => {
                 // Watto timeline (`DeffWattosChanceSceneBackground`): left -> middle -> right.

@@ -77,22 +77,6 @@ pub struct ActiveOverlay {
     pub elapsed_ms: u32,
 }
 
-/// 12-point ellipse used for Jar Jar's juggled junk (`DeffJarjarJuggleScene`).
-const JUGGLE_ORBIT: [(i32, i32); 12] = [
-    (420, 70),
-    (452, 92),
-    (464, 124),
-    (452, 156),
-    (420, 172),
-    (380, 178),
-    (340, 172),
-    (308, 156),
-    (296, 124),
-    (308, 92),
-    (340, 70),
-    (380, 62),
-];
-
 impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A> {
     fn fx_sprite(&mut self, name: &str, frame: usize, x: i32, y: i32, z: u8, scale_x: u32) {
         let mut cmd = SpriteDrawCmd::new(name, frame, x, y, z);

@@ -192,6 +192,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             // Deflector Shield Targets & Center Shield Popper (`Scenes::start_valid_scene`)
             sw::LEFT_SHIELD_TARGET | sw::RIGHT_SHIELD_TARGET | sw::SHIELD_HIT => {
                 self.skill_shot_ready = false;
+                if self.handle_jarjar_juggle_switch(id) {
+                    return;
+                }
                 self.audio.play_sound(sound::SHIELD_HIT_SFX, false);
                 self.trigger_leff(LeffKind::ShieldHit);
                 if self.active_scene.is_some() {
@@ -238,12 +241,18 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             sw::LEFT_RAMP_ENTER => {
                 self.skill_shot_ready = false;
                 self.trigger_virtual_spinner(false, true);
+                if self.handle_jarjar_juggle_switch(id) {
+                    return;
+                }
                 self.add_score(25_000);
             }
             sw::RIGHT_RAMP_ENTER => {
                 self.skill_shot_ready = false;
                 self.trigger_virtual_spinner(true, true);
                 self.jarjar_saucer_event(true, 0);
+                if self.handle_jarjar_juggle_switch(id) {
+                    return;
+                }
                 self.add_score(25_000);
             }
             sw::RAMP_MADE_LEFT | sw::RAMP_MADE_RIGHT | sw::LEFT_LOOP_UPPER | sw::LEFT_LOOP_ROLLOVER => {
@@ -448,6 +457,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             intro_remaining_ms: intro_ms,
             active_ms: 0,
         });
+        if scene == Swe1Scene::JarJarJuggle {
+            self.start_jarjar_juggle_state();
+        } else {
+            self.jarjar_juggle = None;
+        }
         self.active_anim_hint = scene.intro_anim_hint().to_string();
         self.audits.scenes_started = self.audits.scenes_started.saturating_add(1);
         self.emit_sound(scene.music_id(), true);
@@ -639,32 +653,36 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             });
         }
         if let Some(scene) = finished_scene {
-            self.active_scene = None;
-            let idx = Swe1Scene::ALL.iter().position(|&s| s == scene).unwrap_or(0);
-            self.players[self.current_player].scenes_completed |= 1 << idx;
-            let done_count = self.players[self.current_player].scenes_completed.count_ones();
-            if done_count == 4 {
-                self.players[self.current_player].extra_balls += 1;
-            }
-            let comp_pts = scene.completion_score();
-            self.add_score(comp_pts);
-            self.audits.scenes_completed = self.audits.scenes_completed.saturating_add(1);
-            self.emit_coil(drive::LIGHTSABER_NEON, 160);
-            self.emit_sound(sound::MAIN_THEME_LOOP, true);
-            self.emit_ard(scene.complete_ard());
-            self.trigger_leff(LeffKind::SceneComplete);
-            self.scene_complete_fx(scene);
-            self.emit_event(GameEvent::SceneCompleted {
-                scene,
-                points: comp_pts,
-            });
-            if scene == Swe1Scene::Podrace {
-                self.active_anim_hint = "anim_podrace_closeup".to_string();
-            } else {
-                self.active_anim_hint.clear();
-            }
-            self.set_banner(format!("{} VICTORY! +{comp_pts}", scene.title()), 3_500);
+            self.complete_active_scene(scene);
         }
+    }
+
+    pub(crate) fn complete_active_scene(&mut self, scene: Swe1Scene) {
+        self.active_scene = None;
+        let idx = Swe1Scene::ALL.iter().position(|&s| s == scene).unwrap_or(0);
+        self.players[self.current_player].scenes_completed |= 1 << idx;
+        let done_count = self.players[self.current_player].scenes_completed.count_ones();
+        if done_count == 4 {
+            self.players[self.current_player].extra_balls += 1;
+        }
+        let comp_pts = scene.completion_score();
+        self.add_score(comp_pts);
+        self.audits.scenes_completed = self.audits.scenes_completed.saturating_add(1);
+        self.emit_coil(drive::LIGHTSABER_NEON, 160);
+        self.emit_sound(sound::MAIN_THEME_LOOP, true);
+        self.emit_ard(scene.complete_ard());
+        self.trigger_leff(LeffKind::SceneComplete);
+        self.scene_complete_fx(scene);
+        self.emit_event(GameEvent::SceneCompleted {
+            scene,
+            points: comp_pts,
+        });
+        if scene == Swe1Scene::Podrace {
+            self.active_anim_hint = "anim_podrace_closeup".to_string();
+        } else {
+            self.active_anim_hint.clear();
+        }
+        self.set_banner(format!("{} VICTORY! +{comp_pts}", scene.title()), 3_500);
     }
 
     pub(super) fn damage_darth_maul(&mut self, dmg: u8, combo: bool, label: &str) {

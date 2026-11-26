@@ -531,6 +531,97 @@
     }
 
     #[test]
+    fn jarjar_juggle_authentic_lanes_rewards_and_state_machine() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        // Launch Jar Jar Juggle directly and skip intro
+        assert!(machine.debug_launch_mode("scene:9"));
+        assert_eq!(
+            machine.active_scene.as_ref().map(|s| s.scene),
+            Some(Swe1Scene::JarJarJuggle)
+        );
+        if let Some(ref mut sc) = machine.active_scene {
+            sc.intro_remaining_ms = 0;
+        }
+        let jj = machine.jarjar_juggle.as_ref().expect("jarjar_juggle state initialized");
+        assert_eq!(jj.remaining, 5);
+        assert!(!jj.dropped);
+        assert_eq!(jj.anim, super::JuggleAnimState::Juggle1);
+        // Max 1 LightExtraBall across the 5 lanes (`no_jarjar_juggle_extra_ball`)
+        let eb_count = jj
+            .lanes
+            .iter()
+            .filter(|l| l.award == super::JuggleAward::LightExtraBall)
+            .count();
+        assert!(eb_count <= 1);
+
+        // Render initial frame: backdrop + Jar Jar + 5 junk sprites
+        machine.tick(16);
+        assert!(machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .any(|s| s.anim_name == "anim_jarjar_juggle_backdrop" && s.x == 0 && s.y == 50));
+        assert!(machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .any(|s| s.anim_name == "anim_jarjar_juggle"));
+        let junk_count = machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .filter(|s| s.anim_name.starts_with("anim_jarjar_junk"))
+            .count();
+        assert_eq!(junk_count, 5);
+
+        // Center shield hit knocks Jar Jar down (`Fall1`), drops items into lanes, and collects lane 2
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+        machine.tick(16);
+        {
+            let jj = machine.jarjar_juggle.as_ref().unwrap();
+            assert!(jj.dropped);
+            assert_eq!(jj.anim, super::JuggleAnimState::Fall1);
+            assert!(jj.lanes[2].collected);
+            assert_eq!(jj.remaining, 4);
+        }
+        assert!(machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .any(|s| s.anim_name == "anim_jarjar_fall"));
+
+        // Re-hitting already collected center lane does not reduce remaining count
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+        machine.tick(16);
+        assert_eq!(machine.jarjar_juggle.as_ref().unwrap().remaining, 4);
+
+        // Advance time through Fall1 -> JumpUp -> Switch -> Stare
+        for _ in 0..70 {
+            machine.tick(50);
+        }
+        assert_eq!(
+            machine.jarjar_juggle.as_ref().unwrap().anim,
+            super::JuggleAnimState::Stare
+        );
+
+        // Collect remaining 4 lanes (0, 1, 3, 4) -> completes the scene!
+        for sw_id in [
+            sw::LEFT_RAMP_ENTER,
+            sw::LEFT_SHIELD_TARGET,
+            sw::RIGHT_SHIELD_TARGET,
+            sw::RIGHT_RAMP_ENTER,
+        ] {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw_id);
+        }
+        assert!(machine.active_scene.is_none());
+        assert!(machine.jarjar_juggle.is_none());
+    }
+
+    #[test]
     fn attract_kahuna_logo_renders_tinted_light_flare_and_spinning_logo() {
         let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
         let driver = PdbDriver::new(port);
