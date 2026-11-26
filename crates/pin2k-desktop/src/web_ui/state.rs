@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -66,7 +67,18 @@ pub struct SharedWebState {
     pub active_sound_file: Option<(u64, String, bool)>,
     pub sound_stack: Vec<SoundStackEntry>,
     pub audio_overrides: HashMap<String, PathBuf>,
+    pub log_writer: Option<Arc<Mutex<File>>>,
     pub paused: bool,
+}
+
+impl SharedWebState {
+    pub fn write_log(&self, line: &str) {
+        if let Some(ref writer) = self.log_writer {
+            if let Ok(mut f) = writer.lock() {
+                let _ = writeln!(f, "{line}");
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -146,7 +158,7 @@ impl AudioBackend for WebAudioBridge {
                 0,
                 SoundStackEntry {
                     seq: self.seq,
-                    id_hex,
+                    id_hex: id_hex.clone(),
                     file: file.clone(),
                     looping,
                     is_override,
@@ -154,6 +166,14 @@ impl AudioBackend for WebAudioBridge {
                 },
             );
             st.sound_stack.truncate(32);
+            st.write_log(&format!(
+                "[AUDIO] seq={} PLAY {} {} {}{}",
+                self.seq,
+                id_hex,
+                if looping { "LOOP" } else { "SFX" },
+                file,
+                if is_override { " [MOD]" } else { "" }
+            ));
             st.active_sound_file = Some((self.seq, file, looping));
         }
     }
@@ -166,6 +186,7 @@ impl AudioBackend for WebAudioBridge {
                     entry.active = false;
                 }
             }
+            st.write_log(&format!("[AUDIO] STOP {id_hex}"));
         }
     }
 
@@ -175,6 +196,7 @@ impl AudioBackend for WebAudioBridge {
             for entry in &mut st.sound_stack {
                 entry.active = false;
             }
+            st.write_log(&format!("[AUDIO] seq={} STOP_ALL", self.seq));
             st.active_sound_file = None;
         }
     }

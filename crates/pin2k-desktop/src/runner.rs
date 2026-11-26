@@ -128,6 +128,30 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
     };
 
     let shared_web = Arc::new(Mutex::new(SharedWebState::default()));
+    if let Some(p) = cli.debug_log.parent() {
+        if !p.as_os_str().is_empty() {
+            let _ = fs::create_dir_all(p);
+        }
+    }
+    if let Ok(f) = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&cli.debug_log)
+    {
+        if let Ok(mut st) = shared_web.lock() {
+            st.log_writer = Some(Arc::new(Mutex::new(f)));
+            st.write_log(&format!(
+                "[BOOT] game={} mods={} assets={}",
+                cli.game,
+                loaded_mods.len(),
+                cli.assets_dir
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "none".into())
+            ));
+        }
+    }
     let mut audio = CompositeAudioBackend::new(
         Arc::clone(&shared_web),
         cli.assets_dir.as_deref(),
@@ -398,6 +422,13 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
             for ev in &emitted_events {
                 if let Ok(line) = serde_json::to_string(ev) {
                     let _ = writeln!(ef, "{line}");
+                }
+            }
+        }
+        if !emitted_events.is_empty() {
+            if let Ok(st) = shared_web.lock() {
+                for ev in &emitted_events {
+                    st.write_log(&format!("[EVENT] t={}ms {:?}", ev.elapsed_ms, ev.event));
                 }
             }
         }

@@ -34,6 +34,10 @@ pub(crate) struct Cli {
     #[arg(long)]
     pub(crate) events_log: Option<PathBuf>,
 
+    /// File path to write human-readable runtime debug logs (audio stack, events, mod anim_layers).
+    #[arg(long, default_value = "pin2k_debug.log")]
+    pub(crate) debug_log: PathBuf,
+
     /// Disable native OS OGG/PCM audio playback (`--no-native-audio`).
     #[arg(long, default_value_t = false)]
     pub(crate) no_native_audio: bool,
