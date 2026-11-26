@@ -188,13 +188,8 @@ pub mod sound {
     pub const SPACE_EXPLOSION_1: SoundId = SoundId(0x0261);    // acd_space_explosion_1
     pub const ENDING_CELEBRATION: SoundId = SoundId(0x002F);   // acd_ending_celebration_tune
     pub const PODRACE_START_ENGINES: SoundId = SoundId(0x044D); // acd_green_announcer_start_your_engines
-    /// `acd_traditional_spinner_sound` (`0x2e4030`): 4 alternating turnstile click IDs.
-    pub const SPINNER_TICKS: [SoundId; 4] = [
-        SoundId(0x03C3),
-        SoundId(0x03C9),
-        SoundId(0x03CA),
-        SoundId(0x03CB),
-    ];
+    /// `acd_traditional_spinner_sound` (`0x03C3`, 6.7 KB crisp click; `0x03C9..0x03CB` were long unrelated tracks).
+    pub const SPINNER_TICKS: [SoundId; 1] = [SoundId(0x03C3)];
 
     #[allow(non_snake_case)]
     pub const fn LASER_SFX_OR_CLICK() -> SoundId {

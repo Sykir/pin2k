@@ -2,8 +2,8 @@
 //! - Left spinner at `(43, 174)` (`0x2b, 0xae`) `z = 22` (`anim_spinner_bracket_left` + `anim_spinner_1`).
 //! - Right spinner at `(421, 174)` (`0x1a5, 0xae`) `z = 22` (`anim_spinner_bracket_right` + `anim_spinner_2`).
 //! - **Only active when triggered by a ball passing a ramp entry/made switch!**
-//! - Plays `acd_traditional_spinner_sound` (`0x03C3`, `0x03C9`, `0x03CA`, `0x03CB`) on every
-//!   half-turn and spawns a rising score popup (`z = 23`, `font_system_7_data`).
+//! - Plays `acd_traditional_spinner_sound` (`0x03C3`) on every full turn
+//!   and spawns a rising score popup (`z = 23`, `font_system_7_data`).
 
 use pin2k_hal::{AudioBackend, PinballHardware, SpriteDrawCmd, TextAlign, TextDrawCmd, VideoBackend};
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,7 @@ pub const LEFT_SPINNER_X: i32 = 43;
 pub const RIGHT_SPINNER_X: i32 = 421;
 pub const SPINNER_Y: i32 = 174;
 const SPINNER_ANIM_FRAMES: u32 = 56;
-const FRAMES_PER_TURNSTILE_CLICK: u32 = 28; // half-turn = 1 audible click
+const FRAMES_PER_TURNSTILE_CLICK: u32 = 56; // 1 full revolution = 1 crisp click
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct VirtualSpinnerState {
@@ -36,7 +36,7 @@ impl VirtualSpinnerState {
     pub fn trigger(&mut self, forward: bool) {
         self.active = true;
         self.forward = forward;
-        self.velocity_q8 = (self.velocity_q8 + 512).clamp(480, 960);
+        self.velocity_q8 = (self.velocity_q8 + 384).clamp(480, 768);
         self.high_speed = self.velocity_q8 >= 720;
         self.popup_ms = 1_100;
         self.last_award = if self.high_speed { 25_000 } else { 10_000 };
@@ -85,8 +85,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     sp.last_award = click_award;
                     sp.popup_ms = 900;
                 }
-                // Smooth friction decay (~1.6 s spin)
-                let decay = (dt_ms / 3).max(1);
+                // Smooth friction decay (~1.2 s spin)
+                let decay = (dt_ms / 2).max(1);
                 sp.velocity_q8 = sp.velocity_q8.saturating_sub(decay);
                 sp.popup_ms = sp.popup_ms.saturating_sub(dt_ms);
                 if sp.velocity_q8 == 0 && sp.popup_ms == 0 {
