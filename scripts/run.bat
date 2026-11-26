@@ -17,11 +17,15 @@ if not "%~1"=="" set "PORT=%~1"
 echo Starting pin2k-desktop at http://127.0.0.1:%PORT% ...
 start "" "http://127.0.0.1:%PORT%"
 
-if exist "work\swe1_assets" (
-    ".\target\release\pin2k-desktop.exe" --assets-dir .\work\swe1_assets --web-port %PORT% --frames 0
+if exist "work\swe1_assets\gfx_hd_2x-DeGif_4x" (
+    ".\target\release\pin2k-desktop.exe" --assets-dir .\work\swe1_assets --hd-dir .\work\swe1_assets\gfx_hd_2x-DeGif_4x --hd-scale 4 --aa --window --web-port %PORT% --frames 0
+) else if exist "work\swe1_assets\gfx_hd" (
+    ".\target\release\pin2k-desktop.exe" --assets-dir .\work\swe1_assets --hd --hd-scale 4 --aa --window --web-port %PORT% --frames 0
+) else if exist "work\swe1_assets" (
+    ".\target\release\pin2k-desktop.exe" --assets-dir .\work\swe1_assets --window --web-port %PORT% --frames 0
 ) else (
     echo [WARNING] Folder "work\swe1_assets" not found. Launching without extracted assets.
-    ".\target\release\pin2k-desktop.exe" --web-port %PORT% --frames 0
+    ".\target\release\pin2k-desktop.exe" --window --web-port %PORT% --frames 0
 )
 
 if errorlevel 1 (

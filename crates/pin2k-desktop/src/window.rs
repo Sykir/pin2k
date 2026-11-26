@@ -72,7 +72,10 @@ where
         }
         let mut attrs = WindowAttributes::default()
             .with_title(&self.title)
-            .with_inner_size(LogicalSize::new(self.src_w.max(960), self.src_h.max(720)))
+            .with_inner_size(LogicalSize::new(
+                self.src_w.clamp(960, 1280),
+                self.src_h.clamp(720, 960),
+            ))
             .with_min_inner_size(LogicalSize::new(640, 480));
         if self.start_fullscreen {
             attrs = attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));

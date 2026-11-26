@@ -587,7 +587,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
 
         if key == "darth_maul_duel" || key == "maul" || key == "jedi_battle" {
-            self.game_title = GameTitle::Swe1;
+            self.ensure_ingame_swe1();
             self.active_scene = None;
             self.start_darth_maul_duel();
             return true;

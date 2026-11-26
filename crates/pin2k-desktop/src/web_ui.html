@@ -79,7 +79,7 @@
             <button onclick="dbgMode('skill_shot')">Skill Shot</button>
             <button onclick="dbgMode('holo_select')">Holo Select</button>
             <button onclick="dbgMode('hangar_multiball')">Hangar MB</button>
-            <button onclick="dbgMode('darth_maul_duel')">Maul Duel</button>
+            <button onclick="dbgMode('darth_maul_duel')">Jedi Battle (Maul)</button>
             <button onclick="dbgMode('spinner_left')">Spinner G</button>
             <button onclick="dbgMode('spinner_right')">Spinner D</button>
             <button onclick="dbgMode('bonus')">Bonus</button>
@@ -147,6 +147,7 @@
               <option value="scene:11">12: Mos Espa Cantina</option>
               <option value="scene:12">13: R2-D2 Repair</option>
               <option value="scene:13">14: Mystery (?)</option>
+              <option value="jedi_battle">Jedi Battle (Darth Maul Duel)</option>
               <option value="sub_escape">Sub-Scene: Naboo Sub Escape</option>
             </select>
             <select id="rfmWave" onchange="if(this.value){ dbgMode(this.value); this.selectedIndex=0; }">
