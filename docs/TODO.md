@@ -12,7 +12,7 @@ Progress tracker for the native Rust **Pinball 2000** port (*Star Wars Episode I
 | 4. SWE1 Asset Coverage (`gfx` / `fonts` / `audio`) | **97%** | Fonts **100% (`19/19`)**, Audio **100% (`689/689`)**, Anims **90.3% (`354/392`)** |
 | 5. Desktop Runtime, Debug Console & HD (`pin2k-desktop`) | **90%** | Native `--window`/`--fullscreen` (`winit`+`softbuffer`), `--hd` (`gfx_hd/`), native audio `StopAll`/looping + WebAudio mod overrides, 5-tab Web Console |
 | 6. Asset Modding & Custom Scenes (`mod.json`) | **35%** | `gfx/` replacement & native + WebAudio overrides done; fonts, stateful rules & custom scenes remaining |
-| 7. Documentation & Quality | **100%** | **43/43 unit tests passing**, **14/14 E2E video checks**, 0 warnings, complete English documentation |
+| 7. Documentation & Quality | **90%** | **44/44 unit tests passing**, **14/14 E2E video checks**, 0 warnings; full codebase & class reference documentation remaining |
 
 ### Playability Score: **93.5 / 100**
 
@@ -100,8 +100,9 @@ Progress tracker for the native Rust **Pinball 2000** port (*Star Wars Episode I
 
 ---
 
-## 7. Documentation & Quality — **100%**
-- [x] `RUSTFLAGS="-D warnings" cargo check --workspace --all-targets` (**0 warnings**), **43 / 43 unit tests** passing, and `cargo build --release --workspace` clean
+## 7. Documentation & Quality — **90%**
+- [x] `RUSTFLAGS="-D warnings" cargo check --workspace --all-targets` (**0 warnings**), **44 / 44 unit tests** passing, and `cargo build --release --workspace` clean
 - [x] **14 / 14 End-to-End functional test** recorded as MP4 video (`work/e2e_validation.mp4`, 1,455 frames, 48.5s @ 30 fps)
 - [x] Visual verification across **11 PNG captures** (`attract:0`, `ingame`, `spinner_left`, `scene:6`, `scene:0`, `scene:12`, `bonus`, `match`, `hstd_entry`, `diag:colorbar`, `diag:switch`)
-- [x] Complete English documentation: [README.md](../README.md), [SCREEN_LAYOUT_REFERENCE.md](SCREEN_LAYOUT_REFERENCE.md), [ARCHITECTURE_GUIDE.md](ARCHITECTURE_GUIDE.md), [HARDWARE_NOTES.md](HARDWARE_NOTES.md), [GAME_SCRIPT_REFERENCE.md](GAME_SCRIPT_REFERENCE.md), [ASSETS_MATRIX.md](ASSETS_MATRIX.md), [SWE1_EXTRACTION_INVENTORY.md](SWE1_EXTRACTION_INVENTORY.md), [SWE1_GAME_RULES.md](SWE1_GAME_RULES.md), [RFM_EXTRACTION_INVENTORY.md](RFM_EXTRACTION_INVENTORY.md), [RFM_GAME_RULES.md](RFM_GAME_RULES.md), [HD_UPSCALING_GUIDE.md](HD_UPSCALING_GUIDE.md), [TODO.md](TODO.md)
+- [x] High-level English documentation: [README.md](../README.md), [SCREEN_LAYOUT_REFERENCE.md](SCREEN_LAYOUT_REFERENCE.md), [ARCHITECTURE_GUIDE.md](ARCHITECTURE_GUIDE.md), [HARDWARE_NOTES.md](HARDWARE_NOTES.md), [GAME_SCRIPT_REFERENCE.md](GAME_SCRIPT_REFERENCE.md), [ASSETS_MATRIX.md](ASSETS_MATRIX.md), [SWE1_EXTRACTION_INVENTORY.md](SWE1_EXTRACTION_INVENTORY.md), [SWE1_GAME_RULES.md](SWE1_GAME_RULES.md), [RFM_EXTRACTION_INVENTORY.md](RFM_EXTRACTION_INVENTORY.md), [RFM_GAME_RULES.md](RFM_GAME_RULES.md), [HD_UPSCALING_GUIDE.md](HD_UPSCALING_GUIDE.md), [TODO.md](TODO.md)
+- [ ] **Complete codebase & class documentation**: write a thorough technical reference covering every crate (`pin2k-hal`, `pin2k-core`, `pin2k-rom-tool`, `pin2k-desktop`), module, struct/enum/trait, state machine lifecycle, 60 Hz tick & rendering/audio pipelines, PDB hardware protocol flow, and ROM-to-Rust class mapping (`Deff*`, `Leff*`, `Player`, `Scenes`, etc.), plus inline Rustdoc (`///`) across public APIs
