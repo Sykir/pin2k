@@ -874,13 +874,31 @@
             1
         );
 
-        // 4 SHIELD_POPPER hits (2 each) defeat all 8 droids
-        for expected in [6, 4, 2, 0] {
-            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_POPPER);
-            if expected > 0 {
-                assert_eq!(machine.hangar_escape.as_ref().unwrap().droids_remaining, expected);
-            }
+        // First droid starts alone at center: empty-lane miss (+20_000) increments droids_missed
+        assert_eq!(machine.hangar_escape.as_ref().unwrap().lanes, [0, 1, 0]);
+        let s0 = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
+        assert_eq!(machine.score, s0 + 20_000);
+        assert_eq!(machine.hangar_escape.as_ref().unwrap().droids_missed, 1);
+
+        // Defeat all 8 droids by hitting active lanes (+200_000 each)
+        while machine.hangar_escape.as_ref().is_some_and(|h| !h.door_open()) {
+            let lanes = machine.hangar_escape.as_ref().unwrap().lanes;
+            let sw_id = if lanes[1] > 0 {
+                sw::SHIELD_HIT
+            } else if lanes[0] > 0 {
+                sw::LEFT_RAMP_ENTER
+            } else {
+                sw::RIGHT_RAMP_ENTER
+            };
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw_id);
         }
+        assert!(machine.shield_raised);
+        assert!(machine.hangar_escape.as_ref().unwrap().door_open());
+
+        // Shoot SHIELD_POPPER behind raised shield to exit hangar
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_POPPER);
+        assert!(!machine.shield_raised);
         assert!(machine.active_scene.is_none());
         assert!(machine.hangar_escape.is_none());
     }

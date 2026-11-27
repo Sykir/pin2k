@@ -164,6 +164,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     if self.handle_battle_droid_laser(right)
                         || self.handle_mos_espa_cantina_laser()
                         || self.handle_queen_fashion_laser()
+                        || self.handle_hangar_escape_laser(right)
                     {
                         return;
                     }
@@ -251,7 +252,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             sw::LEFT_DROP_TARGET => {
                 self.left_drop_down = true;
                 self.trigger_leff(LeffKind::ShieldHit);
-                if self.handle_battle_droid_drop_target(false) {
+                if self.handle_battle_droid_drop_target(false)
+                    || self.handle_hangar_escape_switch(id)
+                {
                     return;
                 }
                 self.add_score(scoring::DROP_TARGET);
@@ -261,7 +264,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             sw::RIGHT_DROP_TARGET => {
                 self.right_drop_down = true;
                 self.trigger_leff(LeffKind::ShieldHit);
-                if self.handle_battle_droid_drop_target(true) {
+                if self.handle_battle_droid_drop_target(true)
+                    || self.handle_hangar_escape_switch(id)
+                {
                     return;
                 }
                 self.add_score(scoring::DROP_TARGET);
