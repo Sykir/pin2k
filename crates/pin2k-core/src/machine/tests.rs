@@ -1105,6 +1105,22 @@
             1
         );
 
+        // Hurry-up stays frozen at 500_000 during 3s, then decays down toward 50_000
+        for _ in 0..180 {
+            machine.tick(16);
+        }
+        assert_eq!(machine.r2d2.as_ref().unwrap().hurry_up_value, 500_000);
+        for _ in 0..400 {
+            machine.tick(16);
+        }
+        assert!(machine.r2d2.as_ref().unwrap().hurry_up_value < 500_000);
+        assert!(machine.r2d2.as_ref().unwrap().hurry_up_value >= 50_000);
+
+        // Ramp made boosts hurry-up (500_000 + 250_000 = 750_000) without boarding a unit
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
+        assert_eq!(machine.r2d2.as_ref().unwrap().units_remaining, 6);
+        assert_eq!(machine.r2d2.as_ref().unwrap().hurry_up_value, 750_000);
+
         for expected in (0..6).rev() {
             pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
             if expected > 0 {
