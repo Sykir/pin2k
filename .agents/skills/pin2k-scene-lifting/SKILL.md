@@ -12,10 +12,15 @@ description: >-
 Use this workflow when porting a Pinball 2000 scene (e.g. `JarJarJuggle`, `WattosChance`,
 `BattleDroid`, etc.) from `work/swe1_0200.elf` into `crates/pin2k-core/src/machine/scenes/`.
 
-## 1. Inventory Classes, Symbols, and Data Tables
+## 1. Inventory Classes, Symbols, Rulebooks, and Data Tables
 1. Read the Ghidra decompilations in `work/ghidra_out/classes/` for the scene's
    `<Scene>.c`, `Deff<Scene>.c`, `Deff<Scene>Intro.c`, and `Class<Scene>Leff*.c`.
-2. **Ghidra `Font::Font` truncation check**: if `Deff*::Run` stops right after
+2. **Cross-check the rulebook docs in `work/` (if present)**:
+   Search `work/swe1-regles/` (e.g., `livre_regles_swe1_14_essentiel.md`,
+   `livre_regles_swe1_210_essentiel.md`, `livre_regles_swe1_14.md`) for the scene's
+   gameplay rules, progressive/combo scoring windows, miss/raté flags, shield/drop-target
+   interactions, and perfect-completion bonuses to ensure nothing is missed in Ghidra.
+3. **Ghidra `Font::Font` truncation check**: if `Deff*::Run` stops right after
    `Font__Font_FontData_const___` with `/* WARNING: Subroutine does not return */`,
    the decompilation is truncated. Disassemble the full address range up to the next
    symbol using `objdump -d -C --start-address=<Run> --stop-address=<NextSym> work/swe1_0200.elf`.
