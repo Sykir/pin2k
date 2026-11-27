@@ -728,7 +728,7 @@
 
         assert!(machine.debug_launch_mode("scene:0"));
         assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, 8);
-        for _ in 0..260 {
+        for _ in 0..270 {
             machine.tick(16);
         }
         assert_eq!(
@@ -736,7 +736,7 @@
             1
         );
         assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_mtt_doors_clean_anim" && s.x == 239 && s.y == 89));
-        assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_left_bdroid_standing" && s.x == 69 && s.y == 135 && s.z == 5));
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_left_bdroid_standing" && s.x == 68 && s.y == 135 && s.z == 5));
         assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_right_bdroid_standing" && s.x == 421 && s.y == 134 && s.z == 5));
         assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_bdroid_on_stap" && (s.y == 84 || s.y == 80)));
 
