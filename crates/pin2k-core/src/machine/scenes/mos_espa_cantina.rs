@@ -163,8 +163,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         let mc = self.mos_espa_cantina.clone().unwrap_or_default();
 
         self.scene_sprite("anim_jedi_council_background", 0, BG_X, BG_Y, 1);
-        let bounce_y = if mc.jump_ms > 0 || !mc.music_stopped {
-            ((f60 % 6) as i32) * 2
+        let jump_offset = if mc.jump_ms > 0 {
+            let phase = (400 - mc.jump_ms) as i32;
+            (20 - ((phase - 200).abs() / 10)).max(0)
         } else {
             0
         };
@@ -173,7 +174,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 continue;
             }
             let anim = COUNCIL_ANIMS[member_idx % COUNCIL_ANIMS.len()];
-            let y = CHAIR_Y - if chair_idx % 2 == 0 { bounce_y } else { 0 };
+            let y = CHAIR_Y - jump_offset;
             self.scene_sprite(anim, f60, CHAIR_X[chair_idx], y, 4);
         }
         let status = if mc.music_stopped {

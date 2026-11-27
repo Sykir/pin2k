@@ -49,8 +49,8 @@
         <button onclick="hit(86)">R-Laser [.]</button>
         <button onclick="hit(29)">L-Ramp Spin [L]</button>
         <button onclick="hit(30)">R-Ramp Spin [R]</button>
-        <button onclick="hit(34)">Shield [H]</button>
-        <button onclick="hit(32)">Scoop [P]</button>
+        <button onclick="hit(39)">Shield [H]</button>
+        <button onclick="hit(32)">Derrière Shield [P]</button>
         <button onclick="hit(22)">Saucer [K]</button>
         <button onclick="hit(45)">Jets/Skill [J]</button>
         <button onclick="hit(72)">Esc [1]</button>
@@ -69,6 +69,7 @@
         <button onclick="showTab('player', this)">Joueurs &amp; Temps</button>
         <button onclick="showTab('assets', this)">Anims &amp; Sons</button>
         <button onclick="showTab('hw', this)">Matériel</button>
+        <button onclick="showTab('phys', this)">Plateau Physique</button>
         <button onclick="showTab('layers', this)">Piles Live (GFX/Audio)</button>
       </div>
 
@@ -248,6 +249,31 @@
         </div>
       </div>
 
+      <div id="tab-phys" class="tab-pane">
+        <div class="grp">
+          <h4>État Physique du Plateau (Live)</h4>
+          <table>
+            <thead><tr><th>Élément</th><th>État Actuel</th><th>Action Debug</th></tr></thead>
+            <tbody id="physBody"></tbody>
+          </table>
+        </div>
+        <div class="grp">
+          <h4>Déclencheurs Physiques Plateau</h4>
+          <div class="grid">
+            <button onclick="hit(32)">Derrière Shield (Popper Sw32)</button>
+            <button onclick="hit(39)">Impact Shield (Sw39)</button>
+            <button onclick="hit(34)">Cible Shield G (Sw34)</button>
+            <button onclick="hit(35)">Cible Shield D (Sw35)</button>
+            <button onclick="hit(22)">Trou Jar Jar (Sw22)</button>
+            <button onclick="hit(23)">Trou Watto (Sw23)</button>
+            <button onclick="hit(4)">Cible Tombante G (Sw04)</button>
+            <button onclick="hit(12)">Cible Tombante D (Sw12)</button>
+            <button onclick="hit(7)">Tire-Bille (Sw07)</button>
+            <button onclick="hit(25)">Drain Bille (Sw25)</button>
+          </div>
+        </div>
+      </div>
+
       <div id="tab-layers" class="tab-pane">
         <div class="grp">
           <h4>Pile Audio Audible (Sons actifs en cours)</h4>
@@ -375,6 +401,21 @@ setInterval(async () => {
       document.getElementById('playersList').innerHTML = st.players.map(p =>
         `<div style="color:${p.active ? '#fde047' : '#94a3b8'}">${p.active ? '▶ ' : ''}P${p.index} (${p.character}): ${p.score.toLocaleString()} | Lasers:${p.lasers} | Shield:${p.shield} | ${p.rank}</div>`
       ).join('');
+    }
+    if (st.physical) {
+      const p = st.physical;
+      const badge = (cond, onTxt, offTxt, onCol='#4ade80', offCol='#94a3b8') =>
+        `<span style="color:${cond ? onCol : offCol}; font-weight:bold;">${cond ? onTxt : offTxt}</span>`;
+      document.getElementById('physBody').innerHTML = [
+        `<tr><td>Bouclier (Shield)</td><td>${badge(p.shield_raised, 'LEVÉ (HAUT)', 'BAISSÉ (BAS)', '#facc15', '#38bdf8')}</td><td><button onclick="hit(39)">Impact (Sw39)</button> <button onclick="hit(32)">Popper (Sw32)</button></td></tr>`,
+        `<tr><td>Cible Tombante Gauche</td><td>${badge(p.left_drop_down, 'BAISSÉE (OUVERT)', 'LEVÉE (FERMÉ)', '#4ade80', '#f87171')}</td><td><button onclick="hit(4)">Taper (Sw04)</button></td></tr>`,
+        `<tr><td>Cible Tombante Droite</td><td>${badge(p.right_drop_down, 'BAISSÉE (OUVERT)', 'LEVÉE (FERMÉ)', '#4ade80', '#f87171')}</td><td><button onclick="hit(12)">Taper (Sw12)</button></td></tr>`,
+        `<tr><td>Trou Jar Jar (Saucer G)</td><td>${badge(p.jarjar_saucer_ms > 0, 'BILLE PIÉGÉE (' + p.jarjar_saucer_ms + 'ms)', 'VIDE', '#f472b6', '#94a3b8')}</td><td><button onclick="hit(22)">Entrer (Sw22)</button></td></tr>`,
+        `<tr><td>Trou Watto (Saucer D)</td><td>${badge(p.watto_saucer_ms > 0, 'BILLE PIÉGÉE (' + p.watto_saucer_ms + 'ms)', 'VIDE', '#f472b6', '#94a3b8')}</td><td><button onclick="hit(23)">Entrer (Sw23)</button></td></tr>`,
+        `<tr><td>Derrière Shield (Popper)</td><td>${badge(p.behind_shield_popper_ms > 0, 'BILLE PIÉGÉE (' + p.behind_shield_popper_ms + 'ms)', 'VIDE', '#f472b6', '#94a3b8')}</td><td><button onclick="hit(32)">Déclencher (Sw32)</button></td></tr>`,
+        `<tr><td>Tire-Bille (Shooter Lane)</td><td>${badge(p.shooter_lane_closed, 'BILLE PRÊTE', 'VIDE', '#4ade80', '#94a3b8')}</td><td><button onclick="hit(7)">Sw07</button></td></tr>`,
+        `<tr><td>Billes en jeu / En attente</td><td>${p.balls_in_play} en jeu | ${p.pending_eject_balls} en attente</td><td><button onclick="hit(25)">Drain (Sw25)</button></td></tr>`,
+      ].join('');
     }
     if (st.layers) {
       document.getElementById('layersBody').innerHTML = st.layers.map(l =>

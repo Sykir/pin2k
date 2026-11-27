@@ -13,8 +13,9 @@ pub const COUNCIL_ANIMS: [&str; 6] = [
 
 pub const BG_X: i32 = 6;
 pub const BG_Y: i32 = 3;
-pub const CHAIR_X: [i32; 5] = [82, 166, 250, 354, 444];
-pub const CHAIR_Y: i32 = 64;
+/// Exact ROM chair positions (`Member::jump_to_slot(..., 0xaa)` -> bottom Y=170, sprite h=58 -> Y=112).
+pub const CHAIR_X: [i32; 5] = [82, 166, 256, 348, 438];
+pub const CHAIR_Y: i32 = 112;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CouncilAward {

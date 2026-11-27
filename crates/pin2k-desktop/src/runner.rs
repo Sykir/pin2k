@@ -487,6 +487,10 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
                     })
                     .collect();
                 let layers_json = machine.video.last_frame_layers_json();
+                let sw_bytes = machine.hw.read_logical_switches();
+                let shooter_closed = (sw_bytes[(pin2k_core::swe1_tables::sw::SHOOTER_LANE / 8) as usize]
+                    & (1 << (pin2k_core::swe1_tables::sw::SHOOTER_LANE % 8)))
+                    != 0;
                 if let Ok(mut st) = shared_web.lock() {
                     st.prune_expired_sounds();
                     let (seq, sfile, sloop) = st
@@ -513,6 +517,17 @@ pub(crate) fn run(cli: crate::cli::Cli) -> Result<()> {
                             "left_spins": machine.left_spinner.total_spins,
                             "right_active": machine.right_spinner.active,
                             "right_spins": machine.right_spinner.total_spins,
+                        },
+                        "physical": {
+                            "shield_raised": machine.shield_raised,
+                            "left_drop_down": machine.left_drop_down,
+                            "right_drop_down": machine.right_drop_down,
+                            "jarjar_saucer_ms": machine.saucer_hold_ms[0],
+                            "watto_saucer_ms": machine.saucer_hold_ms[1],
+                            "behind_shield_popper_ms": machine.popper_hold_ms,
+                            "shooter_lane_closed": shooter_closed,
+                            "balls_in_play": machine.balls_in_play,
+                            "pending_eject_balls": machine.pending_eject_balls,
                         },
                         "players": players_json,
                         "paused": st.paused,
