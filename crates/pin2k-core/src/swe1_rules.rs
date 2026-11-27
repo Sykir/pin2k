@@ -248,7 +248,8 @@ impl Swe1Scene {
 
     pub const fn required_hits(self) -> u8 {
         match self {
-            Swe1Scene::WattosChance | Swe1Scene::QueenFashion => 3,
+            Swe1Scene::WattosChance => 3,
+            Swe1Scene::QueenFashion => 6,
             Swe1Scene::Podrace | Swe1Scene::HangarEscape => 6,
             _ => 5,
         }

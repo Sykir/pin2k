@@ -947,21 +947,43 @@
             Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
 
         assert!(machine.debug_launch_mode("scene:8"));
-        assert_eq!(machine.queen_fashion.as_ref().unwrap().outfits_remaining, 3);
+        assert_eq!(machine.queen_fashion.as_ref().unwrap().outfits_remaining, 6);
         machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
         machine.tick(16);
         assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_fashion_throne" && s.x == 5 && s.y == 44));
 
-        // Spin wheel with SHIELD_HIT
-        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
-        assert_eq!(machine.queen_fashion.as_ref().unwrap().wheel_pos, 1);
-
-        // Collect 3 outfits via ramps
+        // Expose both windows at initial position (0x20 left, 0x04 right) -> 500_000 each
+        let s0 = machine.score;
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
-        assert_eq!(machine.queen_fashion.as_ref().unwrap().outfits_remaining, 2);
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_RAMP_ENTER);
-        assert_eq!(machine.queen_fashion.as_ref().unwrap().outfits_remaining, 1);
-        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_SHIELD_TARGET);
+        assert_eq!(machine.queen_fashion.as_ref().unwrap().outfits_remaining, 4);
+        assert_eq!(
+            machine.score,
+            s0 + 2 * crate::swe1_rules::scoring::QUEEN_FASHION_MATCH
+        );
+
+        // Duplicate left hit awards 15_520 instead of 500_000
+        let s_dup = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
+        assert_eq!(machine.score, s_dup + 15_520);
+        assert_eq!(machine.queen_fashion.as_ref().unwrap().outfits_remaining, 4);
+
+        // Spin wheel with SHIELD_HIT (+20_000) and finish remaining 4 outfits
+        while machine.queen_fashion.is_some() {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+            for _ in 0..40 {
+                machine.tick(30);
+                if machine.queen_fashion.as_ref().is_none_or(|q| !q.spinning) {
+                    break;
+                }
+            }
+            if machine.queen_fashion.as_ref().is_some_and(|q| q.is_left_card_clear()) {
+                pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
+            }
+            if machine.queen_fashion.as_ref().is_some_and(|q| q.is_right_card_clear()) {
+                pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_RAMP_ENTER);
+            }
+        }
         assert!(machine.active_scene.is_none());
         assert!(machine.queen_fashion.is_none());
     }
