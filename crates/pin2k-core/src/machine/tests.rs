@@ -566,12 +566,13 @@
         assert_eq!(machine.players[0].next_scene_idx, initial_idx);
 
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_ACTION_BUTTON);
-        assert_eq!(machine.players[0].next_scene_idx, (initial_idx + 1) % Swe1Scene::ALL.len());
+        // Index 1 (MosEspaCantina) requires min_scenes_started = 1, so cycling skips to index 2 (FederationFighter)
+        assert_eq!(machine.players[0].next_scene_idx, 2);
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_ACTION_BUTTON);
         assert_eq!(machine.players[0].next_scene_idx, initial_idx);
 
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_RIGHT);
-        assert_eq!(machine.players[0].next_scene_idx, (initial_idx + 1) % Swe1Scene::ALL.len());
+        assert_eq!(machine.players[0].next_scene_idx, 2);
         assert!(machine.active_scene.is_none());
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
         assert_eq!(machine.players[0].next_scene_idx, initial_idx);

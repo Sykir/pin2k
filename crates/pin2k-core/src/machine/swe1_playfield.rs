@@ -726,14 +726,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     pub fn cycle_scene_selection(&mut self, forward: bool) {
-        let p = &mut self.players[self.current_player];
-        let n = Swe1Scene::ALL.len();
-        p.next_scene_idx = if forward {
-            (p.next_scene_idx + 1) % n
-        } else {
-            (p.next_scene_idx + n - 1) % n
-        };
-        let scene = Swe1Scene::ALL[p.next_scene_idx];
+        let scene = self.players[self.current_player].cycle_eligible_scene(forward);
         self.active_anim_hint = scene.holo_anim_hint().to_string();
         self.emit_sound(sound::LASER_SFX_OR_CLICK(), false);
         self.set_banner(format!("SELECT MODE: {} (SHOOT SCOOP TO START)", scene.title()), 3_000);
@@ -854,6 +847,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
 
     pub fn start_darth_maul_duel(&mut self) {
         self.players[self.current_player].jedi_letters = 0;
+        self.players[self.current_player].jedi_battles_started =
+            self.players[self.current_player].jedi_battles_started.saturating_add(1);
         self.right_saber_color = 1; // Red Sith lightsaber
         self.hw.set_drive_hold(drive::LIGHTSABER_NEON, true);
         self.multiball = ActiveMultiball::DarthMaulDuel {

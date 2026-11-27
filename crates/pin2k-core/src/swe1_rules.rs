@@ -545,6 +545,8 @@ pub struct PlayerState {
     pub jedi_letters_total: u16,
     #[serde(default)]
     pub scenes_started: u32,
+    #[serde(default)]
+    pub jedi_battles_started: u32,
 }
 
 impl Default for PlayerState {
@@ -582,6 +584,7 @@ impl Default for PlayerState {
             skill_shot_jedi_awarded: false,
             jedi_letters_total: 0,
             scenes_started: 0,
+            jedi_battles_started: 0,
         }
     }
 }
@@ -638,19 +641,55 @@ impl PlayerState {
         };
     }
 
+    /// True when `Swe1Scene::ALL[idx]` is unlocked (`min_scenes_started` / `min_jedi_battles_started`),
+    /// not `QuestionMark`, and not yet completed in the current cycle.
+    pub fn is_scene_eligible(&self, idx: usize) -> bool {
+        let Some(&scene) = Swe1Scene::ALL.get(idx) else {
+            return false;
+        };
+        scene != Swe1Scene::QuestionMark
+            && (self.scenes_completed & (1 << idx)) == 0
+            && self.scenes_started >= scene.min_scenes_started()
+            && self.jedi_battles_started >= scene.min_jedi_battles_started()
+    }
+
     pub fn choose_next_scene(&mut self) -> Swe1Scene {
         let n = Swe1Scene::ALL.len();
         for offset in 0..n {
             let idx = (self.next_scene_idx + offset) % n;
-            if (self.scenes_completed & (1 << idx)) == 0 {
+            if self.is_scene_eligible(idx) {
                 self.next_scene_idx = (idx + 1) % n;
                 return Swe1Scene::ALL[idx];
             }
         }
-        // All 14 completed -> reset cycle!
+        // All eligible scenes completed -> reset cycle!
         self.scenes_completed = 0;
+        for offset in 0..n {
+            let idx = offset % n;
+            if self.is_scene_eligible(idx) {
+                self.next_scene_idx = (idx + 1) % n;
+                return Swe1Scene::ALL[idx];
+            }
+        }
         self.next_scene_idx = 1;
-        Swe1Scene::ALL[0]
+        Swe1Scene::BattleDroid
+    }
+
+    /// Advances `next_scene_idx` forward/backward to the next eligible scene.
+    pub fn cycle_eligible_scene(&mut self, forward: bool) -> Swe1Scene {
+        let n = Swe1Scene::ALL.len();
+        for step in 1..=n {
+            let idx = if forward {
+                (self.next_scene_idx + step) % n
+            } else {
+                (self.next_scene_idx + n - (step % n)) % n
+            };
+            if self.is_scene_eligible(idx) {
+                self.next_scene_idx = idx;
+                return Swe1Scene::ALL[idx];
+            }
+        }
+        Swe1Scene::ALL[self.next_scene_idx % n]
     }
 }
 
