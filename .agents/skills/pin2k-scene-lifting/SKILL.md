@@ -30,9 +30,16 @@ Use this workflow when porting a Pinball 2000 scene (e.g. `JarJarJuggle`, `Watto
      to recover exact ID -> `anim_*_ptr` mappings.
 
 ## 2. Extract Exact Sprite Dimensions & Timings
-Query `work/swe1_assets/gfx/gfx_manifest.json` (`m["animations"]` entries with keys
-`symbol_name`, `width`, `height`, `frame_count`, `fps`) for all `anim_*` used by the scene.
-Convert ROM `sleep100(n)` delays using `n * 10 ms` per frame.
+- Query `work/swe1_assets/gfx/gfx_manifest.json` (`m["animations"]` entries with keys
+  `symbol_name`, `width`, `height`, `frame_count`, `fps`) for all `anim_*` used by the scene.
+- Convert ROM `sleep100(n)` delays using `n * 10 ms` per frame.
+- **Exact `(x, y, z)` & anchor math**: Never estimate sprite positions. Disassemble
+  `Deff*::Run`, `*_process`, and helper positioning methods (`Member::position_slot`,
+  `Member::jump_to_slot`, `SetPosStyle`) to recover exact coordinates, parent-relative
+  offsets, and center/bottom-aligned anchors (`center_x - width / 2`, `bottom_y - height`).
+- **Hardware & playfield invariants**: Check `<Scene>.c` and `work/swe1-regles/` for
+  shield state transitions (`set_shield_raised`), drop-target hooks (`LEFT/RIGHT_DROP_TARGET`),
+  and laser action button hooks (`hook_left_laser_fired` / `hook_right_laser_fired`).
 
 ## 3. Implement Modular Rust Scene (`<= 300` Lines per File)
 1. Split into two cohesive files under `crates/pin2k-core/src/machine/scenes/`:
