@@ -478,7 +478,9 @@ pub enum ActiveMultiball {
     },
     DarthMaulDuel {
         maul_health: u8,
+        quigon_health: u8,
         combo_window_ms: u32,
+        maul_attack_ms: u32,
     },
 }
 

@@ -285,7 +285,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 if self.active_scene.is_some() {
                     self.advance_active_scene("SHIELD BLAST!");
                 } else if let ActiveMultiball::DarthMaulDuel { .. } = self.multiball {
-                    self.damage_darth_maul(20, false, "SABER STRIKE!");
+                    self.damage_darth_maul(1, false, "SABER STRIKE!");
                 } else if !matches!(self.multiball, ActiveMultiball::None)
                     || self.players[self.current_player].jedi_letters == 0x0F
                 {
@@ -851,10 +851,12 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.right_saber_color = 1; // Red Sith lightsaber
         self.hw.set_drive_hold(drive::LIGHTSABER_NEON, true);
         self.multiball = ActiveMultiball::DarthMaulDuel {
-            maul_health: 100,
+            maul_health: 15,
+            quigon_health: 15,
             combo_window_ms: 5_000,
+            maul_attack_ms: 5_500,
         };
-        self.pending_eject_balls = self.pending_eject_balls.saturating_add(1);
+        self.pending_eject_balls = self.pending_eject_balls.saturating_add(2);
         self.ball_save_ms = 20_000;
         self.emit_sound(sound::DUEL_OF_THE_FATES_LOOP, true);
         self.emit_sound(sound::SITH_LIGHTSABRE_ON, false);
@@ -905,14 +907,13 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 }
             }
             ActiveMultiball::DarthMaulDuel { combo_window_ms, .. } => {
-                let is_combo = combo_window_ms > 0;
-                let dmg = if is_combo { 35 } else { 25 };
+                let is_combo = is_ramp && combo_window_ms > 0;
                 let msg = if is_combo {
                     "LIGHTSABER COMBO!"
                 } else {
                     "LIGHTSABER SLASH!"
                 };
-                self.damage_darth_maul(dmg, is_combo, msg);
+                self.damage_darth_maul(2, is_combo, msg);
                 return;
             }
             ActiveMultiball::None => {}
@@ -1032,7 +1033,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     pub(super) fn damage_darth_maul(&mut self, dmg: u8, combo: bool, label: &str) {
-        self.audio.play_sound(sound::SABER_CLASH, false);
+        self.emit_sound(sound::SABER_CLASH, false);
         self.emit_ard("ard_jedi_battle_multiball_saber_hit");
         self.trigger_leff(LeffKind::JediMultiballClash);
         self.add_score(if combo {
@@ -1041,7 +1042,13 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             scoring::JEDI_MB_ATTACK_MAUL
         });
 
-        if let ActiveMultiball::DarthMaulDuel { maul_health, .. } = self.multiball {
+        if let ActiveMultiball::DarthMaulDuel {
+            maul_health,
+            quigon_health,
+            maul_attack_ms,
+            ..
+        } = self.multiball
+        {
             let next_hp = maul_health.saturating_sub(dmg);
             if next_hp == 0 {
                 self.multiball = ActiveMultiball::None;
@@ -1065,14 +1072,16 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             } else {
                 self.multiball = ActiveMultiball::DarthMaulDuel {
                     maul_health: next_hp,
+                    quigon_health,
                     combo_window_ms: 4_000,
+                    maul_attack_ms,
                 };
-                self.active_anim_hint = match (next_hp / 20) % 3 {
+                self.active_anim_hint = match next_hp % 3 {
                     0 => "anim_jedi_battle_clash".to_string(),
                     1 => "anim_jedi_battle_quigon_high_right_single".to_string(),
                     _ => "anim_jedi_battle_maul_chop_single".to_string(),
                 };
-                self.set_banner(format!("{label} MAUL HP: {next_hp}%"), 2_000);
+                self.set_banner(format!("{label} MAUL HP: {next_hp}/15"), 2_000);
             }
         }
     }

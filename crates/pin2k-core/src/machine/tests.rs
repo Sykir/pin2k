@@ -1643,3 +1643,69 @@
             "Ball 2 shooter lane should play ard_shooter_tune (0x0003)"
         );
     }
+
+    #[test]
+    fn jedi_multiball_authentic_15hp_combat_and_maul_counterattack() {
+        let port = VirtualPdbPort::new(pin2k_hal::PlayfieldSignature::Swe1);
+        let driver = PdbDriver::new(port);
+        let mut machine =
+            Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
+
+        assert!(machine.debug_launch_mode("darth_maul_duel"));
+        assert!(matches!(
+            machine.multiball,
+            ActiveMultiball::DarthMaulDuel {
+                maul_health: 15,
+                quigon_health: 15,
+                ..
+            }
+        ));
+        assert!(machine.pending_eject_balls >= 2);
+        machine.playfield_valid = true;
+
+        // 1. Shield hit deals 1 dmg (15 -> 14) and awards 500,000
+        let pre_shield = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+        assert_eq!(machine.score, pre_shield + 500_000);
+        assert!(matches!(
+            machine.multiball,
+            ActiveMultiball::DarthMaulDuel { maul_health: 14, .. }
+        ));
+
+        // 2. Ramp combo deals 2 dmg (14 -> 12) and awards 700,000 (+ SWITCH_BASE 2,310)
+        let pre_ramp = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
+        assert_eq!(machine.score, pre_ramp + crate::swe1_rules::scoring::SWITCH_BASE + 700_000);
+        assert!(matches!(
+            machine.multiball,
+            ActiveMultiball::DarthMaulDuel { maul_health: 12, .. }
+        ));
+
+        // 3. Left loop deals 2 dmg (12 -> 10) and awards 500,000 (+ SWITCH_BASE 2,310)
+        let pre_loop = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_LOOP_UPPER);
+        assert_eq!(machine.score, pre_loop + crate::swe1_rules::scoring::SWITCH_BASE + 500_000);
+        assert!(matches!(
+            machine.multiball,
+            ActiveMultiball::DarthMaulDuel { maul_health: 10, .. }
+        ));
+
+        // 4. Maul counter-attack after intro overlay finishes (-2 HP to Qui-Gon: 15 -> 13)
+        machine.overlay = None;
+        for _ in 0..360 {
+            machine.tick(16);
+        }
+        assert!(matches!(
+            machine.multiball,
+            ActiveMultiball::DarthMaulDuel { quigon_health: 13, .. }
+        ));
+
+        // 5. Remaining hits defeat Maul -> +5,000,000 and Jedi Rank promotion
+        let pre_rank = machine.players[0].jedi_rank;
+        for _ in 0..5 {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_RIGHT);
+        }
+        assert_eq!(machine.multiball, ActiveMultiball::None);
+        assert_ne!(machine.players[0].jedi_rank, pre_rank);
+        assert!(machine.score >= 5_000_000);
+    }

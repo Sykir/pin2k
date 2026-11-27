@@ -186,11 +186,18 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 }
                 return;
             }
-            ActiveMultiball::DarthMaulDuel { maul_health, .. } => {
+            ActiveMultiball::DarthMaulDuel {
+                maul_health,
+                quigon_health,
+                ..
+            } => {
                 self.scene_sprite("anim_jedi_battle_background_hangar", 0, 0, 0, 1);
                 self.scene_sprite("anim_jedi_battle_icon_quigon", f60, 10, 48, 4);
                 self.scene_sprite("anim_jedi_battle_icon_maul", f60, 540, 48, 4);
-                let duel_anim = if self.active_anim_hint.starts_with("anim_jedi_battle_") {
+                let duel_anim = if self.active_anim_hint.starts_with("anim_jedi_battle_")
+                    && (self.overlay.is_some()
+                        || self.active_anim_hint != "anim_jedi_battle_intro_movie")
+                {
                     self.active_anim_hint.clone()
                 } else {
                     "anim_jedi_battle_idle".to_string()
@@ -199,21 +206,52 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 if duel_anim == "anim_jedi_battle_clash" {
                     self.scene_sprite("anim_jedi_battle_saber_sparks", f60, 188, 48, 6);
                 }
-                let max_hp = 12i32;
-                let hp = (maul_health as i32).clamp(0, max_hp);
+                let max_hp = 15i32;
+                let q_hp = (quigon_health as i32).clamp(0, max_hp);
+                let m_hp = (maul_health as i32).clamp(0, max_hp);
+                // Qui-Gon / Jedi health bar (left)
                 self.video.draw_rect(RectDrawCmd {
-                    x: 200,
+                    x: 92,
                     y: 44,
-                    w: 240,
+                    w: 180,
                     h: 8,
                     z: 6,
                     color_rgb555: 0x2108,
                     alpha: 220,
                 });
                 self.video.draw_rect(RectDrawCmd {
-                    x: 202,
+                    x: 94,
                     y: 45,
-                    w: (236 * hp) / max_hp,
+                    w: (176 * q_hp) / max_hp,
+                    h: 6,
+                    z: 7,
+                    color_rgb555: 0x03E0,
+                    alpha: 255,
+                });
+                self.scene_text(
+                    "font_shadow_9_narrow_data",
+                    format!("JEDI HP: {q_hp}/{max_hp}"),
+                    182,
+                    56,
+                    7,
+                    0x07FF,
+                    Some(0x0000),
+                    TextAlign::Center,
+                );
+                // Darth Maul health bar (right)
+                self.video.draw_rect(RectDrawCmd {
+                    x: 368,
+                    y: 44,
+                    w: 180,
+                    h: 8,
+                    z: 6,
+                    color_rgb555: 0x2108,
+                    alpha: 220,
+                });
+                self.video.draw_rect(RectDrawCmd {
+                    x: 370,
+                    y: 45,
+                    w: (176 * m_hp) / max_hp,
                     h: 6,
                     z: 7,
                     color_rgb555: 0x7C00,
@@ -221,8 +259,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 });
                 self.scene_text(
                     "font_shadow_9_narrow_data",
-                    format!("DARTH MAUL HP: {hp}/{max_hp}"),
-                    320,
+                    format!("MAUL HP: {m_hp}/{max_hp}"),
+                    458,
                     56,
                     7,
                     0x7FE8,

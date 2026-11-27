@@ -1197,16 +1197,53 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.set_banner(banner, 3_000);
         }
 
-        // Darth Maul combo window decay
+        // Darth Maul combo window & counter-attack (`maul_attack_process`)
         if let ActiveMultiball::DarthMaulDuel {
             maul_health,
+            quigon_health,
             combo_window_ms,
+            maul_attack_ms,
         } = self.multiball
         {
-            if combo_window_ms > 0 {
+            let next_combo = combo_window_ms.saturating_sub(dt_ms);
+            if self.overlay.is_none() {
+                let mut next_atk_ms = maul_attack_ms.saturating_sub(dt_ms);
+                if next_atk_ms == 0 {
+                    let next_q_hp = quigon_health.saturating_sub(2);
+                    if next_q_hp == 0 {
+                        self.multiball = ActiveMultiball::None;
+                        self.hw.set_drive_hold(drive::LIGHTSABER_NEON, false);
+                        self.add_score(crate::swe1_rules::scoring::JEDI_MB_ATTACK_QUIGON);
+                        self.emit_sound(sound::MAINPLAY_LOOP, true);
+                        self.duel_lost_fx();
+                        self.active_anim_hint = "anim_jedi_battle_quigon_death".to_string();
+                        self.set_banner("DARTH MAUL WINS! +1,000,000", 4_000);
+                    } else {
+                        next_atk_ms = 4_500 + ((self.elapsed_ms % 3_000) as u32);
+                        self.emit_sound(sound::SABER_CLASH, false);
+                        self.active_anim_hint = "anim_jedi_battle_maul_chop_single".to_string();
+                        self.set_banner(format!("MAUL STRIKES! JEDI {next_q_hp}/15"), 1_500);
+                        self.multiball = ActiveMultiball::DarthMaulDuel {
+                            maul_health,
+                            quigon_health: next_q_hp,
+                            combo_window_ms: next_combo,
+                            maul_attack_ms: next_atk_ms,
+                        };
+                    }
+                } else {
+                    self.multiball = ActiveMultiball::DarthMaulDuel {
+                        maul_health,
+                        quigon_health,
+                        combo_window_ms: next_combo,
+                        maul_attack_ms: next_atk_ms,
+                    };
+                }
+            } else if next_combo != combo_window_ms {
                 self.multiball = ActiveMultiball::DarthMaulDuel {
                     maul_health,
-                    combo_window_ms: combo_window_ms.saturating_sub(dt_ms),
+                    quigon_health,
+                    combo_window_ms: next_combo,
+                    maul_attack_ms,
                 };
             }
         }
