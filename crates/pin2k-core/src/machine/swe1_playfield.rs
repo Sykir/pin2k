@@ -247,16 +247,22 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             // Drop Targets (`Drop::hook_drop_target_hit`) & Saucers
             sw::LEFT_DROP_TARGET => {
                 self.left_drop_down = true;
+                self.trigger_leff(LeffKind::ShieldHit);
+                if self.handle_battle_droid_drop_target(false) {
+                    return;
+                }
                 self.add_score(scoring::DROP_TARGET);
                 self.emit_ard("ard_hit_bdroids_speech");
-                self.trigger_leff(LeffKind::ShieldHit);
                 self.set_banner("LEFT SAUCER OPEN!", 1_800);
             }
             sw::RIGHT_DROP_TARGET => {
                 self.right_drop_down = true;
+                self.trigger_leff(LeffKind::ShieldHit);
+                if self.handle_battle_droid_drop_target(true) {
+                    return;
+                }
                 self.add_score(scoring::DROP_TARGET);
                 self.emit_ard("ard_hit_bdroids_speech");
-                self.trigger_leff(LeffKind::ShieldHit);
                 self.set_banner("RIGHT SAUCER OPEN!", 1_800);
             }
             sw::LEFT_SAUCER | sw::RIGHT_SAUCER => {

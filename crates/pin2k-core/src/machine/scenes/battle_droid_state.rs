@@ -56,6 +56,8 @@ pub struct BattleDroidState {
     pub right_droid_ms: u32,
     pub stap_zap_ms: u32,
     pub stap_exploding_ms: u32,
+    pub stap_combo_window_ms: u32,
+    pub stap_hits: u32,
     pub stap_side_right: bool,
     pub last_hit_laser: bool,
 }
@@ -76,6 +78,8 @@ impl BattleDroidState {
             right_droid_ms: 0,
             stap_zap_ms: 0,
             stap_exploding_ms: 0,
+            stap_combo_window_ms: 0,
+            stap_hits: 0,
             stap_side_right: false,
             last_hit_laser: false,
         }
@@ -88,6 +92,35 @@ impl BattleDroidState {
             2..=3 => "anim_mtt_doors_damage1_anim",
             4..=5 => "anim_mtt_doors_damage2_anim",
             _ => "anim_mtt_doors_damage3_anim",
+        }
+    }
+
+    /// Applies a STAP / ramp / laser hit and returns the authentic score award (`200k`, `400k`, or `1M` within 0.8s).
+    pub fn record_stap_hit(&mut self, is_right: bool, is_laser: bool) -> u64 {
+        let pts = if self.stap_combo_window_ms > 0 {
+            1_000_000
+        } else if self.stap_hits == 0 {
+            200_000
+        } else {
+            400_000
+        };
+        self.stap_hits = self.stap_hits.saturating_add(1);
+        self.stap_combo_window_ms = 800;
+        self.staps_destroyed = self.staps_destroyed.saturating_add(1);
+        self.stap_exploding_ms = 350;
+        self.stap_side_right = is_right;
+        self.last_hit_laser = is_laser;
+        self.explode_side_droid(is_right);
+        pts
+    }
+
+    pub fn explode_side_droid(&mut self, is_right: bool) {
+        if is_right {
+            self.right_droid = DroidSideState::Exploding;
+            self.right_droid_ms = 0;
+        } else {
+            self.left_droid = DroidSideState::Exploding;
+            self.left_droid_ms = 0;
         }
     }
 }

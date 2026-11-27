@@ -730,29 +730,36 @@
         assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_right_bdroid_standing" && s.x == 421 && s.y == 134 && s.z == 5));
         assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_bdroid_on_stap" && (s.y == 84 || s.y == 80)));
 
-        // Ramp shot & laser action destroy STAP (+400_000) without reducing tank_hits_remaining
+        // Ramp shot (200_000) & quick laser within 0.8s (1_000_000) destroy STAP without reducing tank_hits_remaining
         let pre_ramp = machine.score;
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
         assert_eq!(machine.battle_droid.as_ref().unwrap().staps_destroyed, 1);
         assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, 8);
-        assert_eq!(machine.score, pre_ramp + crate::swe1_rules::scoring::SWITCH_BASE + 400_000);
+        assert_eq!(machine.score, pre_ramp + crate::swe1_rules::scoring::SWITCH_BASE + 200_000);
 
         machine.players[0].laser_shots = 1;
         let pre_laser = machine.score;
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_ACTION_BUTTON);
         assert_eq!(machine.battle_droid.as_ref().unwrap().staps_destroyed, 2);
         assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, 8);
-        assert_eq!(machine.score, pre_laser + 400_000);
+        assert_eq!(machine.score, pre_laser + 1_000_000);
+
+        // Drop target hits side droid (100_000) without reducing tank_hits_remaining
+        let pre_drop = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_DROP_TARGET);
+        assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, 8);
+        assert_eq!(machine.score, pre_drop + 100_000);
 
         // Side shield target deals 1 damage (down to 7) + 200_000 pts
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_SHIELD_TARGET);
         assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, 7);
 
-        // Center shield hits deal 2 damage each (7 -> 5 -> 3 -> 1)
+        // Center shield hits deal 2 damage each (7 -> 5 -> 3 -> 1); shield rises when < 3 HP remain
         for expected in [5, 3, 1] {
             pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
             assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, expected);
         }
+        assert!(machine.shield_raised);
         // Final center shield hit defeats the tank & completes the scene
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
         assert!(machine.active_scene.is_none());

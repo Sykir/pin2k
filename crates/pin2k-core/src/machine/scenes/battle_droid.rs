@@ -34,6 +34,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             bd.tank_hit_flash_ms = bd.tank_hit_flash_ms.saturating_sub(dt_ms);
             bd.tank_defeated_ms = bd.tank_defeated_ms.saturating_sub(dt_ms);
             bd.stap_exploding_ms = bd.stap_exploding_ms.saturating_sub(dt_ms);
+            bd.stap_combo_window_ms = bd.stap_combo_window_ms.saturating_sub(dt_ms);
             bd.stap_zap_ms = bd.stap_zap_ms.saturating_add(dt_ms) % 1_600;
 
             for (side, ms, ard) in [
@@ -107,6 +108,13 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 if completed {
                     self.complete_battle_droid_scene();
                 } else {
+                    if self
+                        .battle_droid
+                        .as_ref()
+                        .is_some_and(|b| b.tank_hits_remaining < 3)
+                    {
+                        self.set_shield_raised(true);
+                    }
                     self.emit_ard("ard_battle_droid_scene_tank_hit");
                     if speech {
                         self.emit_ard("ard_hit_bdroids_speech");
@@ -145,35 +153,50 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         true
     }
 
-    fn trigger_stap_hit(&mut self, is_right: bool, is_laser: bool) {
+    /// Handles `LEFT_DROP_TARGET` / `RIGHT_DROP_TARGET` during `BattleDroidScene` (100,000 pts, counts as miss).
+    pub(crate) fn handle_battle_droid_drop_target(&mut self, right: bool) -> bool {
+        if !self
+            .active_scene
+            .as_ref()
+            .is_some_and(|s| s.scene == Swe1Scene::BattleDroid)
+        {
+            return false;
+        }
+        if self.battle_droid.is_none() {
+            self.start_battle_droid_state();
+        }
         if let Some(ref mut bd) = self.battle_droid {
             bd.staps_destroyed = bd.staps_destroyed.saturating_add(1);
-            bd.stap_exploding_ms = 350;
-            bd.stap_side_right = is_right;
-            bd.last_hit_laser = is_laser;
-            if is_right {
-                bd.right_droid = DroidSideState::Exploding;
-                bd.right_droid_ms = 0;
-            } else {
-                bd.left_droid = DroidSideState::Exploding;
-                bd.left_droid_ms = 0;
-            }
+            bd.explode_side_droid(right);
         }
-        self.add_score(400_000);
+        self.add_score(100_000);
         self.emit_ard("ard_battle_droid_scene_droid_boom");
-        self.set_banner(
-            if is_laser {
-                "LASER STAP HIT! +400,000"
-            } else {
-                "STAP DESTROYED! +400,000"
-            },
-            1_800,
-        );
+        self.set_banner("DROID HIT! +100,000", 1_500);
+        true
+    }
+
+    fn trigger_stap_hit(&mut self, is_right: bool, is_laser: bool) {
+        let pts = self
+            .battle_droid
+            .as_mut()
+            .map_or(200_000, |bd| bd.record_stap_hit(is_right, is_laser));
+        self.add_score(pts);
+        self.emit_ard("ard_battle_droid_scene_droid_boom");
+        let prefix = if is_laser { "LASER STAP HIT" } else { "STAP DESTROYED" };
+        self.set_banner(format!("{prefix}! +{pts}"), 1_800);
     }
 
     fn complete_battle_droid_scene(&mut self) {
+        let perfect_mtt_only = self
+            .battle_droid
+            .as_ref()
+            .is_some_and(|b| b.staps_destroyed == 0);
         self.emit_ard("ard_battle_droid_scene_tank_boom");
         self.complete_active_scene(Swe1Scene::BattleDroid);
+        if perfect_mtt_only {
+            // Rulebook: 3M when no non-MTT shot (droid/ramp/laser) was hit
+            self.add_score(750_000);
+        }
         self.battle_droid = None;
         self.set_banner("BATTLE DROID TANK DESTROYED!", 3_000);
     }
@@ -205,58 +228,49 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
 
         // Left & Right Battle Droids (exact ROM coordinates from `bdroid_process`, z=5 above MTT doors)
-        match bd.left_droid {
-            DroidSideState::Unpacking => {
-                let fr = ((bd.left_droid_ms * 60) / 1000) as usize;
-                self.scene_sprite("anim_left_bdroid_unpacking", fr.min(14), LEFT_DROID_UNPACK_X, DROID_UNPACK_Y, 5);
-            }
-            DroidSideState::Standing => {
-                self.scene_sprite("anim_left_bdroid_standing", f60, LEFT_DROID_STAND_X, LEFT_DROID_STAND_Y, 5);
-            }
-            DroidSideState::Shooting => {
-                self.scene_sprite("anim_left_bdroid_shooting", f60, LEFT_DROID_STAND_X, LEFT_DROID_STAND_Y, 5);
-                let dx = (bd.left_droid_ms / 4) as i32;
-                self.scene_sprite("anim_bdroid_zap", f60, LEFT_DROID_STAND_X + 52 + dx, 148, 6);
-            }
-            DroidSideState::Exploding => {
-                let fr = ((bd.left_droid_ms * 60) / 1000) as usize;
-                self.scene_sprite("anim_bdroid_explosion", fr, LEFT_DROID_STAND_X - 40, 96, 7);
-            }
-        }
-        match bd.right_droid {
-            DroidSideState::Unpacking => {
-                let fr = ((bd.right_droid_ms * 60) / 1000) as usize;
-                self.scene_sprite(
+        for (is_right, side, ms) in [
+            (false, bd.left_droid, bd.left_droid_ms),
+            (true, bd.right_droid, bd.right_droid_ms),
+        ] {
+            let (unpack_anim, stand_anim, shoot_anim, ux, sx, sy, ex) = if is_right {
+                (
                     "anim_right_bdroid_unpacking",
-                    fr.min(14),
-                    RIGHT_DROID_UNPACK_X,
-                    DROID_UNPACK_Y,
-                    5,
-                );
-            }
-            DroidSideState::Standing => {
-                self.scene_sprite(
                     "anim_right_bdroid_standing",
-                    f60,
-                    RIGHT_DROID_STAND_X,
-                    RIGHT_DROID_STAND_Y,
-                    5,
-                );
-            }
-            DroidSideState::Shooting => {
-                self.scene_sprite(
                     "anim_right_bdroid_shooting",
-                    f60,
+                    RIGHT_DROID_UNPACK_X,
                     RIGHT_DROID_STAND_X,
                     RIGHT_DROID_STAND_Y,
-                    5,
-                );
-                let dx = (bd.right_droid_ms / 4) as i32;
-                self.scene_sprite("anim_bdroid_zap", f60, RIGHT_DROID_STAND_X - 24 - dx, 148, 6);
-            }
-            DroidSideState::Exploding => {
-                let fr = ((bd.right_droid_ms * 60) / 1000) as usize;
-                self.scene_sprite("anim_bdroid_explosion", fr, RIGHT_DROID_STAND_X - 80, 96, 7);
+                    RIGHT_DROID_STAND_X - 80,
+                )
+            } else {
+                (
+                    "anim_left_bdroid_unpacking",
+                    "anim_left_bdroid_standing",
+                    "anim_left_bdroid_shooting",
+                    LEFT_DROID_UNPACK_X,
+                    LEFT_DROID_STAND_X,
+                    LEFT_DROID_STAND_Y,
+                    LEFT_DROID_STAND_X - 40,
+                )
+            };
+            match side {
+                DroidSideState::Unpacking => {
+                    let fr = ((ms * 60) / 1000) as usize;
+                    self.scene_sprite(unpack_anim, fr.min(14), ux, DROID_UNPACK_Y, 5);
+                }
+                DroidSideState::Standing => {
+                    self.scene_sprite(stand_anim, f60, sx, sy, 5);
+                }
+                DroidSideState::Shooting => {
+                    self.scene_sprite(shoot_anim, f60, sx, sy, 5);
+                    let dx = (ms / 4) as i32;
+                    let zx = if is_right { sx - 24 - dx } else { sx + 52 + dx };
+                    self.scene_sprite("anim_bdroid_zap", f60, zx, 148, 6);
+                }
+                DroidSideState::Exploding => {
+                    let fr = ((ms * 60) / 1000) as usize;
+                    self.scene_sprite("anim_bdroid_explosion", fr, ex, 96, 7);
+                }
             }
         }
 
