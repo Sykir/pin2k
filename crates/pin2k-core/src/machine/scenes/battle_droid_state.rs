@@ -9,9 +9,25 @@ pub const MTT_Y: i32 = 90;
 /// MTT doors offset relative to `MTT_X, MTT_Y`: `(0x4b, -1)` = `(75, -1)`.
 pub const MTT_DOORS_X: i32 = MTT_X + 75;
 pub const MTT_DOORS_Y: i32 = MTT_Y - 1;
-/// Tank explosion (`anim_bdroid_tank_explosion`, 580x220) at `(0, 20)` (`0x107b5e..0x107b60`).
+/// MTT explosion (`anim_bdroid_tank_explosion`, 580x220) at `(0, 20)` (`0x107b5e..0x107b60`).
 pub const TANK_EXPLOSION_X: i32 = 0;
 pub const TANK_EXPLOSION_Y: i32 = 20;
+/// Exact ROM Battle Droid coordinates (`DeffBattleDroidSceneBackground::Run` + `bdroid_process`):
+/// Left unpacking at `(MTT_X - 95, MTT_Y + 50) = (69, 140)`, standing at `(69, 135)`.
+/// Right unpacking at `(MTT_X + 265, MTT_Y + 50) = (429, 140)`, standing at `(421, 134)`.
+pub const LEFT_DROID_UNPACK_X: i32 = MTT_X - 95;
+pub const RIGHT_DROID_UNPACK_X: i32 = MTT_X + 265;
+pub const DROID_UNPACK_Y: i32 = MTT_Y + 50;
+pub const LEFT_DROID_STAND_X: i32 = LEFT_DROID_UNPACK_X;
+pub const LEFT_DROID_STAND_Y: i32 = DROID_UNPACK_Y - 5;
+pub const RIGHT_DROID_STAND_X: i32 = RIGHT_DROID_UNPACK_X - 8;
+pub const RIGHT_DROID_STAND_Y: i32 = DROID_UNPACK_Y - 6;
+/// Exact ROM STAP start positions (`DeffBattleDroidSceneBackground::Run` `0x10727d`, `0x1072c9`):
+/// Left STAP `(0, 84)`, Right STAP `(477, 80)` (`0x25c` adjusted for 163px sprite width).
+pub const STAP_LEFT_X: i32 = 0;
+pub const STAP_LEFT_Y: i32 = 84;
+pub const STAP_RIGHT_X: i32 = 477;
+pub const STAP_RIGHT_Y: i32 = 80;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DroidSideState {
@@ -40,6 +56,7 @@ pub struct BattleDroidState {
     pub right_droid_ms: u32,
     pub stap_zap_ms: u32,
     pub stap_exploding_ms: u32,
+    pub stap_side_right: bool,
     pub last_hit_laser: bool,
 }
 
@@ -59,6 +76,7 @@ impl BattleDroidState {
             right_droid_ms: 0,
             stap_zap_ms: 0,
             stap_exploding_ms: 0,
+            stap_side_right: false,
             last_hit_laser: false,
         }
     }

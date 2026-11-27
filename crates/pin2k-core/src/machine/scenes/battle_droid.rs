@@ -6,8 +6,10 @@
 use pin2k_hal::{AudioBackend, PinballHardware, VideoBackend};
 
 use super::battle_droid_state::{
-    BattleDroidState, DroidSideState, MTT_DOORS_X, MTT_DOORS_Y, MTT_X, MTT_Y, TANK_EXPLOSION_X,
-    TANK_EXPLOSION_Y,
+    BattleDroidState, DroidSideState, DROID_UNPACK_Y, LEFT_DROID_STAND_X, LEFT_DROID_STAND_Y,
+    LEFT_DROID_UNPACK_X, MTT_DOORS_X, MTT_DOORS_Y, MTT_X, MTT_Y, RIGHT_DROID_STAND_X,
+    RIGHT_DROID_STAND_Y, RIGHT_DROID_UNPACK_X, STAP_LEFT_X, STAP_LEFT_Y, STAP_RIGHT_X,
+    STAP_RIGHT_Y, TANK_EXPLOSION_X, TANK_EXPLOSION_Y,
 };
 use crate::machine::{LeffKind, Pin2kMachine};
 use crate::swe1_rules::Swe1Scene;
@@ -120,24 +122,53 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
             sw::RAMP_MADE_LEFT | sw::RAMP_MADE_RIGHT => {
                 let is_right = sw_id == sw::RAMP_MADE_RIGHT;
-                if let Some(ref mut bd) = self.battle_droid {
-                    bd.staps_destroyed = bd.staps_destroyed.saturating_add(1);
-                    bd.stap_exploding_ms = 350;
-                    bd.last_hit_laser = false;
-                    if is_right {
-                        bd.right_droid = DroidSideState::Exploding;
-                        bd.right_droid_ms = 0;
-                    } else {
-                        bd.left_droid = DroidSideState::Exploding;
-                        bd.left_droid_ms = 0;
-                    }
-                }
-                self.emit_ard("ard_battle_droid_scene_droid_boom");
-                self.advance_active_scene("STAP DESTROYED!");
+                self.trigger_stap_hit(is_right, false);
                 true
             }
             _ => false,
         }
+    }
+
+    /// Handles `BattleDroidScene::hook_left_laser_fired` / `hook_right_laser_fired` (`stap_ramp_hit(side, 1)`).
+    pub(crate) fn handle_battle_droid_laser(&mut self, right: bool) -> bool {
+        let is_bd = self
+            .active_scene
+            .as_ref()
+            .is_some_and(|s| s.scene == Swe1Scene::BattleDroid);
+        if !is_bd {
+            return false;
+        }
+        if self.battle_droid.is_none() {
+            self.start_battle_droid_state();
+        }
+        self.trigger_stap_hit(right, true);
+        true
+    }
+
+    fn trigger_stap_hit(&mut self, is_right: bool, is_laser: bool) {
+        if let Some(ref mut bd) = self.battle_droid {
+            bd.staps_destroyed = bd.staps_destroyed.saturating_add(1);
+            bd.stap_exploding_ms = 350;
+            bd.stap_side_right = is_right;
+            bd.last_hit_laser = is_laser;
+            if is_right {
+                bd.right_droid = DroidSideState::Exploding;
+                bd.right_droid_ms = 0;
+            } else {
+                bd.left_droid = DroidSideState::Exploding;
+                bd.left_droid_ms = 0;
+            }
+        }
+        self.add_score(400_000);
+        self.emit_ard("ard_battle_droid_scene_droid_boom");
+        self.set_banner(
+            if is_laser {
+                "LASER STAP HIT! +400,000"
+            } else {
+                "STAP DESTROYED! +400,000"
+            },
+            1_800,
+        );
     }
 
     fn complete_battle_droid_scene(&mut self) {
@@ -173,53 +204,78 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             );
         }
 
-        // Left & Right Battle Droids
+        // Left & Right Battle Droids (exact ROM coordinates from `bdroid_process`, z=5 above MTT doors)
         match bd.left_droid {
             DroidSideState::Unpacking => {
                 let fr = ((bd.left_droid_ms * 60) / 1000) as usize;
-                self.scene_sprite("anim_left_bdroid_unpacking", fr.min(14), -30, 75, 3);
+                self.scene_sprite("anim_left_bdroid_unpacking", fr.min(14), LEFT_DROID_UNPACK_X, DROID_UNPACK_Y, 5);
             }
             DroidSideState::Standing => {
-                self.scene_sprite("anim_left_bdroid_standing", f60, 40, 80, 3);
+                self.scene_sprite("anim_left_bdroid_standing", f60, LEFT_DROID_STAND_X, LEFT_DROID_STAND_Y, 5);
             }
             DroidSideState::Shooting => {
-                self.scene_sprite("anim_left_bdroid_shooting", f60, 40, 80, 3);
+                self.scene_sprite("anim_left_bdroid_shooting", f60, LEFT_DROID_STAND_X, LEFT_DROID_STAND_Y, 5);
                 let dx = (bd.left_droid_ms / 4) as i32;
-                self.scene_sprite("anim_bdroid_zap", f60, 96 + dx, 112, 6);
+                self.scene_sprite("anim_bdroid_zap", f60, LEFT_DROID_STAND_X + 52 + dx, 148, 6);
             }
             DroidSideState::Exploding => {
                 let fr = ((bd.left_droid_ms * 60) / 1000) as usize;
-                self.scene_sprite("anim_bdroid_explosion", fr, 12, 60, 7);
+                self.scene_sprite("anim_bdroid_explosion", fr, LEFT_DROID_STAND_X - 40, 96, 7);
             }
         }
         match bd.right_droid {
             DroidSideState::Unpacking => {
                 let fr = ((bd.right_droid_ms * 60) / 1000) as usize;
-                self.scene_sprite("anim_right_bdroid_unpacking", fr.min(14), 470, 75, 3);
+                self.scene_sprite(
+                    "anim_right_bdroid_unpacking",
+                    fr.min(14),
+                    RIGHT_DROID_UNPACK_X,
+                    DROID_UNPACK_Y,
+                    5,
+                );
             }
             DroidSideState::Standing => {
-                self.scene_sprite("anim_right_bdroid_standing", f60, 520, 80, 3);
+                self.scene_sprite(
+                    "anim_right_bdroid_standing",
+                    f60,
+                    RIGHT_DROID_STAND_X,
+                    RIGHT_DROID_STAND_Y,
+                    5,
+                );
             }
             DroidSideState::Shooting => {
-                self.scene_sprite("anim_right_bdroid_shooting", f60, 520, 80, 3);
+                self.scene_sprite(
+                    "anim_right_bdroid_shooting",
+                    f60,
+                    RIGHT_DROID_STAND_X,
+                    RIGHT_DROID_STAND_Y,
+                    5,
+                );
                 let dx = (bd.right_droid_ms / 4) as i32;
-                self.scene_sprite("anim_bdroid_zap", f60, 516 - dx, 112, 6);
+                self.scene_sprite("anim_bdroid_zap", f60, RIGHT_DROID_STAND_X - 24 - dx, 148, 6);
             }
             DroidSideState::Exploding => {
                 let fr = ((bd.right_droid_ms * 60) / 1000) as usize;
-                self.scene_sprite("anim_bdroid_explosion", fr, 420, 60, 7);
+                self.scene_sprite("anim_bdroid_explosion", fr, RIGHT_DROID_STAND_X - 80, 96, 7);
             }
         }
 
-        // Center STAP + Crosshair + Zap / Explosion
+        // Left/Right STAP Patrol + Crosshair + Zap / Explosion (`stap_process` exact Y=84/80)
         if bd.stap_exploding_ms > 0 {
             let fr = ((350 - bd.stap_exploding_ms) * 60 / 1000) as usize;
-            self.scene_sprite("anim_bdroid_stap_explosion", fr, 33, 14, 7);
+            let ex = if bd.stap_side_right { 66 } else { 0 };
+            self.scene_sprite("anim_bdroid_stap_explosion", fr, ex, 14, 7);
         } else {
-            self.scene_sprite("anim_bdroid_on_stap", f60, 238, 68, 4);
-            self.scene_sprite("anim_stap_xhair", f60, 275, 76, 5);
+            let sway = (((bd.intro_elapsed_ms / 32) % 40) as i32 - 20).abs();
+            let (sx, sy) = if (bd.intro_elapsed_ms / 4_000) % 2 == 0 {
+                (STAP_LEFT_X + sway, STAP_LEFT_Y)
+            } else {
+                (STAP_RIGHT_X - sway, STAP_RIGHT_Y)
+            };
+            self.scene_sprite("anim_bdroid_on_stap", f60, sx, sy, 4);
+            self.scene_sprite("anim_stap_xhair", f60, sx + 62, sy + 18, 5);
             if bd.stap_zap_ms < 367 {
-                self.scene_sprite("anim_bdroid_stap_zap", f60, 280, 96, 6);
+                self.scene_sprite("anim_bdroid_stap_zap", f60, sx + 55, sy + 42, 6);
             }
         }
 

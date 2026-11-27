@@ -161,6 +161,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.players[self.current_player].laser_shots -= 1;
                     self.audio.play_sound(sound::LASER_FIRE, false);
                     self.trigger_leff(LeffKind::LaserFired { right });
+                    if self.handle_battle_droid_laser(right) {
+                        return;
+                    }
                     if self.active_scene.is_some() {
                         self.advance_active_scene("LASER DIRECT HIT!");
                     } else {

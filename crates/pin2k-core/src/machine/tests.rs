@@ -137,7 +137,7 @@
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_BANK_UPPER);
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_ACTION_BUTTON);
         for _ in 0..4 {
-            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_RIGHT);
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
         }
         assert!(machine.active_scene.is_none(), "Scene completed");
         assert_eq!(machine.players[0].scenes_completed & 1, 1);
@@ -718,7 +718,7 @@
 
         assert!(machine.debug_launch_mode("scene:0"));
         assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, 8);
-        for _ in 0..240 {
+        for _ in 0..260 {
             machine.tick(16);
         }
         assert_eq!(
@@ -726,6 +726,23 @@
             1
         );
         assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_mtt_doors_clean_anim" && s.x == 239 && s.y == 89));
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_left_bdroid_standing" && s.x == 69 && s.y == 135 && s.z == 5));
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_right_bdroid_standing" && s.x == 421 && s.y == 134 && s.z == 5));
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| s.anim_name == "anim_bdroid_on_stap" && (s.y == 84 || s.y == 80)));
+
+        // Ramp shot & laser action destroy STAP (+400_000) without reducing tank_hits_remaining
+        let pre_ramp = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
+        assert_eq!(machine.battle_droid.as_ref().unwrap().staps_destroyed, 1);
+        assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, 8);
+        assert_eq!(machine.score, pre_ramp + crate::swe1_rules::scoring::SWITCH_BASE + 400_000);
+
+        machine.players[0].laser_shots = 1;
+        let pre_laser = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_ACTION_BUTTON);
+        assert_eq!(machine.battle_droid.as_ref().unwrap().staps_destroyed, 2);
+        assert_eq!(machine.battle_droid.as_ref().unwrap().tank_hits_remaining, 8);
+        assert_eq!(machine.score, pre_laser + 400_000);
 
         // Side shield target deals 1 damage (down to 7) + 200_000 pts
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_SHIELD_TARGET);
@@ -1350,9 +1367,9 @@
         let start_score = machine.score;
         machine.audio.played.clear();
 
-        // 5 required hits for BattleDroid -> 4 * 400_000 + 2_250_000 completion
-        for _ in 0..5 {
-            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_RIGHT);
+        // 4 center SHIELD_HITs (-2 HP each = 8 HP) complete BattleDroid + 2_250_000 completion
+        for _ in 0..4 {
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
         }
         assert!(machine.active_scene.is_none());
         assert!(machine.score >= start_score + crate::swe1_rules::scoring::BATTLE_DROID_COMPLETE);
