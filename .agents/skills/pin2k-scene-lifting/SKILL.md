@@ -32,14 +32,23 @@ Use this workflow when porting a Pinball 2000 scene (e.g. `JarJarJuggle`, `Watto
 ## 2. Extract Exact Sprite Dimensions & Timings
 - Query `work/swe1_assets/gfx/gfx_manifest.json` (`m["animations"]` entries with keys
   `symbol_name`, `width`, `height`, `frame_count`, `fps`) for all `anim_*` used by the scene.
-- Convert ROM `sleep100(n)` delays using `n * 10 ms` per frame.
-- **Exact `(x, y, z)` & anchor math**: Never estimate sprite positions. Disassemble
-  `Deff*::Run`, `*_process`, and helper positioning methods (`Member::position_slot`,
-  `Member::jump_to_slot`, `SetPosStyle`) to recover exact coordinates, parent-relative
-  offsets, and center/bottom-aligned anchors (`center_x - width / 2`, `bottom_y - height`).
+- Convert ROM `sleep100(n)` delays using `n * 10 ms` per frame. **Never default to continuous
+  60fps loops**: disassemble `*_process` / `member_control_process_*` to capture idle-wait +
+  random-burst state machines, ping-pong vs forward loops, exact `frame_count` per asset from
+  `gfx_manifest.json`, and repeated sound triggers (e.g., virtual spinner `56 / 14 = 4`
+  frames/click).
+- **Exact `(x, y, z)`, child labels & anchor math**: Never estimate sprite or text positions.
+  Disassemble `Deff*::Run`, `*_process`, and helper positioning methods (`Member::position_slot`,
+  `Member::jump_to_slot`, `Member::plot_award_text`, `SetPosStyle`) to recover exact
+  coordinates, parent-relative offsets, active vs dimmed colors, and center/bottom-aligned
+  anchors (`center_x - width / 2`, `bottom_y - height`).
 - **Hardware & playfield invariants**: Check `<Scene>.c` and `work/swe1-regles/` for
   shield state transitions (`set_shield_raised`), drop-target hooks (`LEFT/RIGHT_DROP_TARGET`),
-  and laser action button hooks (`hook_left_laser_fired` / `hook_right_laser_fired`).
+  and laser action button hooks (`hook_left_laser_fired` / `hook_right_laser_fired`). When a
+  mode raises the shield (`set_shield_raised(true)`) to expose the center trap, always wire
+  `sw::SHIELD_POPPER` (`0x20`) in `swe1_playfield.rs` and accept both `SHIELD_POPPER` and
+  `SHIELD_HIT` (`0x27`) — in the simulator, pulsing `SHIELD_POPPER` does not automatically
+  pulse `SHIELD_HIT` first.
 
 ## 3. Implement Modular Rust Scene (`<= 300` Lines per File)
 1. Split into two cohesive files under `crates/pin2k-core/src/machine/scenes/`:

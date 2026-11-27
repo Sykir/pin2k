@@ -10,3 +10,6 @@
 6. **Virtual Spinners & Mod Assets**:
    - Virtual spinners are active and rendered only in nominal SWE1 gameplay (no active scene, multiball, overlay, or special screen).
    - When adding multi-frame PNGs under `mods/<mod>/custom_assets/<anim>/`, ensure `.gitignore` un-ignores `custom_assets/**/*.png`.
+7. **SWE1 Shield & Trap Polarity**:
+   - `shield_raised = false` (DOWN) blocks `SHIELD_POPPER` (`Sw32`) so center shots hit `SHIELD_HIT` (`Sw39`).
+   - `shield_raised = true` (UP) exposes `SHIELD_POPPER` (`Sw32`) behind the shield. Any mode or scene that raises the shield for a trap shot must wire `sw::SHIELD_POPPER` in `swe1_playfield.rs` and handle `SHIELD_POPPER` directly (not only `SHIELD_HIT`).
