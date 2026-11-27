@@ -429,11 +429,18 @@
             .iter()
             .any(|(sid, _)| crate::swe1_tables::sound::SPINNER_TICKS.contains(sid)));
 
-        // Left ramp enter triggers left virtual spinner once; RAMP_MADE_LEFT does NOT double-trigger
+        // Left ramp enter triggers left virtual spinner (~14 clicks over ~1s); RAMP_MADE_LEFT does NOT re-trigger
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
         machine.tick(16);
         assert!(machine.left_spinner.active);
+        for _ in 0..80 {
+            machine.tick(16);
+        }
         let spins_after_enter = machine.left_spinner.total_spins;
+        assert!(
+            (13..=16).contains(&spins_after_enter),
+            "1 ramp entry should produce ~14 turnstile clicks, got {spins_after_enter}"
+        );
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
         assert_eq!(machine.left_spinner.total_spins, spins_after_enter);
         assert!(machine.video.last_sprite_cmds.iter().any(|s| {

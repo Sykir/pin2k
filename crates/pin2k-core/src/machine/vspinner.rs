@@ -16,7 +16,8 @@ pub const LEFT_SPINNER_X: i32 = 43;
 pub const RIGHT_SPINNER_X: i32 = 421;
 pub const SPINNER_Y: i32 = 174;
 const SPINNER_ANIM_FRAMES: u32 = 56;
-const FRAMES_PER_TURNSTILE_CLICK: u32 = 56; // 1 full revolution = 1 crisp click
+/// 56 frames / 14 clicks = 4 frames per turnstile click (rulebook: 14x value per ramp entry).
+const FRAMES_PER_TURNSTILE_CLICK: u32 = 4;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct VirtualSpinnerState {
@@ -33,13 +34,14 @@ pub struct VirtualSpinnerState {
 }
 
 impl VirtualSpinnerState {
-    pub fn trigger(&mut self, forward: bool) {
+    pub fn trigger(&mut self, forward: bool, award_per_click: u64) {
         self.active = true;
         self.forward = forward;
-        self.velocity_q8 = (self.velocity_q8 + 640).clamp(960, 1_536);
-        self.high_speed = self.velocity_q8 >= 1_300;
+        self.velocity_q8 = 480;
+        self.tick_accum_q8 = 0;
+        self.high_speed = award_per_click >= 5_000;
         self.popup_ms = 1_100;
-        self.last_award = if self.high_speed { 25_000 } else { 10_000 };
+        self.last_award = award_per_click;
     }
 }
 
@@ -54,34 +56,42 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             && self.overlay.is_none()
     }
 
-    /// Triggers the left or right virtual spinner (called on ramp entry/made in nominal play only).
+    /// Triggers the left or right virtual spinner (called on ramp entry in nominal play only).
+    /// Marks 14x spinner_value (1,000..10,000, +1,000 per ramp entry within 9.6s).
     pub fn trigger_virtual_spinner(&mut self, right_side: bool, forward: bool) {
         if !self.is_nominal_spinner_mode() {
             return;
         }
+        if self.spinner_combo_ms > 0 {
+            self.spinner_value = (self.spinner_value + 1_000).min(10_000);
+        } else {
+            self.spinner_value = 1_000;
+        }
+        self.spinner_combo_ms = 9_600;
+        let award = self.spinner_value;
         let sp = if right_side {
             &mut self.right_spinner
         } else {
             &mut self.left_spinner
         };
-        sp.trigger(forward);
+        sp.trigger(forward, award);
         let sid = sound::SPINNER_TICKS[sp.sound_idx % sound::SPINNER_TICKS.len()];
         sp.sound_idx = sp.sound_idx.wrapping_add(1);
         sp.total_spins = sp.total_spins.saturating_add(1);
-        let award = sp.last_award;
         self.emit_sound(sid, false);
         self.add_score(award);
     }
 
     pub(super) fn update_virtual_spinners(&mut self, dt_ms: u32) {
+        self.spinner_combo_ms = self.spinner_combo_ms.saturating_sub(dt_ms);
         if !self.is_nominal_spinner_mode() {
             self.left_spinner.active = false;
             self.right_spinner.active = false;
             return;
         }
+        let award = self.spinner_value.max(1_000);
         for side in 0..2 {
             let mut click_sound = None;
-            let mut click_award = 0u64;
             {
                 let sp = if side == 0 {
                     &mut self.left_spinner
@@ -99,12 +109,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     sp.total_spins = sp.total_spins.saturating_add(1);
                     click_sound = Some(sound::SPINNER_TICKS[sp.sound_idx % sound::SPINNER_TICKS.len()]);
                     sp.sound_idx = sp.sound_idx.wrapping_add(1);
-                    click_award = if sp.high_speed { 25_000 } else { 10_000 };
-                    sp.last_award = click_award;
+                    sp.last_award = award;
                     sp.popup_ms = 900;
                 }
-                // Smooth fast spin decay (~1.2 s)
-                let decay = dt_ms.max(1);
+                // Smooth deceleration over ~0.96s (56 frames = 14 clicks)
+                let decay = (dt_ms / 2).max(1);
                 sp.velocity_q8 = sp.velocity_q8.saturating_sub(decay);
                 sp.popup_ms = sp.popup_ms.saturating_sub(dt_ms);
                 if sp.velocity_q8 == 0 && sp.popup_ms == 0 {
@@ -114,7 +123,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
             if let Some(sid) = click_sound {
                 self.emit_sound(sid, false);
-                self.add_score(click_award);
+                self.add_score(award);
             }
         }
     }

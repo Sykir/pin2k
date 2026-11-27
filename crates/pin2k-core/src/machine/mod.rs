@@ -198,6 +198,8 @@ pub struct Pin2kMachine<H: PinballHardware, V: VideoBackend, A: AudioBackend = H
     pub attract: AttractController,
     pub left_spinner: VirtualSpinnerState,
     pub right_spinner: VirtualSpinnerState,
+    pub spinner_value: u64,
+    pub spinner_combo_ms: u32,
     pub left_saber_color: usize,
     pub right_saber_color: usize,
     pub saber_flare_ms: u32,
@@ -306,6 +308,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             attract: AttractController::default(),
             left_spinner: VirtualSpinnerState::default(),
             right_spinner: VirtualSpinnerState::default(),
+            spinner_value: 1_000,
+            spinner_combo_ms: 0,
             left_saber_color: 2,  // Blue (Qui-Gon / Obi-Wan)
             right_saber_color: 0, // Green
             saber_flare_ms: 0,
@@ -696,6 +700,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         self.eject_cooldown_ms = 0;
         self.left_spinner = VirtualSpinnerState::default();
         self.right_spinner = VirtualSpinnerState::default();
+        self.spinner_value = 1_000;
+        self.spinner_combo_ms = 0;
         self.debug_anim_override = None;
         self.active_anim_hint.clear();
         self.emit_event(GameEvent::BallStarted {
