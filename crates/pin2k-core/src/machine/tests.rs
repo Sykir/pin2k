@@ -968,6 +968,11 @@
         }
         assert!(machine.active_scene.is_none());
         assert!(machine.probe_droid.is_none());
+        assert_eq!(machine.players[0].jedi_letters, 1);
+        machine.tick(16);
+        assert!(machine.video.last_sprite_cmds.iter().any(|s| {
+            s.anim_name == "anim_jedi_letters_loop" && s.x == 166 && s.y == 38 && s.z == 16
+        }));
     }
 
     #[test]

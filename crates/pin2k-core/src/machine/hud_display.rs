@@ -114,6 +114,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             15,
         ));
 
+        self.render_jedi_letters_hud();
+
         // 5 rising `anim_gungan_bubbles` columns behind seaweed (`z = 10`, y: 195 -> 125)
         const BUBBLE_SPEEDS: [u64; 5] = [28, 36, 24, 42, 32];
         const BUBBLE_PHASES: [u64; 5] = [0, 19, 43, 11, 57];
@@ -157,6 +159,38 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 shadow_rgb555: Some(0x0000),
                 align: TextAlign::Center,
             });
+        }
+    }
+
+    /// Renders earned J-E-D-I letters (`DeffJediLettersBackground` / `anim_jedi_letters_loop`, `54×18`)
+    /// at ROM coordinates `x = [166, 224, 282, 340], y = 38, z = 16`.
+    pub fn render_jedi_letters_hud(&mut self) {
+        if self.active_scene.is_some()
+            || self.multiball != ActiveMultiball::None
+            || self.special_screen.is_some()
+        {
+            return;
+        }
+        let mask = self
+            .players
+            .get(self.current_player)
+            .map(|p| p.jedi_letters)
+            .unwrap_or(0);
+        if mask == 0 {
+            return;
+        }
+        const LETTER_X: [i32; 4] = [166, 224, 282, 340];
+        let f20 = ((self.elapsed_ms * 20) / 1000) as usize;
+        for (i, &lx) in LETTER_X.iter().enumerate() {
+            if (mask & (1 << i)) != 0 {
+                self.video.draw_named_sprite(SpriteDrawCmd::new(
+                    "anim_jedi_letters_loop",
+                    i * 20 + (f20 % 20),
+                    lx,
+                    38,
+                    16,
+                ));
+            }
         }
     }
 }

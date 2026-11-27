@@ -1023,6 +1023,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         let comp_pts = scene.completion_score();
         self.add_score(comp_pts);
+        self.award_jedi_letter_with_score();
         self.audits.scenes_completed = self.audits.scenes_completed.saturating_add(1);
         self.emit_coil(drive::LIGHTSABER_NEON, 160);
         self.emit_sound(sound::MAINPLAY_LOOP, true);
