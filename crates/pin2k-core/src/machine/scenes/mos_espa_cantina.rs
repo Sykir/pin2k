@@ -12,7 +12,11 @@ use crate::swe1_tables::sw;
 
 impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A> {
     pub(crate) fn start_mos_espa_cantina_state(&mut self) {
-        self.mos_espa_cantina = Some(MosEspaCantinaState::new());
+        let mut mc = MosEspaCantinaState::new();
+        let p = &self.players[self.current_player];
+        let seed = (self.elapsed_ms as u32) ^ (p.score as u32).wrapping_add(1);
+        mc.select_awards(seed, p.jedi_letters != 0x0F, p.bonus_multiplier < 5);
+        self.mos_espa_cantina = Some(mc);
     }
 
     pub(crate) fn tick_mos_espa_cantina(&mut self, dt_ms: u32) {
@@ -62,7 +66,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
     }
 
-    /// Handles `MusicalChairsScene` switches (`0x1b`, `0x1c`, `0x22`, `0x23`, `0x27`).
+    /// Handles `MusicalChairsScene` switches (`0x1b`, `0x1c`, `0x20`, `0x22`, `0x23`, `0x27`).
     pub(crate) fn handle_mos_espa_cantina_switch(&mut self, sw_id: u8) -> bool {
         let is_mc = self
             .active_scene
@@ -73,7 +77,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         let valid = matches!(
             sw_id,
-            sw::SHIELD_HIT
+            sw::SHIELD_POPPER
+                | sw::SHIELD_HIT
                 | sw::LEFT_SHIELD_TARGET
                 | sw::RIGHT_SHIELD_TARGET
                 | sw::RAMP_MADE_LEFT
@@ -87,11 +92,14 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         let music_stopped = self.mos_espa_cantina.as_ref().is_some_and(|m| m.music_stopped);
         if !music_stopped {
+            if sw_id == sw::SHIELD_POPPER {
+                return false;
+            }
             self.trigger_musical_chairs_jump();
             return true;
         }
-        // During silence (20s), only center SHIELD_HIT collects the center seat member
-        if sw_id != sw::SHIELD_HIT {
+        // During silence (20s), shield is UP: trapping in SHIELD_POPPER (or SHIELD_HIT opto) collects center member
+        if !matches!(sw_id, sw::SHIELD_POPPER | sw::SHIELD_HIT) {
             return true;
         }
         let next_dur = 3_000 + ((self.elapsed_ms % 6_000) as u32);
@@ -177,6 +185,13 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             let frame = mc.member_frame(member_idx % COUNCIL_ANIMS.len());
             let y = CHAIR_Y - jump_offset;
             self.scene_sprite(anim, frame, CHAIR_X[chair_idx], y, 4);
+
+            // `Member::plot_award_text`: centered below each chair; grey (`0x3DEF`) on non-center during silence
+            let (line1, line2) = mc.awards[chair_idx].lines();
+            let color = if mc.music_stopped && chair_idx != 2 { 0x3DEF } else { 0x07FF };
+            let cx = CHAIR_X[chair_idx] + 46;
+            self.scene_text("font_shadow_9_data", line1, cx, 173, 5, color, Some(0x0000), TextAlign::Center);
+            self.scene_text("font_shadow_9_data", line2, cx, 185, 5, color, Some(0x0000), TextAlign::Center);
         }
         let status = if mc.music_stopped {
             format!("COLLECT CENTER: {}", mc.awards[2].label())

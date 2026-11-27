@@ -1016,6 +1016,11 @@
             .iter()
             .filter(|s| s.anim_name.starts_with("anim_jedi_council_") && s.anim_name != "anim_jedi_council_background")
             .all(|s| s.frame == 0));
+        // All 5 chairs display their award text underneath (y = 173 / 185)
+        assert_eq!(
+            machine.video.last_font_text_cmds.iter().filter(|t| t.y == 173).count(),
+            5
+        );
 
         // During music: ramp/shield/laser shuffle and award 70_000 without departing a seat
         let pre_jump = machine.score;
@@ -1033,7 +1038,8 @@
             }
             assert!(machine.mos_espa_cantina.as_ref().unwrap().music_stopped);
             assert!(machine.shield_raised);
-            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+            let sw_collect = if round == 1 { sw::SHIELD_POPPER } else { sw::SHIELD_HIT };
+            pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw_collect);
             if round > 0 {
                 assert_eq!(machine.mos_espa_cantina.as_ref().unwrap().seats_remaining, round);
             }

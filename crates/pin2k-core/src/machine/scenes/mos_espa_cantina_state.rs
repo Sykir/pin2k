@@ -10,6 +10,7 @@ pub const COUNCIL_ANIMS: [&str; 6] = [
     "anim_jedi_council_member_2",
     "anim_jedi_council_chic",
 ];
+pub const COUNCIL_FRAME_COUNTS: [usize; 6] = [1, 12, 6, 6, 5, 1];
 
 pub const BG_X: i32 = 6;
 pub const BG_Y: i32 = 3;
@@ -32,14 +33,43 @@ impl CouncilAward {
             CouncilAward::AdvanceBonusX => "ADVANCE BONUS X".to_string(),
         }
     }
+
+    /// Two-line ROM display (`Member::plot_award_text` from `member_award_table_*`).
+    pub fn lines(self) -> (&'static str, &'static str) {
+        match self {
+            CouncilAward::AddJediLetter => ("ADD JEDI", "LETTER"),
+            CouncilAward::AdvanceBonusX => ("ADVANCE", "BONUS X"),
+            CouncilAward::Points(1_000) => ("1,000", "POINTS"),
+            CouncilAward::Points(5_000) => ("5,000", "POINTS"),
+            CouncilAward::Points(10_000) => ("10,000", "POINTS"),
+            CouncilAward::Points(15_000) => ("15,000", "POINTS"),
+            CouncilAward::Points(20_000) => ("20,000", "POINTS"),
+            CouncilAward::Points(50_000) => ("50,000", "POINTS"),
+            CouncilAward::Points(100_000) => ("100,000", "POINTS"),
+            CouncilAward::Points(500_000) => ("500,000", "POINTS"),
+            CouncilAward::Points(1_000_000) => ("1,000,000", "POINTS"),
+            CouncilAward::Points(2_000_000) => ("2,000,000", "POINTS"),
+            CouncilAward::Points(_) => ("200,000", "POINTS"),
+        }
+    }
 }
 
-pub const DEFAULT_CHAIR_AWARDS: [CouncilAward; 5] = [
-    CouncilAward::Points(200_000),
-    CouncilAward::Points(500_000),
+pub const RARE_CHAIR_AWARDS: [CouncilAward; 2] = [
     CouncilAward::AddJediLetter,
     CouncilAward::AdvanceBonusX,
+];
+
+pub const DEFAULT_CHAIR_AWARDS: [CouncilAward; 10] = [
+    CouncilAward::Points(1_000),
+    CouncilAward::Points(5_000),
+    CouncilAward::Points(10_000),
+    CouncilAward::Points(15_000),
+    CouncilAward::Points(20_000),
+    CouncilAward::Points(50_000),
+    CouncilAward::Points(100_000),
+    CouncilAward::Points(500_000),
     CouncilAward::Points(1_000_000),
+    CouncilAward::Points(2_000_000),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,12 +103,59 @@ impl MosEspaCantinaState {
             music_duration_ms: 5_000,
             order: [0, 1, 2, 3, 5],
             departed_mask: 0,
-            awards: DEFAULT_CHAIR_AWARDS,
+            awards: [
+                DEFAULT_CHAIR_AWARDS[6],
+                DEFAULT_CHAIR_AWARDS[7],
+                RARE_CHAIR_AWARDS[0],
+                RARE_CHAIR_AWARDS[1],
+                DEFAULT_CHAIR_AWARDS[8],
+            ],
             jump_ms: 0,
             member_idle_ms: [1_200, 2_100, 3_000, 3_900, 4_800, 5_700],
             member_burst_ms: [0; 6],
             member_burst_total_ms: [1_120; 6],
             rng_state: 0x5EED_1999,
+        }
+    }
+
+    /// Authentic `MusicalChairsScene::select_awards()`: up to 2 rare awards at 40% each,
+    /// then unique random picks from `member_award_table_default`.
+    pub fn select_awards(&mut self, seed: u32, allow_jedi_letter: bool, allow_bonus_x: bool) {
+        self.rng_state = seed ^ 0x5EED_1999;
+        let mut chosen: [Option<CouncilAward>; 5] = [None; 5];
+        for _ in 0..RARE_CHAIR_AWARDS.len() {
+            if (self.next_rand() % 100) < 40 {
+                let start = (self.next_rand() as usize) % RARE_CHAIR_AWARDS.len();
+                for off in 0..RARE_CHAIR_AWARDS.len() {
+                    let cand = RARE_CHAIR_AWARDS[(start + off) % RARE_CHAIR_AWARDS.len()];
+                    let valid = match cand {
+                        CouncilAward::AddJediLetter => allow_jedi_letter,
+                        CouncilAward::AdvanceBonusX => allow_bonus_x,
+                        _ => true,
+                    };
+                    if valid && !chosen.contains(&Some(cand)) {
+                        if let Some(slot) = chosen.iter_mut().find(|s| s.is_none()) {
+                            *slot = Some(cand);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        for idx in 0..chosen.len() {
+            if chosen[idx].is_none() {
+                let start = (self.next_rand() as usize) % DEFAULT_CHAIR_AWARDS.len();
+                for off in 0..DEFAULT_CHAIR_AWARDS.len() {
+                    let cand = DEFAULT_CHAIR_AWARDS[(start + off) % DEFAULT_CHAIR_AWARDS.len()];
+                    if !chosen.contains(&Some(cand)) {
+                        chosen[idx] = Some(cand);
+                        break;
+                    }
+                }
+            }
+        }
+        for (i, slot) in chosen.into_iter().enumerate() {
+            self.awards[i] = slot.unwrap_or(DEFAULT_CHAIR_AWARDS[i % DEFAULT_CHAIR_AWARDS.len()]);
         }
     }
 
@@ -114,6 +191,10 @@ impl MosEspaCantinaState {
 
     /// Current frame index for member `idx`: `0` while idle, `70ms`/step ping-pong or neck loop during burst.
     pub fn member_frame(&self, idx: usize) -> usize {
+        let len = COUNCIL_FRAME_COUNTS.get(idx).copied().unwrap_or(1);
+        if len <= 1 {
+            return 0;
+        }
         let rem = self.member_burst_ms.get(idx).copied().unwrap_or(0);
         if rem == 0 {
             return 0;
@@ -123,14 +204,16 @@ impl MosEspaCantinaState {
         let step = (elapsed / 70) as usize;
         if idx == 1 {
             // `member_control_process_neck`: plays forward loop 1..4 times
-            step % 8
+            step % len
         } else {
             // `member_control_process_ping_pong` / `yoda`: forward then reverse back to frame 0
-            let half = (total / 140).max(1) as usize;
-            if step <= half {
-                step
+            let max_f = len - 1;
+            let cycle = max_f * 2;
+            let pos = step % cycle;
+            if pos <= max_f {
+                pos
             } else {
-                (2 * half).saturating_sub(step)
+                cycle - pos
             }
         }
     }

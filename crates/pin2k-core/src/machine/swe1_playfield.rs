@@ -336,6 +336,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 self.add_score(scoring::SAUCER_ARRIVAL);
                 if self.handle_federation_fighter_switch(id)
                     || self.handle_hangar_escape_switch(id)
+                    || self.handle_mos_espa_cantina_switch(id)
                 {
                     return;
                 }
