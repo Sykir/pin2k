@@ -4,14 +4,18 @@
 
 use pin2k_hal::{AudioBackend, PinballHardware, VideoBackend};
 
-use super::probe_droid_state::ProbeDroidState;
+use super::probe_droid_state::{
+    ProbeDroidState, PROBE_MISS_SCORE, SHOT_COOLDOWN_MS, TARGET_MAX_X, TARGET_MIN_X,
+    TARGET_SPEED_PX_S,
+};
 use crate::machine::{LeffKind, Pin2kMachine};
 use crate::swe1_rules::{scoring, Swe1Scene};
 use crate::swe1_tables::sw;
 
 impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A> {
     pub(crate) fn start_probe_droid_state(&mut self) {
-        self.probe_droid = Some(ProbeDroidState::new());
+        let attempts = self.players[self.current_player].scenes_started.max(1);
+        self.probe_droid = Some(ProbeDroidState::new(attempts));
     }
 
     pub(crate) fn tick_probe_droid(&mut self, dt_ms: u32) {
@@ -25,17 +29,18 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         if let Some(ref mut pd) = self.probe_droid {
             pd.scroll_x = (pd.scroll_x + ((dt_ms as i32) * 45) / 1000) % 160;
             pd.fly_ms = pd.fly_ms.saturating_add(dt_ms) % 9_000;
+            pd.shot_cooldown_ms = pd.shot_cooldown_ms.saturating_sub(dt_ms);
             pd.queen_shoot_ms = pd.queen_shoot_ms.saturating_sub(dt_ms);
             pd.explosion_ms = pd.explosion_ms.saturating_sub(dt_ms);
             pd.miss_blast_ms = pd.miss_blast_ms.saturating_sub(dt_ms);
 
-            let step = ((dt_ms as i32) * 180) / 1000;
+            let step = ((dt_ms as i32) * TARGET_SPEED_PX_S) / 1000;
             pd.target_x += pd.target_dir * step.max(1);
-            if pd.target_x >= 440 {
-                pd.target_x = 440;
+            if pd.target_x >= TARGET_MAX_X {
+                pd.target_x = TARGET_MAX_X;
                 pd.target_dir = -1;
-            } else if pd.target_x <= 28 {
-                pd.target_x = 28;
+            } else if pd.target_x <= TARGET_MIN_X {
+                pd.target_x = TARGET_MIN_X;
                 pd.target_dir = 1;
             }
         }
@@ -51,20 +56,27 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             return false;
         }
         let (min_x, max_x) = match sw_id {
-            sw::LEFT_RAMP_ENTER => (28, 180),
-            sw::LEFT_SHIELD_TARGET => (38, 260),
+            sw::LEFT_RAMP_ENTER => (28, 128),
+            sw::LEFT_SHIELD_TARGET => (58, 178),
             sw::SHIELD_HIT => (98, 348),
-            sw::RIGHT_SHIELD_TARGET => (248, 440),
-            sw::RIGHT_RAMP_ENTER => (280, 440),
+            sw::RIGHT_SHIELD_TARGET => (248, 408),
+            sw::RIGHT_RAMP_ENTER => (318, 418),
             _ => return false,
         };
         if self.probe_droid.is_none() {
             self.start_probe_droid_state();
         }
+        if self.probe_droid.as_ref().is_some_and(|p| p.shot_cooldown_ms > 0) {
+            return true;
+        }
         let mut hit = false;
         let mut completed = false;
+        let mut attempts = 1u32;
+        let mut missed = 0u32;
         if let Some(ref mut pd) = self.probe_droid {
+            pd.shot_cooldown_ms = SHOT_COOLDOWN_MS;
             pd.queen_shoot_ms = 350;
+            attempts = pd.attempts;
             if (min_x..=max_x).contains(&pd.target_x) {
                 hit = true;
                 pd.explosion_ms = 500;
@@ -75,6 +87,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 pd.probes_missed = pd.probes_missed.saturating_add(1);
                 pd.miss_blast_ms = 350;
             }
+            missed = pd.probes_missed;
         }
         if hit {
             self.add_score(scoring::PROBE_DROID_DESTROY);
@@ -87,11 +100,22 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     .map_or(0, |p| p.probes_remaining);
             }
             if completed {
+                let mult = (attempts.min(3)) as u64;
+                let total_award = if missed == 0 { 3_000_000 * mult } else { 1_000_000 * mult };
+                let extra = total_award.saturating_sub(Swe1Scene::ProbeDroid.completion_score());
+                if extra > 0 {
+                    self.add_score(extra);
+                }
+                if missed == 0 {
+                    self.set_banner(format!("PERFECT SHOOTING! +{total_award}"), 3_000);
+                }
                 self.complete_active_scene(Swe1Scene::ProbeDroid);
                 self.probe_droid = None;
             }
         } else {
+            self.add_score(PROBE_MISS_SCORE);
             self.emit_ard("ard_probe_droid_scene_probe_miss");
+            self.set_banner("PROBE MISSED! +70,000", 1_200);
         }
         true
     }

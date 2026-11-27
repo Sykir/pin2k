@@ -946,7 +946,21 @@
             1
         );
 
+        // Miss when target_x is outside window -> +70_000 and probes_missed == 1
+        machine.probe_droid.as_mut().unwrap().target_x = 400;
+        let s_miss = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
+        assert_eq!(machine.score, s_miss + 70_000);
+        assert_eq!(machine.probe_droid.as_ref().unwrap().probes_missed, 1);
+
+        // Cooldown (0.48s) ignores immediate repeat shot
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
+        assert_eq!(machine.probe_droid.as_ref().unwrap().probes_remaining, 3);
+
         for expected in [2, 1, 0] {
+            for _ in 0..32 {
+                machine.tick(16);
+            }
             machine.probe_droid.as_mut().unwrap().target_x = 220;
             pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
             if expected > 0 {
