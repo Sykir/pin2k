@@ -24,22 +24,22 @@ Complete inventory of everything extracted from the **Star Wars Episode I (`#500
 
 ## 2. All Extracted Scenes (`Table<scene_info>` @ `0x2e179c`)
 
-| # | Bitmask | ROM C++ Symbol | Display Title | `min_scenes_started` | Main C++ Class | Background `Deff` Class |
-|---|---|---|---|---|---|---|
-| 1 | `0x0001` | `jedi_scene_battle_droids` | Battle Droid Invasion | `0` | `BattleDroidScene` | `DeffBattleDroidSceneBackground` |
-| 2 | `0x0002` | `jedi_scene_musical_chairs` | Mos Espa Cantina (Musical Chairs) | `1` | `MusicalChairsScene` | `MusicalChairsScene` |
-| 3 | `0x0004` | `jedi_scene_federation_fighter` | Federation Fighters | `0` | `FederationFighterScene` | `DeffFedFighterSceneBackground` |
-| 4 | `0x0008` | `jedi_scene_r2d2` | R2-D2 Scene | `1` | `R2D2Scene` | `DeffR2D2SceneBackground` |
-| 5 | `0x0010` | `jedi_scene_gungan` | Gungan Energy Battle | `0` | `GunganScene` | `GunganScene` |
-| 6 | `0x0020` | `jedi_scene_queen_fashion` | Queen Amidala Wardrobe | `2` | `QueenFashionScene` | `DeffQueenFashionSceneBackground` |
-| 7 | `0x0040` | `jedi_scene_podrace` | Boonta Eve Podrace | `0` | `PodraceScene` | `DeffPodRaceSceneBackground` |
-| 8 | `0x0080` | `jedi_scene_hangar_escape` | Theed Hangar Escape | `0` | `HangarEscapeScene` | `DeffHangarEscapeSceneBackground` |
-| 9 | `0x0100` | `jedi_scene_jarjar_juggle` | Jar Jar Juggle | `0` | `JarjarJuggleScene` | `DeffJarjarJuggleScene` |
-| 10 | `0x0200` | `jedi_scene_probe_droid` | Sith Probe Droids | `0` | `ProbeDroidScene` | `DeffProbeDroidSceneBackground` |
-| 11 | `0x0400` | `jedi_scene_destroyer_droid` | Destroyer Droids | `1` | `DestroyerDroidScene` | `DeffDestroyerDroidSceneBackground` |
-| 12 | `0x0800` | `jedi_scene_hover_tank` | AAT Hover Tank | `1` | `HoverTankScene` | `DeffHoverTankSceneBackground` |
-| 13 | `0x1000` | `jedi_scene_wattos_chance` | Watto's Chance Cube | `1` | `WattosChanceScene` | `DeffWattosChanceSceneBackground` |
-| 14 | `0x2000` | `jedi_scene_question_mark` | Mystery (`?`) | `0` | `QuestionMarkScene` | `DeffQuestionMarkSceneBackground` |
+| # | Bitmask | ROM C++ Symbol | Display Title | `min_scenes_started` (`+0x08`) | `min_jedi_battles` (`+0x0C`) | Main C++ Class | Background `Deff` Class |
+|---|---|---|---|---|---|---|---|
+| 1 | `0x0001` | `jedi_scene_battle_droids` | Battle Droid Invasion | `0` | `0` | `BattleDroidScene` | `DeffBattleDroidSceneBackground` |
+| 2 | `0x0002` | `jedi_scene_musical_chairs` | Mos Espa Cantina (Musical Chairs) | `1` | `0` | `MusicalChairsScene` | `MusicalChairsScene` |
+| 3 | `0x0004` | `jedi_scene_federation_fighter` | Federation Fighters | `0` | `0` | `FederationFighterScene` | `DeffFedFighterSceneBackground` |
+| 4 | `0x0008` | `jedi_scene_r2d2` | R2-D2 Scene | `1` | `0` | `R2D2Scene` | `DeffR2D2SceneBackground` |
+| 5 | `0x0010` | `jedi_scene_gungan` | Gungan Energy Battle | `0` | `0` | `GunganScene` | `GunganScene` |
+| 6 | `0x0020` | `jedi_scene_queen_fashion` | Queen Amidala Wardrobe | `2` | `0` | `QueenFashionScene` | `DeffQueenFashionSceneBackground` |
+| 7 | `0x0040` | `jedi_scene_podrace` | Boonta Eve Podrace | `0` | `0` | `PodraceScene` | `DeffPodRaceSceneBackground` |
+| 8 | `0x0080` | `jedi_scene_hangar_escape` | Theed Hangar Escape | `0` | `0` | `HangarEscapeScene` | `DeffHangarEscapeSceneBackground` |
+| 9 | `0x0100` | `jedi_scene_jarjar_juggle` | Jar Jar Juggle | `0` | `0` | `JarjarJuggleScene` | `DeffJarjarJuggleScene` |
+| 10 | `0x0200` | `jedi_scene_probe_droid` | Sith Probe Droids | `0` | `0` | `ProbeDroidScene` | `DeffProbeDroidSceneBackground` |
+| 11 | `0x0400` | `jedi_scene_destroyer_droid` | Destroyer Droids | `0` | `1` | `DestroyerDroidScene` | `DeffDestroyerDroidSceneBackground` |
+| 12 | `0x0800` | `jedi_scene_hover_tank` | AAT Hover Tank | `0` | `1` | `HoverTankScene` | `DeffHoverTankSceneBackground` |
+| 13 | `0x1000` | `jedi_scene_wattos_chance` | Watto's Chance Cube | `0` | `1` | `WattosChanceScene` | `DeffWattosChanceSceneBackground` |
+| 14 | `0x2000` | `jedi_scene_question_mark` | Mystery (`?`) | `0` | `1` (unused in 13-scene draw) | `QuestionMarkScene` | `DeffQuestionMarkSceneBackground` |
 
 ---
 

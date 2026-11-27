@@ -273,16 +273,22 @@ impl Swe1Scene {
         }
     }
 
-    /// Minimum scenes started before this scene becomes eligible (`scene_info` table `0x2dc95c`).
+    /// Minimum scenes started before this scene becomes eligible (`scene_info` `+0x08` @ `0x2dc95c`).
     pub const fn min_scenes_started(self) -> u32 {
         match self {
-            Swe1Scene::MosEspaCantina
-            | Swe1Scene::R2D2
-            | Swe1Scene::DestroyerDroid
+            Swe1Scene::MosEspaCantina | Swe1Scene::R2D2 => 1,
+            Swe1Scene::QueenFashion => 2,
+            _ => 0,
+        }
+    }
+
+    /// Minimum Jedi Multiball battles started before this scene becomes eligible (`scene_info` `+0x0C` @ `0x2dc95c`).
+    pub const fn min_jedi_battles_started(self) -> u32 {
+        match self {
+            Swe1Scene::DestroyerDroid
             | Swe1Scene::HoverTank
             | Swe1Scene::WattosChance
             | Swe1Scene::QuestionMark => 1,
-            Swe1Scene::QueenFashion => 2,
             _ => 0,
         }
     }
