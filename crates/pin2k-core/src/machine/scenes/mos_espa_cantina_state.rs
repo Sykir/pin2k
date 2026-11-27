@@ -219,15 +219,43 @@ impl MosEspaCantinaState {
     }
 
     pub fn shuffle(&mut self) {
-        self.order.rotate_left(1);
+        let active: Vec<usize> = (0..5).filter(|&i| !self.is_seat_departed(i)).collect();
+        if active.len() <= 1 {
+            return;
+        }
+        let first_ord = self.order[active[0]];
+        let first_aw = self.awards[active[0]];
+        for w in 0..active.len() - 1 {
+            self.order[active[w]] = self.order[active[w + 1]];
+            self.awards[active[w]] = self.awards[active[w + 1]];
+        }
+        let last = active[active.len() - 1];
+        self.order[last] = first_ord;
+        self.awards[last] = first_aw;
     }
 
     pub fn is_seat_departed(&self, idx: usize) -> bool {
         (self.departed_mask & (1 << idx)) != 0
     }
 
+    /// Center member (`slot 2`) departs: center (`slot 2`) always stays occupied,
+    /// and outer chairs are removed in order: far-right (`slot 4`) first, then far-left (`slot 0`).
     pub fn mark_center_departed(&mut self) {
-        self.departed_mask |= 1 << 2;
+        match self.seats_remaining {
+            3 => {
+                self.order[2] = self.order[4];
+                self.awards[2] = self.awards[4];
+                self.departed_mask |= 1 << 4;
+            }
+            2 => {
+                self.order[2] = self.order[0];
+                self.awards[2] = self.awards[0];
+                self.departed_mask |= 1 << 0;
+            }
+            _ => {
+                self.departed_mask |= 1 << 2;
+            }
+        }
         self.seats_remaining = self.seats_remaining.saturating_sub(1);
     }
 }

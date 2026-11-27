@@ -1100,7 +1100,16 @@
             let sw_collect = if round == 1 { sw::SHIELD_POPPER } else { sw::SHIELD_HIT };
             pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw_collect);
             if round > 0 {
-                assert_eq!(machine.mos_espa_cantina.as_ref().unwrap().seats_remaining, round);
+                let mc = machine.mos_espa_cantina.as_ref().unwrap();
+                assert_eq!(mc.seats_remaining, round);
+                assert!(!mc.is_seat_departed(2));
+                if round == 2 {
+                    assert!(mc.is_seat_departed(4));
+                    assert!(!mc.is_seat_departed(0));
+                } else if round == 1 {
+                    assert!(mc.is_seat_departed(4));
+                    assert!(mc.is_seat_departed(0));
+                }
             }
         }
         assert!(machine.active_scene.is_none());
