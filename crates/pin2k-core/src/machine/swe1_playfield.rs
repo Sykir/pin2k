@@ -161,7 +161,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     self.players[self.current_player].laser_shots -= 1;
                     self.audio.play_sound(sound::LASER_FIRE, false);
                     self.trigger_leff(LeffKind::LaserFired { right });
-                    if self.handle_battle_droid_laser(right) {
+                    if self.handle_battle_droid_laser(right) || self.handle_mos_espa_cantina_laser() {
                         return;
                     }
                     if self.active_scene.is_some() {
@@ -497,7 +497,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
     }
 
-    fn award_jedi_letter_with_score(&mut self) {
+    pub(super) fn award_jedi_letter_with_score(&mut self) {
         let (completed_jedi, letter_pts) = {
             let p = &mut self.players[self.current_player];
             let pts = scoring::JEDI_LETTER_BASE

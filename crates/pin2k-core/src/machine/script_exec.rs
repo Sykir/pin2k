@@ -571,7 +571,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 "queen_fashion" => Some(Swe1Scene::QueenFashion),
                 "jar_jar_juggle" => Some(Swe1Scene::JarJarJuggle),
                 "wattos_chance" => Some(Swe1Scene::WattosChance),
-                "mos_espa_cantina" => Some(Swe1Scene::MosEspaCantina),
+                "musical_chairs" | "mos_espa_cantina" | "cantina" => Some(Swe1Scene::MosEspaCantina),
                 "r2d2" | "r2_d2" => Some(Swe1Scene::R2D2),
                 "question_mark" | "mystery" => Some(Swe1Scene::QuestionMark),
                 _ => None,

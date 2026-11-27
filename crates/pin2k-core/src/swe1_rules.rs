@@ -114,7 +114,7 @@ impl Swe1Scene {
             Swe1Scene::QueenFashion => "QUEEN AMIDALA WARDROBE",
             Swe1Scene::JarJarJuggle => "JAR JAR JUGGLE",
             Swe1Scene::WattosChance => "WATTO'S CHANCE CUBE",
-            Swe1Scene::MosEspaCantina => "MOS ESPA CANTINA",
+            Swe1Scene::MosEspaCantina => "MUSICAL CHAIRS",
             Swe1Scene::R2D2 => "R2-D2 REPAIR",
             Swe1Scene::QuestionMark => "MYSTERY (?)",
         }

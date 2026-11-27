@@ -991,19 +991,35 @@
         let mut machine =
             Pin2kMachine::with_audio(driver, HeadlessVideo::default(), HeadlessAudio::default());
 
-        assert!(machine.debug_launch_mode("scene:11"));
-        assert_eq!(machine.mos_espa_cantina.as_ref().unwrap().seats_remaining, 5);
+        assert!(machine.debug_launch_mode("musical_chairs"));
+        assert_eq!(machine.mos_espa_cantina.as_ref().unwrap().seats_remaining, 3);
         machine.active_scene.as_mut().unwrap().intro_remaining_ms = 0;
         machine.tick(16);
-        assert_eq!(
-            machine.video.last_sprite_cmds.iter().filter(|s| s.anim_name == "anim_jedi_council_background").count(),
-            1
-        );
+        assert!(machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .any(|s| s.anim_name == "anim_jedi_council_background" && s.x == 6 && s.y == 3));
 
-        for expected in (0..5).rev() {
+        // During music: ramp/shield/laser shuffle and award 70_000 without departing a seat
+        let pre_jump = machine.score;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
+        assert_eq!(machine.score, pre_jump + crate::swe1_rules::scoring::SWITCH_BASE + 70_000);
+        assert_eq!(machine.mos_espa_cantina.as_ref().unwrap().seats_remaining, 3);
+
+        // Advance until music stops (3..9s), shield rises, then 3 center collects complete the scene
+        for round in (0..3).rev() {
+            for _ in 0..600 {
+                machine.tick(16);
+                if machine.mos_espa_cantina.as_ref().is_some_and(|m| m.music_stopped) {
+                    break;
+                }
+            }
+            assert!(machine.mos_espa_cantina.as_ref().unwrap().music_stopped);
+            assert!(machine.shield_raised);
             pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::SHIELD_HIT);
-            if expected > 0 {
-                assert_eq!(machine.mos_espa_cantina.as_ref().unwrap().seats_remaining, expected);
+            if round > 0 {
+                assert_eq!(machine.mos_espa_cantina.as_ref().unwrap().seats_remaining, round);
             }
         }
         assert!(machine.active_scene.is_none());
