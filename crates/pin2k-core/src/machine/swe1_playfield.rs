@@ -377,11 +377,6 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             }
             sw::RAMP_MADE_LEFT | sw::RAMP_MADE_RIGHT | sw::LEFT_LOOP_UPPER | sw::LEFT_LOOP_ROLLOVER => {
                 self.add_score(scoring::SWITCH_BASE);
-                if id == sw::RAMP_MADE_LEFT {
-                    self.trigger_virtual_spinner(false, true);
-                } else if id == sw::RAMP_MADE_RIGHT {
-                    self.trigger_virtual_spinner(true, true);
-                }
                 if self.handle_battle_droid_switch(id)
                     || self.handle_gungan_battle_switch(id)
                     || self.handle_mos_espa_cantina_switch(id)
@@ -753,7 +748,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         self.set_shield_raised(false);
         self.holo_close_fx();
-        self.popper_hold_ms = intro_ms;
+        // Ball stays held in the behind-shield popper during intro + 1s after scene gameplay starts
+        self.popper_hold_ms = intro_ms + 1_000;
         self.special_screen = None;
         self.special_screen_ms = 0;
         self.active_scene = Some(ActiveSceneState {

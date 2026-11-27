@@ -36,8 +36,8 @@ impl VirtualSpinnerState {
     pub fn trigger(&mut self, forward: bool) {
         self.active = true;
         self.forward = forward;
-        self.velocity_q8 = (self.velocity_q8 + 384).clamp(480, 768);
-        self.high_speed = self.velocity_q8 >= 720;
+        self.velocity_q8 = (self.velocity_q8 + 640).clamp(960, 1_536);
+        self.high_speed = self.velocity_q8 >= 1_300;
         self.popup_ms = 1_100;
         self.last_award = if self.high_speed { 25_000 } else { 10_000 };
     }
@@ -103,8 +103,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                     sp.last_award = click_award;
                     sp.popup_ms = 900;
                 }
-                // Smooth friction decay (~1.2 s spin)
-                let decay = (dt_ms / 2).max(1);
+                // Smooth fast spin decay (~1.2 s)
+                let decay = dt_ms.max(1);
                 sp.velocity_q8 = sp.velocity_q8.saturating_sub(decay);
                 sp.popup_ms = sp.popup_ms.saturating_sub(dt_ms);
                 if sp.velocity_q8 == 0 && sp.popup_ms == 0 {

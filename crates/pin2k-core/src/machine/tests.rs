@@ -429,10 +429,13 @@
             .iter()
             .any(|(sid, _)| crate::swe1_tables::sound::SPINNER_TICKS.contains(sid)));
 
-        // Left ramp pass triggers left virtual spinner animation + turnstile sound
+        // Left ramp enter triggers left virtual spinner once; RAMP_MADE_LEFT does NOT double-trigger
         pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
         machine.tick(16);
         assert!(machine.left_spinner.active);
+        let spins_after_enter = machine.left_spinner.total_spins;
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RAMP_MADE_LEFT);
+        assert_eq!(machine.left_spinner.total_spins, spins_after_enter);
         assert!(machine.video.last_sprite_cmds.iter().any(|s| {
             s.anim_name == "anim_spinner_bracket_left" && s.x == 43 && s.y == 174 && s.z == 22
         }));
