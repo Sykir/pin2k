@@ -1,9 +1,10 @@
 //! Authentic `VirtualSpinners` / `DeffVSpinner` (`0x0017ead0..0x0017fa04` in `swe1_0200.elf`):
 //! - Left spinner at `(43, 174)` (`0x2b, 0xae`) `z = 22` (`anim_spinner_bracket_left` + `anim_spinner_1`).
 //! - Right spinner at `(421, 174)` (`0x1a5, 0xae`) `z = 22` (`anim_spinner_bracket_right` + `anim_spinner_2`).
-//! - **Only active when triggered by a ball passing a ramp entry/made switch!**
-//! - Plays `acd_traditional_spinner_sound` (`0x03C3`) on every full turn
-//!   and spawns a rising score popup (`z = 23`, `font_system_7_data`).
+//! - `DeffVSpinner::Run`: resets to frame `0`, plays frames `0..=55` sequentially (never wrapping):
+//!   `sleep1000(72..87 ms)` for frames `0..=40`, `sleep1000(40..47 ms)` for frames `41..=55`.
+//! - Sound clicks (`acd_traditional_spinner_sound`) fire on frame `0` (trigger), `1..=8`, `9, 11, 13, 15, 17`, and `22`
+//!   (15 total clicks = initial + 14 deceleration clicks), while frames `23..=55` coast silently to rest.
 
 use pin2k_hal::{AudioBackend, PinballHardware, SpriteDrawCmd, TextAlign, TextDrawCmd, VideoBackend};
 use serde::{Deserialize, Serialize};
@@ -15,17 +16,14 @@ use crate::swe1_tables::sound;
 pub const LEFT_SPINNER_X: i32 = 43;
 pub const RIGHT_SPINNER_X: i32 = 421;
 pub const SPINNER_Y: i32 = 174;
-const SPINNER_ANIM_FRAMES: u32 = 56;
-/// 56 frames / 14 clicks = 4 frames per turnstile click (rulebook: 14x value per ramp entry).
-const FRAMES_PER_TURNSTILE_CLICK: u32 = 4;
+const SPINNER_ANIM_FRAMES: usize = 56;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct VirtualSpinnerState {
     pub active: bool,
     pub forward: bool,
-    pub frame_accum_q8: u32,
-    pub velocity_q8: u32,
-    pub tick_accum_q8: u32,
+    pub frame: usize,
+    pub step_ms: u32,
     pub total_spins: u32,
     pub sound_idx: usize,
     pub popup_ms: u32,
@@ -37,11 +35,25 @@ impl VirtualSpinnerState {
     pub fn trigger(&mut self, forward: bool, award_per_click: u64) {
         self.active = true;
         self.forward = forward;
-        self.velocity_q8 = 480;
-        self.tick_accum_q8 = 0;
+        self.frame = 0;
+        self.step_ms = 0;
         self.high_speed = award_per_click >= 5_000;
         self.popup_ms = 1_100;
         self.last_award = award_per_click;
+    }
+
+    /// Authentic `DeffVSpinner::Run` (`0x17f5c7..0x17f5e3`) click frame schedule.
+    fn is_click_frame(frame: usize) -> bool {
+        matches!(frame, 1..=8 | 9 | 11 | 13 | 15 | 17 | 22)
+    }
+
+    /// Authentic `DeffVSpinner::Run` (`0x17f61d`, `0x17f664`, `0x17f911`) `sleep1000` delay.
+    fn frame_delay_ms(&self) -> u32 {
+        if self.frame <= 40 {
+            78
+        } else {
+            44
+        }
     }
 }
 
@@ -57,7 +69,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     /// Triggers the left or right virtual spinner (called on ramp entry in nominal play only).
-    /// Marks 14x spinner_value (1,000..10,000, +1,000 per ramp entry within 9.6s).
+    /// Marks `spinner_value` (1,000..10,000, +1,000 per ramp entry within 9.6s).
     pub fn trigger_virtual_spinner(&mut self, right_side: bool, forward: bool) {
         if !self.is_nominal_spinner_mode() {
             return;
@@ -91,7 +103,8 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         }
         let award = self.spinner_value.max(1_000);
         for side in 0..2 {
-            let mut click_sound = None;
+            let mut clicks = 0u32;
+            let mut first_sid = None;
             {
                 let sp = if side == 0 {
                     &mut self.left_spinner
@@ -101,29 +114,35 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 if !sp.active {
                     continue;
                 }
-                let step = (sp.velocity_q8 * dt_ms) / 16;
-                sp.frame_accum_q8 = sp.frame_accum_q8.wrapping_add(step);
-                sp.tick_accum_q8 = sp.tick_accum_q8.saturating_add(step);
-                if sp.tick_accum_q8 >= FRAMES_PER_TURNSTILE_CLICK * 256 {
-                    sp.tick_accum_q8 -= FRAMES_PER_TURNSTILE_CLICK * 256;
-                    sp.total_spins = sp.total_spins.saturating_add(1);
-                    click_sound = Some(sound::SPINNER_TICKS[sp.sound_idx % sound::SPINNER_TICKS.len()]);
-                    sp.sound_idx = sp.sound_idx.wrapping_add(1);
-                    sp.last_award = award;
-                    sp.popup_ms = 900;
+                sp.step_ms = sp.step_ms.saturating_add(dt_ms);
+                while sp.frame + 1 < SPINNER_ANIM_FRAMES {
+                    let delay = sp.frame_delay_ms();
+                    if sp.step_ms < delay {
+                        break;
+                    }
+                    sp.step_ms -= delay;
+                    sp.frame += 1;
+                    if VirtualSpinnerState::is_click_frame(sp.frame) {
+                        clicks += 1;
+                        sp.total_spins = sp.total_spins.saturating_add(1);
+                        let sid = sound::SPINNER_TICKS[sp.sound_idx % sound::SPINNER_TICKS.len()];
+                        sp.sound_idx = sp.sound_idx.wrapping_add(1);
+                        if first_sid.is_none() {
+                            first_sid = Some(sid);
+                        }
+                        sp.last_award = award;
+                        sp.popup_ms = 900;
+                    }
                 }
-                // Smooth deceleration over ~0.96s (56 frames = 14 clicks)
-                let decay = (dt_ms / 2).max(1);
-                sp.velocity_q8 = sp.velocity_q8.saturating_sub(decay);
                 sp.popup_ms = sp.popup_ms.saturating_sub(dt_ms);
-                if sp.velocity_q8 == 0 && sp.popup_ms == 0 {
+                if sp.frame + 1 >= SPINNER_ANIM_FRAMES && sp.popup_ms == 0 {
                     sp.active = false;
                     sp.high_speed = false;
                 }
             }
-            if let Some(sid) = click_sound {
+            if let Some(sid) = first_sid {
                 self.emit_sound(sid, false);
-                self.add_score(award);
+                self.add_score(award * (clicks as u64));
             }
         }
     }
@@ -153,29 +172,28 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
             self.video
                 .draw_named_sprite(SpriteDrawCmd::new(bracket, 0, x, SPINNER_Y, 22));
 
-            if sp.active && sp.velocity_q8 > 0 {
-                let raw_f = ((sp.frame_accum_q8 >> 8) % SPINNER_ANIM_FRAMES) as usize;
+            if sp.active {
                 let frame = if sp.forward {
-                    raw_f
+                    sp.frame.min(SPINNER_ANIM_FRAMES - 1)
                 } else {
-                    (SPINNER_ANIM_FRAMES as usize - 1) - raw_f
+                    (SPINNER_ANIM_FRAMES - 1).saturating_sub(sp.frame)
                 };
                 self.video
                     .draw_named_sprite(SpriteDrawCmd::new(wheel, frame, x, SPINNER_Y, 22));
-                if sp.high_speed {
+                if sp.high_speed && sp.frame < 22 {
                     self.video.draw_named_sprite(SpriteDrawCmd::new(
                         "anim_spinner_lightning",
-                        raw_f % 22,
+                        sp.frame % 22,
                         x + 6,
                         SPINNER_Y - 12,
                         22,
                     ));
                 }
             } else {
-                // Resting static spinner wheel at the last frame until a ramp pass triggers it
+                // Resting static spinner wheel at frame 55 until a ramp pass triggers it
                 self.video.draw_named_sprite(SpriteDrawCmd::new(
                     wheel,
-                    (SPINNER_ANIM_FRAMES as usize) - 1,
+                    SPINNER_ANIM_FRAMES - 1,
                     x,
                     SPINNER_Y,
                     22,
