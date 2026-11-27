@@ -455,6 +455,25 @@
         assert!(machine.video.last_sprite_cmds.iter().any(|s| {
             s.anim_name == "anim_spinner_2" && s.frame > 0 && s.x == 421 && s.y == 174 && s.z == 22
         }));
+
+        // During a mini-game (active scene) or multiball, ramps must NOT trigger or render spinners
+        assert!(machine.debug_launch_mode("scene:0"));
+        machine.audio.played.clear();
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::LEFT_RAMP_ENTER);
+        pulse_switch(&mut machine, |hw, s, c| hw.port.set_logical_switch(s, c), sw::RIGHT_RAMP_ENTER);
+        machine.tick(16);
+        assert!(!machine.left_spinner.active);
+        assert!(!machine.right_spinner.active);
+        assert!(!machine
+            .audio
+            .played
+            .iter()
+            .any(|(sid, _)| crate::swe1_tables::sound::SPINNER_TICKS.contains(sid)));
+        assert!(!machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .any(|s| s.anim_name.starts_with("anim_spinner_")));
     }
 
     #[test]

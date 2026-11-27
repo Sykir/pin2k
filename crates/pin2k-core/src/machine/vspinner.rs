@@ -44,8 +44,21 @@ impl VirtualSpinnerState {
 }
 
 impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A> {
-    /// Triggers the left or right virtual spinner (called on ramp entry/made).
+    /// Virtual spinners only exist during nominal SWE1 gameplay (no active scene, multiball, or special screen/overlay).
+    pub(super) fn is_nominal_spinner_mode(&self) -> bool {
+        self.state == super::MachineState::InGame
+            && self.game_title == crate::GameTitle::Swe1
+            && self.active_scene.is_none()
+            && self.multiball == ActiveMultiball::None
+            && self.special_screen.is_none()
+            && self.overlay.is_none()
+    }
+
+    /// Triggers the left or right virtual spinner (called on ramp entry/made in nominal play only).
     pub fn trigger_virtual_spinner(&mut self, right_side: bool, forward: bool) {
+        if !self.is_nominal_spinner_mode() {
+            return;
+        }
         let sp = if right_side {
             &mut self.right_spinner
         } else {
@@ -61,6 +74,11 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     pub(super) fn update_virtual_spinners(&mut self, dt_ms: u32) {
+        if !self.is_nominal_spinner_mode() {
+            self.left_spinner.active = false;
+            self.right_spinner.active = false;
+            return;
+        }
         for side in 0..2 {
             let mut click_sound = None;
             let mut click_award = 0u64;
@@ -102,20 +120,16 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     /// Renders left/right virtual spinners (`z = 22`) and rising score popups (`z = 23`).
-    /// In nominal gameplay (no active scene, multiball, or special screen), both spinners
-    /// are visible resting statically at the last frame (`55`) and only animate when triggered by a ramp pass.
+    /// Only rendered in nominal gameplay (no active scene, multiball, or special screen/overlay).
     pub fn render_virtual_spinners(&mut self) {
-        let is_nominal = self.active_scene.is_none()
-            && self.multiball == ActiveMultiball::None
-            && self.special_screen.is_none();
+        if !self.is_nominal_spinner_mode() {
+            return;
+        }
 
         for (side, sp, x) in [
             (0usize, self.left_spinner.clone(), LEFT_SPINNER_X),
             (1usize, self.right_spinner.clone(), RIGHT_SPINNER_X),
         ] {
-            if !sp.active && !is_nominal {
-                continue;
-            }
             let bracket = if side == 0 {
                 "anim_spinner_bracket_left"
             } else {
