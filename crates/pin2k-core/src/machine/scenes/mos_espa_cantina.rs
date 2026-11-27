@@ -29,6 +29,7 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
         let next_dur = 3_000 + ((self.elapsed_ms % 6_000) as u32);
         if let Some(ref mut mc) = self.mos_espa_cantina {
             mc.jump_ms = mc.jump_ms.saturating_sub(dt_ms);
+            mc.tick_member_anims(dt_ms);
             mc.phase_ms = mc.phase_ms.saturating_add(dt_ms);
             if !mc.music_stopped && mc.phase_ms >= mc.music_duration_ms {
                 mc.music_stopped = true;
@@ -159,7 +160,6 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
     }
 
     pub(crate) fn render_mos_espa_cantina(&mut self, secs: u32) {
-        let f60 = ((self.elapsed_ms * 60) / 1000) as usize;
         let mc = self.mos_espa_cantina.clone().unwrap_or_default();
 
         self.scene_sprite("anim_jedi_council_background", 0, BG_X, BG_Y, 1);
@@ -174,8 +174,9 @@ impl<H: PinballHardware, V: VideoBackend, A: AudioBackend> Pin2kMachine<H, V, A>
                 continue;
             }
             let anim = COUNCIL_ANIMS[member_idx % COUNCIL_ANIMS.len()];
+            let frame = mc.member_frame(member_idx % COUNCIL_ANIMS.len());
             let y = CHAIR_Y - jump_offset;
-            self.scene_sprite(anim, f60, CHAIR_X[chair_idx], y, 4);
+            self.scene_sprite(anim, frame, CHAIR_X[chair_idx], y, 4);
         }
         let status = if mc.music_stopped {
             format!("COLLECT CENTER: {}", mc.awards[2].label())

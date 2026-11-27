@@ -1010,6 +1010,12 @@
             .last_sprite_cmds
             .iter()
             .any(|s| s.anim_name == "anim_jedi_council_background" && s.x == 6 && s.y == 3));
+        assert!(machine
+            .video
+            .last_sprite_cmds
+            .iter()
+            .filter(|s| s.anim_name.starts_with("anim_jedi_council_") && s.anim_name != "anim_jedi_council_background")
+            .all(|s| s.frame == 0));
 
         // During music: ramp/shield/laser shuffle and award 70_000 without departing a seat
         let pre_jump = machine.score;
